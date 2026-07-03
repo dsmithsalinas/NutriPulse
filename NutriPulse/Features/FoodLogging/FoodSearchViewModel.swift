@@ -37,7 +37,7 @@ final class FoodSearchViewModel {
         do {
             results = try await client.search(query: q)
         } catch {
-            // Network errors during typing are silent; the field stays empty
+            // Errors during typing are silent; the results list stays empty
         }
     }
 

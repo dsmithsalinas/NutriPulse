@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
-import { getFatSecretToken, asArray } from '../_shared/fatsecret.ts'
+import { fatSecretGet, asArray } from '../_shared/fatsecret.ts'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -8,7 +8,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify the caller is authenticated
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -29,35 +28,27 @@ Deno.serve(async (req) => {
       })
     }
 
-    const token = await getFatSecretToken()
-
-    const url = new URL('https://platform.fatsecret.com/rest/server.api')
-    url.searchParams.set('method', 'foods.search')
-    url.searchParams.set('search_expression', query.trim())
-    url.searchParams.set('page_number', String(page))
-    url.searchParams.set('max_results', String(maxResults))
-    url.searchParams.set('format', 'json')
-
-    const res = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${token}` },
+    const json = await fatSecretGet({
+      method: 'foods.search',
+      search_expression: query.trim(),
+      page_number: String(page),
+      max_results: String(maxResults),
     })
 
-    const json = await res.json()
-    const foods = json.foods
-
-    if (!foods || foods.error) {
+    const foods = json.foods as Record<string, unknown> | undefined
+    if (!foods || (foods as Record<string, unknown>).error) {
       return new Response(JSON.stringify({ results: [], total: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    // Normalise to a consistent shape the Swift app can decode
-    const results = asArray(foods.food).map((f: Record<string, string>) => ({
-      id: f.food_id,
-      name: f.food_name,
-      brand: f.brand_name ?? null,
-      description: f.food_description ?? '',
-    }))
+    const results = asArray(foods.food as Record<string, string>[])
+      .map((f) => ({
+        id:          f.food_id,
+        name:        f.food_name,
+        brand:       f.brand_name ?? null,
+        description: f.food_description ?? '',
+      }))
 
     return new Response(
       JSON.stringify({ results, total: Number(foods.total_results ?? results.length) }),
