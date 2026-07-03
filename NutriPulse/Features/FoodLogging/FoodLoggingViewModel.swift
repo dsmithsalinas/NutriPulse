@@ -52,6 +52,8 @@ final class FoodLoggingViewModel {
         // the created row. Without it, insert returns 204 No Content and we have no id.
         let newItem = NewFoodItem(
             userId: userId,
+            source: "manual",
+            externalId: nil,
             name: trimmedName,
             brand: brand.trimmingCharacters(in: .whitespaces).isEmpty ? nil : brand.trimmingCharacters(in: .whitespaces),
             servingDesc: servingDesc.isEmpty ? "1 serving" : servingDesc,

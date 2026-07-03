@@ -45,8 +45,8 @@ struct FoodItem: Codable, Identifiable, Hashable {
 // with a nil id — the types enforce the right shape at each call site.
 struct NewFoodItem: Encodable {
     let userId: UUID
-    let source: String = "manual"
-    let externalId: String? = nil
+    let source: String         // "manual" | "fatsecret"
+    let externalId: String?    // nil for manual entries; FatSecret food_id otherwise
     let name: String
     let brand: String?
     let servingDesc: String

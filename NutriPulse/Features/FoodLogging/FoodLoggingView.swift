@@ -8,6 +8,7 @@ struct FoodLoggingView: View {
     // router.back() or closing a modal in React — no prop drilling needed.
     @Environment(\.dismiss) private var dismiss
     @State private var vm = FoodLoggingViewModel()
+    @State private var searchVM = FoodSearchViewModel()
 
     var body: some View {
         NavigationStack {
@@ -26,7 +27,9 @@ struct FoodLoggingView: View {
                         dismiss()
                     }
                 case .search:
-                    ComingSoonView(icon: "magnifyingglass", label: "Food Search", detail: "FatSecret integration coming soon")
+                    FoodSearchView(vm: searchVM, date: selectedDate) {
+                        dismiss()
+                    }
                 case .scan:
                     ComingSoonView(icon: "barcode.viewfinder", label: "Barcode Scanner", detail: "On-device scanning coming soon")
                 }
