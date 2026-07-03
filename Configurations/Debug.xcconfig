@@ -1,0 +1,7 @@
+// Debug build settings.
+// Secrets.xcconfig (gitignored) must exist alongside this file with your Supabase credentials.
+#include "Secrets.xcconfig"
+
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
+DEBUG_INFORMATION_FORMAT = dwarf
+SWIFT_OPTIMIZATION_LEVEL = -Onone

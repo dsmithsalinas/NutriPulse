@@ -1,0 +1,6 @@
+// Release build settings.
+#include "Secrets.xcconfig"
+
+SWIFT_OPTIMIZATION_LEVEL = -O
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+VALIDATE_PRODUCT = YES

@@ -4,3 +4,5 @@ xcuserdata/
 .build/
 DerivedData/
 .env
+# Supabase credentials — copy Secrets.xcconfig.template → Secrets.xcconfig locally
+Configurations/Secrets.xcconfig
