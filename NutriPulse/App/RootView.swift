@@ -12,10 +12,12 @@ struct RootView: View {
             if appState.isLoading {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if appState.isAuthenticated {
-                MainTabView()
-            } else {
+            } else if !appState.isAuthenticated {
                 AuthView()
+            } else if appState.needsOnboarding {
+                OnboardingView()
+            } else {
+                MainTabView()
             }
         }
         // SWIFT CONCEPT — .task{} is like useEffect in React. It runs an async block

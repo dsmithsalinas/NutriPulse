@@ -1,5 +1,22 @@
 import Foundation
 
+// Partial update struct — only the fields collected during onboarding.
+struct UpdateProfile: Encodable {
+    let fullName: String
+    let dob: String
+    let sex: String
+    let heightCm: Double
+    let activityLevel: String
+
+    enum CodingKeys: String, CodingKey {
+        case fullName      = "full_name"
+        case dob
+        case sex
+        case heightCm      = "height_cm"
+        case activityLevel = "activity_level"
+    }
+}
+
 struct UserProfile: Codable, Identifiable {
     let id: UUID
     let email: String

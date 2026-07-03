@@ -1,0 +1,228 @@
+import Observation
+import Foundation
+import Supabase
+
+// ─── Supporting enums ────────────────────────────────────────────────────────
+
+enum BiologicalSex: String, CaseIterable, Identifiable {
+    case male   = "male"
+    case female = "female"
+    case other  = "other"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .male:   return "Male"
+        case .female: return "Female"
+        case .other:  return "Non-binary / Other"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .male:   return "person.fill"
+        case .female: return "person.fill"
+        case .other:  return "person.fill"
+        }
+    }
+}
+
+enum ActivityLevel: String, CaseIterable, Identifiable {
+    case sedentary  = "sedentary"
+    case light      = "light"
+    case moderate   = "moderate"
+    case active     = "active"
+    case veryActive = "very_active"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .sedentary:  return "Sedentary"
+        case .light:      return "Lightly Active"
+        case .moderate:   return "Moderately Active"
+        case .active:     return "Active"
+        case .veryActive: return "Very Active"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .sedentary:  return "Desk job, little or no exercise"
+        case .light:      return "Light exercise 1–3 days/week"
+        case .moderate:   return "Moderate exercise 3–5 days/week"
+        case .active:     return "Hard exercise 6–7 days/week"
+        case .veryActive: return "Twice daily training or physical job"
+        }
+    }
+
+    // Harris-Benedict / Mifflin activity multipliers
+    var multiplier: Double {
+        switch self {
+        case .sedentary:  return 1.2
+        case .light:      return 1.375
+        case .moderate:   return 1.55
+        case .active:     return 1.725
+        case .veryActive: return 1.9
+        }
+    }
+}
+
+enum WeightGoal: String, CaseIterable, Identifiable {
+    case lose     = "lose"
+    case maintain = "maintain"
+    case gain     = "gain"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .lose:     return "Lose Weight"
+        case .maintain: return "Maintain Weight"
+        case .gain:     return "Gain Weight"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .lose:     return "500 kcal/day deficit (~1 lb/week)"
+        case .maintain: return "Match your energy expenditure"
+        case .gain:     return "250 kcal/day surplus (~0.5 lb/week)"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .lose:     return "arrow.down.circle.fill"
+        case .maintain: return "equal.circle.fill"
+        case .gain:     return "arrow.up.circle.fill"
+        }
+    }
+
+    var calorieAdjustment: Double {
+        switch self {
+        case .lose:     return -500
+        case .maintain: return 0
+        case .gain:     return  250
+        }
+    }
+}
+
+// ─── Calculated result ───────────────────────────────────────────────────────
+
+struct CalculatedGoals {
+    let calories: Double
+    let proteinG: Double
+    let carbsG: Double
+    let fatG: Double
+    let fiberG: Double
+    let waterMlTarget: Double
+}
+
+// ─── ViewModel ───────────────────────────────────────────────────────────────
+
+@Observable
+@MainActor
+final class OnboardingViewModel {
+    // Step 1 – Name
+    var fullName = ""
+
+    // Step 2 – Biological sex
+    var sex: BiologicalSex = .male
+
+    // Step 3 – Date of birth (default: 30 years ago)
+    var dob: Date = Calendar.current.date(byAdding: .year, value: -30, to: .now) ?? .now
+
+    // Step 4 – Height & weight
+    var useImperialUnits = true    // US default; controls display unit in the step view
+    var heightCm: Double = 170     // always stored in cm; step view converts for display
+    var weightKg: Double = 75      // always stored in kg
+
+    // Step 5 – Activity level
+    var activityLevel: ActivityLevel = .moderate
+
+    // Step 6 – Goal
+    var goal: WeightGoal = .maintain
+
+    var isLoading = false
+    var errorMessage: String? = nil
+
+    var canContinueName: Bool { !fullName.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    // ── Mifflin-St Jeor BMR ──────────────────────────────────────────────────
+    // Male:   BMR = 10W + 6.25H − 5A + 5
+    // Female: BMR = 10W + 6.25H − 5A − 161
+    // Other:  average of the two (no single validated formula)
+    var calculatedGoals: CalculatedGoals {
+        let ageYears = Double(Calendar.current.dateComponents([.year], from: dob, to: .now).year ?? 30)
+
+        let bmr: Double
+        switch sex {
+        case .male:
+            bmr = 10 * weightKg + 6.25 * heightCm - 5 * ageYears + 5
+        case .female:
+            bmr = 10 * weightKg + 6.25 * heightCm - 5 * ageYears - 161
+        case .other:
+            let maleBMR   = 10 * weightKg + 6.25 * heightCm - 5 * ageYears + 5
+            let femaleBMR = 10 * weightKg + 6.25 * heightCm - 5 * ageYears - 161
+            bmr = (maleBMR + femaleBMR) / 2
+        }
+
+        let tdee = bmr * activityLevel.multiplier
+        let target = max(1200, (tdee + goal.calorieAdjustment)).rounded()
+
+        // Macro split: 30% protein / 40% carbs / 30% fat
+        // Water: 35 ml per kg body weight (min 2 L)
+        return CalculatedGoals(
+            calories:     target,
+            proteinG:     (target * 0.30 / 4).rounded(),
+            carbsG:       (target * 0.40 / 4).rounded(),
+            fatG:         (target * 0.30 / 9).rounded(),
+            fiberG:       max(25, (target / 1000 * 14)).rounded(),
+            waterMlTarget: max(2000, (weightKg * 35)).rounded()
+        )
+    }
+
+    // ── Save (called from SummaryStepView) ───────────────────────────────────
+    func save(userId: UUID) async throws {
+        isLoading = true
+        defer { isLoading = false }
+
+        let goals = calculatedGoals
+
+        // 1. Fill in the profile row the trigger created at sign-up
+        try await supabase
+            .from("profiles")
+            .update(UpdateProfile(
+                fullName: fullName.trimmingCharacters(in: .whitespaces),
+                dob: dob.isoDateString,
+                sex: sex.rawValue,
+                heightCm: heightCm,
+                activityLevel: activityLevel.rawValue
+            ))
+            .eq("id", value: userId)
+            .execute()
+
+        // 2. Record starting weight
+        try await supabase
+            .from("weight_logs")
+            .insert(NewWeightLog(userId: userId, weightKg: weightKg))
+            .execute()
+
+        // 3. Create initial daily goal (upsert handles re-runs of onboarding)
+        try await supabase
+            .from("daily_goals")
+            .upsert(NewDailyGoal(
+                userId: userId,
+                effectiveDate: Date().isoDateString,
+                calories: goals.calories,
+                proteinG: goals.proteinG,
+                carbsG: goals.carbsG,
+                fatG: goals.fatG,
+                fiberG: goals.fiberG,
+                waterMlTarget: goals.waterMlTarget
+            ))
+            .execute()
+    }
+}
