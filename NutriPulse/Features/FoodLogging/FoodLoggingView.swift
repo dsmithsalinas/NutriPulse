@@ -38,11 +38,16 @@ struct FoodLoggingView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .alert("Error", isPresented: .constant(vm.errorMessage != nil), actions: {
+            // .constant() evaluates once and freezes — Binding(get:set:) re-evaluates
+            // whenever @Observable tracks a change to vm.errorMessage.
+            .alert("Error", isPresented: Binding(
+                get: { vm.errorMessage != nil },
+                set: { if !$0 { vm.errorMessage = nil } }
+            )) {
                 Button("OK") { vm.errorMessage = nil }
-            }, message: {
+            } message: {
                 Text(vm.errorMessage ?? "")
-            })
+            }
         }
     }
 }

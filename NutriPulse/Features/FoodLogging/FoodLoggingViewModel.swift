@@ -36,10 +36,12 @@ final class FoodLoggingViewModel {
         errorMessage = nil
         defer { isLoading = false }
 
-        // SWIFT CONCEPT — `currentSession` is a synchronous cached value on the auth client.
-        // We guard here so the compiler knows userId is non-optional below.
-        // RLS would also reject a wrong id, but we want a clear local error first.
-        guard let userId = supabase.auth.currentSession?.user.id else {
+        // `session` is async and throws AuthError if no valid session exists — safer than
+        // `currentSession?` which can be nil briefly while the keychain restores on launch.
+        let userId: UUID
+        do {
+            userId = try await supabase.auth.session.user.id
+        } catch {
             throw URLError(.userAuthenticationRequired)
         }
 
