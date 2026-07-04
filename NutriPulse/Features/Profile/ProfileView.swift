@@ -3,6 +3,9 @@ import SwiftUI
 struct ProfileView: View {
     @State private var vm = ProfileViewModel()
     @Environment(AppState.self) private var appState
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
     var body: some View {
         NavigationStack {
@@ -80,11 +83,16 @@ struct ProfileView: View {
 
     private var bodyStatsSection: some View {
         Section("Body Stats") {
+            Picker("Units", selection: $unitSystemRaw) {
+                Text("Metric (kg, cm)").tag("metric")
+                Text("Imperial (lbs, ft)").tag("imperial")
+            }
+
             if let w = vm.latestWeight {
-                row(label: "Weight", value: String(format: "%.1f kg", w.weightKg))
+                row(label: "Weight", value: units.formatWeight(w.weightKg))
             }
             if let h = vm.profile?.heightCm {
-                row(label: "Height", value: String(format: "%.0f cm", h))
+                row(label: "Height", value: units.formatHeight(h))
             }
             if let dob = vm.profile?.dob, let age = ageFrom(dob) {
                 row(label: "Age", value: "\(age) years")
@@ -231,15 +239,20 @@ struct ProfileView: View {
 private struct EditProfileSheet: View {
     @Bindable var vm: ProfileViewModel
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
 
-    @State private var name       = ""
-    @State private var dob        = Date()
-    @State private var sex        = BiologicalSex.male
-    @State private var heightCm   = 170.0
-    @State private var activity   = ActivityLevel.moderate
-    @State private var logWeight  = false
-    @State private var weightKg   = 70.0
-    @State private var isSaving   = false
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
+
+    @State private var name          = ""
+    @State private var dob           = Date()
+    @State private var sex           = BiologicalSex.male
+    @State private var heightCm      = 170.0
+    @State private var heightFeet    = 5.0
+    @State private var heightInches  = 7.0
+    @State private var activity      = ActivityLevel.moderate
+    @State private var logWeight     = false
+    @State private var weightInput   = 70.0   // in user's preferred unit
+    @State private var isSaving      = false
 
     private let dobFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -262,14 +275,31 @@ private struct EditProfileSheet: View {
                             Text(s.displayName).tag(s)
                         }
                     }
-                    HStack {
-                        Text("Height")
-                        Spacer()
-                        TextField("cm", value: $heightCm, format: .number)
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.decimalPad)
-                            .frame(width: 60)
-                        Text("cm").foregroundStyle(.secondary)
+                    if units == .imperial {
+                        HStack {
+                            Text("Height")
+                            Spacer()
+                            TextField("ft", value: $heightFeet, format: .number)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.numberPad)
+                                .frame(width: 36)
+                            Text("ft").foregroundStyle(.secondary)
+                            TextField("in", value: $heightInches, format: .number)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.numberPad)
+                                .frame(width: 36)
+                            Text("in").foregroundStyle(.secondary)
+                        }
+                    } else {
+                        HStack {
+                            Text("Height")
+                            Spacer()
+                            TextField("cm", value: $heightCm, format: .number)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.decimalPad)
+                                .frame(width: 60)
+                            Text("cm").foregroundStyle(.secondary)
+                        }
                     }
                 }
                 Section("Activity Level") {
@@ -285,9 +315,9 @@ private struct EditProfileSheet: View {
                     Toggle("Log today's weight", isOn: $logWeight)
                     if logWeight {
                         HStack {
-                            TextField("kg", value: $weightKg, format: .number)
+                            TextField(units.weightUnit, value: $weightInput, format: .number)
                                 .keyboardType(.decimalPad)
-                            Text("kg").foregroundStyle(.secondary)
+                            Text(units.weightUnit).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -308,27 +338,39 @@ private struct EditProfileSheet: View {
     }
 
     private func prefill() {
-        name     = vm.profile?.fullName ?? ""
-        heightCm = vm.profile?.heightCm ?? 170
+        name = vm.profile?.fullName ?? ""
         if let dobStr = vm.profile?.dob, let d = dobFormatter.date(from: dobStr) { dob = d }
         if let s = vm.profile?.sex { sex = BiologicalSex(rawValue: s) ?? .male }
         if let a = vm.profile?.activityLevel { activity = ActivityLevel(rawValue: a) ?? .moderate }
-        weightKg = vm.latestWeight?.weightKg ?? 70
+
+        let storedCm = vm.profile?.heightCm ?? 170
+        heightCm     = storedCm
+        heightFeet   = units.feetFrom(storedCm)
+        heightInches = units.inchesFrom(storedCm)
+
+        let storedKg  = vm.latestWeight?.weightKg ?? 70
+        weightInput   = units.weightInput(from: storedKg)
     }
 
     private func save() async {
         isSaving = true
         defer { isSaving = false }
+
+        let finalHeightCm = units == .imperial
+            ? units.cmFrom(feet: heightFeet, inches: heightInches)
+            : heightCm
+        let finalWeightKg = units.kgFrom(weightInput)
+
         let update = UpdateProfile(
             fullName: name.trimmingCharacters(in: .whitespaces),
             dob: dobFormatter.string(from: dob),
             sex: sex.rawValue,
-            heightCm: heightCm,
+            heightCm: finalHeightCm,
             activityLevel: activity.rawValue
         )
         do {
             try await vm.updateProfile(update)
-            if logWeight { try await vm.logWeight(weightKg) }
+            if logWeight { try await vm.logWeight(finalWeightKg) }
             dismiss()
         } catch {
             vm.errorMessage = error.localizedDescription
