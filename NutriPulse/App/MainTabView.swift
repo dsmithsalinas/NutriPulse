@@ -10,7 +10,7 @@ struct MainTabView: View {
             Text("Log Food")
                 .tabItem { Label("Log", systemImage: "plus.circle.fill") }
 
-            Text("Analytics")
+            AnalyticsView()
                 .tabItem { Label("Analytics", systemImage: "chart.line.uptrend.xyaxis") }
 
             Text("Coach")
