@@ -7,6 +7,7 @@ struct TodayView: View {
     // if React let you store class instances that outlive renders.
     @State private var vm = TodayViewModel()
     @State private var showFoodLogger = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -87,6 +88,11 @@ struct TodayView: View {
             }
             .task(id: vm.selectedDate) {
                 await vm.loadData()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await vm.loadHealthData() }
+                }
             }
         }
     }
