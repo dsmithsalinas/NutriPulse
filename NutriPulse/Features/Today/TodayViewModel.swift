@@ -68,6 +68,7 @@ final class TodayViewModel {
             errorMessage = error.localizedDescription
         }
         await loadHealthData()
+        await FavoritesStore.shared.loadIfNeeded()
     }
 
     func loadHealthData() async {

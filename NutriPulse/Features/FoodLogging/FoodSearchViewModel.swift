@@ -21,8 +21,11 @@ final class FoodSearchViewModel {
 
     var isLogging = false
     var errorMessage: String? = nil
+    var quickAdds: [FavoriteQuickAdd] = []
+    var wantsToFavorite = false
 
     private let client = FatSecretClient()
+    private let favRepo = FavoriteRepository()
 
     // Called from .task(id: searchQuery) in FoodSearchView.
     // The task auto-cancels when searchQuery changes, giving us debounce for free.
@@ -41,10 +44,15 @@ final class FoodSearchViewModel {
         }
     }
 
+    func loadQuickAdds() async {
+        do { quickAdds = try await favRepo.fetchQuickAdds() } catch {}
+    }
+
     func loadDetail(for result: FoodSearchResult) async {
         selectedResult = result
         detail = nil
         selectedServing = nil
+        wantsToFavorite = false
         isLoadingDetail = true
         defer { isLoadingDetail = false }
         do {
@@ -138,5 +146,20 @@ final class FoodSearchViewModel {
         )
 
         try await supabase.from("food_logs").insert(newLog).execute()
+
+        if wantsToFavorite {
+            struct NewFav: Encodable {
+                let userId: UUID; let foodItemId: UUID
+                enum CodingKeys: String, CodingKey {
+                    case userId = "user_id"; case foodItemId = "food_item_id"
+                }
+            }
+            _ = try? await supabase
+                .from("food_favorites")
+                .insert(NewFav(userId: userId, foodItemId: item.id))
+                .execute()
+            FavoritesStore.shared.insertId(item.id)
+            wantsToFavorite = false
+        }
     }
 }

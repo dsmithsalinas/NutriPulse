@@ -58,6 +58,7 @@ private struct FoodLogRowView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            FavoriteStar(foodItemId: log.foodItemId)
         }
         .padding(.vertical, Theme.Spacing.sm)
     }

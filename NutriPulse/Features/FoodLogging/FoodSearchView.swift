@@ -30,10 +30,14 @@ struct FoodSearchView: View {
             // ── Results ───────────────────────────────────────────────────
             Group {
                 if vm.searchQuery.isEmpty {
-                    placeholder(
-                        icon: "magnifyingglass",
-                        text: "Search millions of foods from the FatSecret database"
-                    )
+                    if !vm.quickAdds.isEmpty {
+                        FavoritesQuickAddList(quickAdds: vm.quickAdds, date: date, onLogged: onLogged)
+                    } else {
+                        placeholder(
+                            icon: "magnifyingglass",
+                            text: "Search millions of foods from the FatSecret database"
+                        )
+                    }
                 } else if vm.isSearching {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -67,6 +71,7 @@ struct FoodSearchView: View {
                 }
             }
         }
+        .task { await vm.loadQuickAdds() }
         // SWIFT CONCEPT — .task(id:) re-runs the async block whenever `id` changes,
         // and cancels the previous run. Combined with Task.sleep this gives us
         // debounce without Combine — identical to useEffect with a cleanup fn in React.
@@ -130,6 +135,14 @@ struct FoodDetailSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         vm.selectedResult = nil
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        vm.wantsToFavorite.toggle()
+                    } label: {
+                        Image(systemName: vm.wantsToFavorite ? "star.fill" : "star")
+                            .foregroundStyle(vm.wantsToFavorite ? Color.yellow : Color.primary)
                     }
                 }
             }
@@ -215,6 +228,90 @@ struct FoodDetailSheet: View {
         .background(.bar)
     }
 }
+
+// ─── Favorites quick-add section ─────────────────────────────────────────────
+
+private struct FavoritesQuickAddList: View {
+    let quickAdds: [FavoriteQuickAdd]
+    let date: Date
+    let onLogged: () -> Void
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(quickAdds) { fav in
+                    FavoriteQuickAddRow(fav: fav, date: date, onLogged: onLogged)
+                }
+            } header: {
+                Label("Favorites", systemImage: "star.fill")
+                    .foregroundStyle(.yellow)
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+}
+
+private struct FavoriteQuickAddRow: View {
+    let fav: FavoriteQuickAdd
+    let date: Date
+    let onLogged: () -> Void
+
+    @State private var isLogging = false
+    private let repo = FavoriteRepository()
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(fav.name)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Text(servingText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            HStack(spacing: Theme.Spacing.sm) {
+                Text("\(Int(fav.totalCalories)) kcal")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button {
+                    Task { await logIt() }
+                } label: {
+                    Group {
+                        if isLogging {
+                            ProgressView().scaleEffect(0.75)
+                        } else {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(Theme.NutrientColor.calories)
+                        }
+                    }
+                    .frame(width: 30, height: 30)
+                }
+                .buttonStyle(.plain)
+                .disabled(isLogging)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var servingText: String {
+        let qty = fav.quantity == fav.quantity.rounded() ? "\(Int(fav.quantity))" : String(format: "%.1f", fav.quantity)
+        let desc = fav.servingDesc ?? "serving"
+        return "\(qty) × \(desc)"
+    }
+
+    private func logIt() async {
+        isLogging = true
+        defer { isLogging = false }
+        do {
+            try await repo.quickLog(fav, on: date)
+            onLogged()
+        } catch {}
+    }
+}
+
+// ─── Macro preview row ────────────────────────────────────────────────────────
 
 struct MacroPreviewRow: View {
     let label: String
