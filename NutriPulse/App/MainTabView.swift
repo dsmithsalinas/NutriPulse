@@ -6,10 +6,6 @@ struct MainTabView: View {
             TodayView()
                 .tabItem { Label("Today", systemImage: "house.fill") }
 
-            // Placeholder tabs — features built incrementally
-            Text("Log Food")
-                .tabItem { Label("Log", systemImage: "plus.circle.fill") }
-
             AnalyticsView()
                 .tabItem { Label("Analytics", systemImage: "chart.line.uptrend.xyaxis") }
 
