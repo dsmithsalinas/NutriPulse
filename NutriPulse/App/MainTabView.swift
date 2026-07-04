@@ -9,7 +9,7 @@ struct MainTabView: View {
             AnalyticsView()
                 .tabItem { Label("Analytics", systemImage: "chart.line.uptrend.xyaxis") }
 
-            Text("Coach")
+            CoachView()
                 .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right.fill") }
 
             ProfileView()

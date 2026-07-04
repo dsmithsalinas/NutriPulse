@@ -4,6 +4,8 @@ struct ProfileView: View {
     @State private var vm = ProfileViewModel()
     @Environment(AppState.self) private var appState
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    @AppStorage("chatHistoryVersion") private var chatHistoryVersion = 0
+    @State private var showClearHistoryConfirm = false
 
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
@@ -15,6 +17,7 @@ struct ProfileView: View {
                 goalsSection
                 glp1Section
                 healthKitSection
+                coachSection
                 signOutSection
             }
             .listStyle(.insetGrouped)
@@ -41,6 +44,21 @@ struct ProfileView: View {
                 Button("OK") { vm.errorMessage = nil }
             } message: {
                 Text(vm.errorMessage ?? "")
+            }
+            .confirmationDialog(
+                "Clear all Pulse chat history?",
+                isPresented: $showClearHistoryConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Clear History", role: .destructive) {
+                    Task {
+                        try? await CoachRepository().clearHistory()
+                        chatHistoryVersion += 1
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This permanently deletes all messages with Pulse.")
             }
         }
     }
@@ -200,6 +218,16 @@ struct ProfileView: View {
             } else {
                 Label("Not available on this device", systemImage: "heart.slash")
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - Coach
+
+    private var coachSection: some View {
+        Section("Pulse Coach") {
+            Button("Clear Chat History", role: .destructive) {
+                showClearHistoryConfirm = true
             }
         }
     }
