@@ -26,4 +26,12 @@ struct FatSecretClient {
             options: .init(body: Payload(foodId: id))
         )
     }
+
+    func getFood(barcode: String) async throws -> FoodDetail {
+        struct Payload: Encodable { let barcode: String }
+        return try await supabase.functions.invoke(
+            "get-food",
+            options: .init(body: Payload(barcode: barcode))
+        )
+    }
 }

@@ -31,7 +31,9 @@ struct FoodLoggingView: View {
                         dismiss()
                     }
                 case .scan:
-                    ComingSoonView(icon: "barcode.viewfinder", label: "Barcode Scanner", detail: "On-device scanning coming soon")
+                    BarcodeScanView(vm: searchVM, date: selectedDate) {
+                        dismiss()
+                    }
                 }
             }
             .navigationTitle("Log Food")

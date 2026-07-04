@@ -1,7 +1,7 @@
 import Foundation
 
 // Lightweight result row returned by the search-food Edge Function.
-struct FoodSearchResult: Codable, Identifiable {
+struct FoodSearchResult: Codable, Identifiable, Equatable {
     let id: String           // FatSecret food_id
     let name: String
     let brand: String?

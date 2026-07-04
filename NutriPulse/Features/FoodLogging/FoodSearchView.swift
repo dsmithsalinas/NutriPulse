@@ -106,7 +106,7 @@ struct FoodSearchView: View {
 // ─── Detail sheet ─────────────────────────────────────────────────────────────
 // Shown after tapping a search result. Lets the user pick a serving, quantity,
 // and meal before logging.
-private struct FoodDetailSheet: View {
+struct FoodDetailSheet: View {
     @Bindable var vm: FoodSearchViewModel
     let result: FoodSearchResult
     let date: Date
@@ -216,7 +216,7 @@ private struct FoodDetailSheet: View {
     }
 }
 
-private struct MacroPreviewRow: View {
+struct MacroPreviewRow: View {
     let label: String
     let value: Double
     let unit: String

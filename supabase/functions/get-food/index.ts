@@ -21,15 +21,28 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { foodId } = await req.json()
-    if (!foodId) {
-      return new Response(JSON.stringify({ error: 'foodId required' }), {
+    const { foodId, barcode } = await req.json()
+
+    let resolvedFoodId: string | undefined = foodId
+    if (barcode) {
+      const barcodeJson = await fatSecretGet({ method: 'food.find_id_for_barcode', barcode })
+      resolvedFoodId = (barcodeJson.food_id as { value?: string } | undefined)?.value
+      if (!resolvedFoodId) {
+        return new Response(JSON.stringify({ error: 'Barcode not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    if (!resolvedFoodId) {
+      return new Response(JSON.stringify({ error: 'foodId or barcode required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const json = await fatSecretGet({ method: 'food.get.v4', food_id: foodId })
+    const json = await fatSecretGet({ method: 'food.get.v4', food_id: resolvedFoodId })
     const food = json.food as Record<string, unknown> | undefined
     if (!food) {
       return new Response(JSON.stringify({ error: 'Food not found' }), {

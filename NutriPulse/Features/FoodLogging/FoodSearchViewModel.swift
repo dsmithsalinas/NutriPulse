@@ -67,6 +67,30 @@ final class FoodSearchViewModel {
         )
     }
 
+    func lookupBarcode(_ barcode: String) async {
+        detail = nil
+        selectedServing = nil
+        isLoadingDetail = true
+        do {
+            let loaded = try await client.getFood(barcode: barcode)
+            detail = loaded
+            selectedServing = loaded.servings.first
+            isLoadingDetail = false
+            selectedResult = FoodSearchResult(id: loaded.id, name: loaded.name, brand: loaded.brand, description: "")
+        } catch {
+            isLoadingDetail = false
+            errorMessage = "No food found for that barcode."
+        }
+    }
+
+    func resetScanState() {
+        selectedResult = nil
+        detail = nil
+        selectedServing = nil
+        isLoadingDetail = false
+        errorMessage = nil
+    }
+
     func logFood(on date: Date) async throws {
         guard let detail, let serving = selectedServing else { return }
         isLogging = true
