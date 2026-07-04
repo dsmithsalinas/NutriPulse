@@ -32,6 +32,17 @@ final class TodayViewModel {
 
     var isToday: Bool { selectedDate.isToday }
 
+    // HealthKit data for the selected date
+    var activeCalories: Double  = 0
+    var restingHeartRate: Double? = nil
+    var hrv: Double?            = nil
+    var sleepHours: Double?     = nil
+
+    var netCalories: Double { totalCalories - activeCalories }
+    var healthDataAvailable: Bool {
+        activeCalories > 0 || restingHeartRate != nil || hrv != nil || sleepHours != nil
+    }
+
     func loadData() async {
         isLoading    = true
         errorMessage = nil
@@ -48,6 +59,22 @@ final class TodayViewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+        await loadHealthData()
+    }
+
+    func loadHealthData() async {
+        let hk = HealthKitManager.shared
+        guard hk.isAvailable else { return }
+        try? await hk.requestAuthorization()
+        async let cal    = hk.fetchActiveCalories(for: selectedDate)
+        async let hr     = hk.fetchRestingHeartRate(for: selectedDate)
+        async let hrvVal = hk.fetchHRV(for: selectedDate)
+        async let sleep  = hk.fetchSleepHours(for: selectedDate)
+        let (calories, heartRate, heartRateVar, sleepTime) = await (cal, hr, hrvVal, sleep)
+        activeCalories   = calories
+        restingHeartRate = heartRate
+        hrv              = heartRateVar
+        sleepHours       = sleepTime
     }
 
     func goToPreviousDay() {
