@@ -10,6 +10,7 @@ import Foundation
 final class TodayViewModel {
     private let foodLogRepo = FoodLogRepository()
     private let goalRepo    = GoalRepository()
+    private let waterRepo   = WaterRepository()
 
     var selectedDate: Date = .now
     var foodLogs: [FoodLog]   = []
@@ -32,6 +33,10 @@ final class TodayViewModel {
 
     var isToday: Bool { selectedDate.isToday }
 
+    // Water tracking
+    var waterIntakeMl: Double = 0
+    var waterGoalMl:   Double = 2000
+
     // HealthKit data for the selected date
     var activeCalories: Double  = 0
     var restingHeartRate: Double? = nil
@@ -51,11 +56,14 @@ final class TodayViewModel {
         do {
             // SWIFT CONCEPT — `async let` runs both requests concurrently (like Promise.all).
             // Without it, `await logsTask` would block while goals sat idle.
-            async let logsTask = foodLogRepo.fetchLogs(for: selectedDate)
-            async let goalTask = goalRepo.fetchGoal(for: selectedDate)
-            let (logs, goal) = try await (logsTask, goalTask)
-            foodLogs  = logs
-            dailyGoal = goal
+            async let logsTask  = foodLogRepo.fetchLogs(for: selectedDate)
+            async let goalTask  = goalRepo.fetchGoal(for: selectedDate)
+            async let waterTask = waterRepo.fetchTotal(for: selectedDate)
+            let (logs, goal, water) = try await (logsTask, goalTask, waterTask)
+            foodLogs      = logs
+            dailyGoal     = goal
+            waterIntakeMl = water
+            waterGoalMl   = goal?.waterMlTarget ?? 2000
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -75,6 +83,15 @@ final class TodayViewModel {
         restingHeartRate = heartRate
         hrv              = heartRateVar
         sleepHours       = sleepTime
+    }
+
+    func addWater(_ ml: Double) async {
+        do {
+            try await waterRepo.add(ml, for: selectedDate)
+            waterIntakeMl += ml
+        } catch {
+            errorMessage = "Couldn't log water."
+        }
     }
 
     func goToPreviousDay() {

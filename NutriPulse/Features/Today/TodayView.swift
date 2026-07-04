@@ -45,6 +45,13 @@ struct TodayView: View {
                             }
                         }
 
+                        WaterCard(
+                            intakeMl: vm.waterIntakeMl,
+                            goalMl:   vm.waterGoalMl
+                        ) { ml in
+                            Task { await vm.addWater(ml) }
+                        }
+
                         if vm.foodLogs.isEmpty {
                             EmptyDayView()
                         } else {

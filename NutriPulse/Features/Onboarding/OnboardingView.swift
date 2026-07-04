@@ -6,7 +6,7 @@ import SwiftUI
 // Push a value onto `path` to navigate forward; pop it to go back.
 // .navigationDestination(for:) maps each route to the view that renders it.
 enum OnboardingRoute: Hashable {
-    case sex, dob, heightWeight, activity, goal, summary
+    case sex, dob, heightWeight, activity, goal, healthKit, glp1, summary
 }
 
 // ─── Top-level shell ─────────────────────────────────────────────────────────
@@ -30,7 +30,11 @@ struct OnboardingView: View {
                     case .activity:
                         ActivityStepView(vm: vm) { path.append(.goal) }
                     case .goal:
-                        GoalStepView(vm: vm) { path.append(.summary) }
+                        GoalStepView(vm: vm) { path.append(.healthKit) }
+                    case .healthKit:
+                        HealthKitStepView { path.append(.glp1) }
+                    case .glp1:
+                        GLP1SetupStepView(vm: vm) { path.append(.summary) }
                     case .summary:
                         SummaryStepView(vm: vm, onComplete: handleSave)
                     }
@@ -77,7 +81,7 @@ struct OnboardingStepLayout<Content: View>: View {
     let onContinue: () -> Void
     @ViewBuilder let content: Content    // trailing closure filled in by each step
 
-    private let totalSteps = 7
+    private let totalSteps = 9
 
     var body: some View {
         ScrollView {

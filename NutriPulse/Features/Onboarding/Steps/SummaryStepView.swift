@@ -8,7 +8,7 @@ struct SummaryStepView: View {
         let goals = vm.calculatedGoals
 
         OnboardingStepLayout(
-            step: 7,
+            step: 9,
             title: "Your daily targets",
             subtitle: "Based on Mifflin-St Jeor BMR + your activity & goal.",
             continueLabel: vm.isLoading ? "Saving…" : "Start Tracking",

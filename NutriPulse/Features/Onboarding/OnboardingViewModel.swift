@@ -145,6 +145,12 @@ final class OnboardingViewModel {
     // Step 6 – Goal
     var goal: WeightGoal = .maintain
 
+    // Step 8 – GLP-1 (optional)
+    var isOnGLP1 = false
+    var glp1Medication: GLP1Medication = .ozempic
+    var glp1DoseMg: Double = 0.5
+    var glp1LastInjected: Date = Calendar.current.startOfDay(for: .now)
+
     var isLoading = false
     var errorMessage: String? = nil
 
@@ -224,5 +230,21 @@ final class OnboardingViewModel {
                 waterMlTarget: goals.waterMlTarget
             ))
             .execute()
+
+        // 4. GLP-1 log (optional — skipped if user didn't set it up)
+        if isOnGLP1 {
+            let nextDue = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: glp1LastInjected) ?? glp1LastInjected
+            try await supabase
+                .from("glp1_logs")
+                .insert(NewGLP1Log(
+                    userId: userId,
+                    injectedAt: glp1LastInjected,
+                    medication: glp1Medication.rawValue,
+                    doseMg: glp1DoseMg,
+                    site: InjectionSite.leftAbdomen.rawValue,
+                    nextDueAt: nextDue
+                ))
+                .execute()
+        }
     }
 }
