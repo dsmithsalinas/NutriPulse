@@ -128,6 +128,21 @@ final class HealthKitManager {
         }
     }
 
+    // MARK: - Write
+
+    func saveWeight(_ kg: Double, date: Date) async throws {
+        guard isAvailable else { return }
+        guard let type = HKQuantityType.quantityType(forIdentifier: .bodyMass) else { return }
+        let quantity = HKQuantity(unit: HKUnit.gramUnit(with: .kilo), doubleValue: kg)
+        let sample = HKQuantitySample(type: type, quantity: quantity, start: date, end: date)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            store.save(sample) { _, error in
+                if let error { continuation.resume(throwing: error) }
+                else { continuation.resume() }
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private func dayInterval(for date: Date) -> (Date, Date) {

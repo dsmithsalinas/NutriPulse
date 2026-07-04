@@ -12,7 +12,7 @@ struct MainTabView: View {
             Text("Coach")
                 .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right.fill") }
 
-            Text("Profile")
+            ProfileView()
                 .tabItem { Label("Profile", systemImage: "person.fill") }
         }
     }
