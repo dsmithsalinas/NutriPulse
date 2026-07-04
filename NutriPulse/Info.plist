@@ -23,9 +23,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>NutriPulse uses the camera to scan food barcodes.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>NutriPulse reads weight, water, active energy, workouts, HRV, resting HR, and sleep from Apple Health.</string>
+	<string>NutriPulse reads weight, body fat, BMI, lean body mass, water, active energy, HRV, resting HR, and sleep from Apple Health.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>NutriPulse writes weight and water logs to Apple Health.</string>
+	<string>NutriPulse writes weight, body fat, BMI, lean body mass, and water logs to Apple Health.</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>SUPABASE_URL</key>

@@ -21,9 +21,18 @@ final class AnalyticsViewModel {
     }
 
     var selectedRange: TimeRange = .week
-    var summaries: [DailySummary] = []
-    var weightLogs: [WeightLog]   = []
-    var goalCalories: Double?     = nil
+    var summaries: [DailySummary]          = []
+    var weightLogs: [WeightLog]            = []
+    var bodyCompHistory: [BodyCompositionLog] = []
+    var goalCalories: Double?              = nil
+
+    var bodyFatLogs: [(date: Date, pct: Double)] {
+        bodyCompHistory.compactMap { log in
+            guard let pct = log.bodyFatPct,
+                  let date = ISO8601DateFormatter().date(from: log.logDate + "T00:00:00Z") else { return nil }
+            return (date, pct)
+        }
+    }
     var isLoading                 = false
     var errorMessage: String?     = nil
 
@@ -48,13 +57,15 @@ final class AnalyticsViewModel {
         errorMessage = nil
         defer { isLoading = false }
         do {
-            async let summariesTask = repo.fetchDailySummaries(days: selectedRange.rawValue)
-            async let weightTask    = repo.fetchWeightLogs(days: selectedRange.rawValue)
-            async let goalTask      = goalRepo.fetchGoal(for: .now)
-            let (s, w, g) = try await (summariesTask, weightTask, goalTask)
-            summaries    = s
-            weightLogs   = w
-            goalCalories = g?.calories
+            async let summariesTask  = repo.fetchDailySummaries(days: selectedRange.rawValue)
+            async let weightTask     = repo.fetchWeightLogs(days: selectedRange.rawValue)
+            async let bodyCompTask   = repo.fetchBodyCompositionHistory(days: selectedRange.rawValue)
+            async let goalTask       = goalRepo.fetchGoal(for: .now)
+            let (s, w, bc, g)        = try await (summariesTask, weightTask, bodyCompTask, goalTask)
+            summaries        = s
+            weightLogs       = w
+            bodyCompHistory  = bc
+            goalCalories     = g?.calories
         } catch {
             errorMessage = error.localizedDescription
         }

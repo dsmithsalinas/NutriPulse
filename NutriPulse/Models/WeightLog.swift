@@ -3,7 +3,13 @@ import Foundation
 struct NewWeightLog: Encodable {
     let userId: UUID
     let weightKg: Double
-    let source: String = "manual"
+    let source: String
+
+    init(userId: UUID, weightKg: Double, source: String = "manual") {
+        self.userId   = userId
+        self.weightKg = weightKg
+        self.source   = source
+    }
 
     enum CodingKeys: String, CodingKey {
         case userId   = "user_id"

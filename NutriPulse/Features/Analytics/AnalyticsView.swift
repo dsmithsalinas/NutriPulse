@@ -35,6 +35,10 @@ struct AnalyticsView: View {
                                 )
                             }
 
+                            if !vm.bodyFatLogs.isEmpty {
+                                BodyFatChartCard(logs: vm.bodyFatLogs)
+                            }
+
                             if vm.loggedDays.isEmpty {
                                 emptyState
                             }
@@ -187,6 +191,48 @@ private struct MacrosChartCard: View {
                 }
                 .frame(height: 160)
             }
+        }
+        .padding(Theme.Spacing.md)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+// MARK: - Weight chart
+
+// MARK: - Body fat chart
+
+private struct BodyFatChartCard: View {
+    let logs: [(date: Date, pct: Double)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text("Body Fat %")
+                .font(.headline)
+
+            Chart(logs, id: \.date) { entry in
+                LineMark(
+                    x: .value("Date", entry.date, unit: .day),
+                    y: .value("%", entry.pct)
+                )
+                .foregroundStyle(Color.orange)
+                .interpolationMethod(.catmullRom)
+
+                PointMark(
+                    x: .value("Date", entry.date, unit: .day),
+                    y: .value("%", entry.pct)
+                )
+                .foregroundStyle(Color.orange)
+                .symbolSize(40)
+            }
+            .chartYAxis {
+                AxisMarks { value in
+                    AxisValueLabel("\(value.as(Double.self).map { String(format: "%.0f", $0) } ?? "")%")
+                    AxisGridLine()
+                }
+            }
+            .chartYScale(domain: .automatic(includesZero: false))
+            .frame(height: 140)
         }
         .padding(Theme.Spacing.md)
         .background(Color(.secondarySystemBackground))

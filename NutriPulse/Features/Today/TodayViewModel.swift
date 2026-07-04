@@ -8,9 +8,10 @@ import Foundation
 @Observable
 @MainActor
 final class TodayViewModel {
-    private let foodLogRepo = FoodLogRepository()
-    private let goalRepo    = GoalRepository()
-    private let waterRepo   = WaterRepository()
+    private let foodLogRepo  = FoodLogRepository()
+    private let goalRepo     = GoalRepository()
+    private let waterRepo    = WaterRepository()
+    private let bodyCompRepo = BodyCompositionRepository()
 
     var selectedDate: Date = .now
     var foodLogs: [FoodLog]   = []
@@ -37,6 +38,9 @@ final class TodayViewModel {
     var waterIntakeMl: Double = 0
     var waterGoalMl:   Double = 2000
 
+    // Body composition
+    var bodyComp = BodyCompositionData()
+
     // HealthKit data for the selected date
     var activeCalories: Double  = 0
     var restingHeartRate: Double? = nil
@@ -51,11 +55,11 @@ final class TodayViewModel {
     func loadData() async {
         isLoading    = true
         errorMessage = nil
-        defer { isLoading = false }  // runs when the function exits for any reason
+        defer { isLoading = false }
+
+        async let bodyCompTask = buildBodyCompData()
 
         do {
-            // SWIFT CONCEPT — `async let` runs both requests concurrently (like Promise.all).
-            // Without it, `await logsTask` would block while goals sat idle.
             async let logsTask  = foodLogRepo.fetchLogs(for: selectedDate)
             async let goalTask  = goalRepo.fetchGoal(for: selectedDate)
             async let waterTask = waterRepo.fetchTotal(for: selectedDate)
@@ -67,8 +71,112 @@ final class TodayViewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+
+        bodyComp = await bodyCompTask
         await loadHealthData()
         await FavoritesStore.shared.loadIfNeeded()
+    }
+
+    private func buildBodyCompData() async -> BodyCompositionData {
+        let hk = HealthKitManager.shared
+        var data = BodyCompositionData()
+
+        async let savedTask = try? bodyCompRepo.fetchLatest()
+        var hkWeight: (value: Double, date: Date)? = nil
+        var hkBodyFat: (value: Double, date: Date)? = nil
+        var hkBMI: (value: Double, date: Date)? = nil
+        var hkLBM: (value: Double, date: Date)? = nil
+
+        if hk.isAvailable {
+            async let w  = hk.fetchMostRecentWeight()
+            async let bf = hk.fetchMostRecentBodyFat()
+            async let b  = hk.fetchMostRecentBMI()
+            async let l  = hk.fetchMostRecentLBM()
+            (hkWeight, hkBodyFat, hkBMI, hkLBM) = await (w, bf, b, l)
+        }
+
+        let saved = await savedTask
+
+        // Weight: prefer HK; auto-sync today's reading once per calendar day
+        if let w = hkWeight {
+            data.weightKg     = w.value
+            data.weightFromHK = true
+            data.latestDate   = w.date
+            if Calendar.current.isDateInToday(w.date) {
+                let today = Date().isoDateString
+                if UserDefaults.standard.string(forKey: "lastHKWeightSyncDate") != today {
+                    try? await bodyCompRepo.upsert(date: today, weightKg: w.value, bodyFatPct: nil, bmi: nil, leanBodyMassKg: nil, source: "healthkit")
+                    if let userId = try? await supabase.auth.session.user.id {
+                        try? await supabase.from("weight_logs")
+                            .insert(NewWeightLog(userId: userId, weightKg: w.value, source: "healthkit"))
+                            .execute()
+                    }
+                    UserDefaults.standard.set(today, forKey: "lastHKWeightSyncDate")
+                }
+            }
+        } else if let w = saved?.weightKg {
+            data.weightKg     = w
+            data.weightFromHK = false
+        }
+
+        if let bf = hkBodyFat {
+            data.bodyFatPct    = bf.value
+            data.bodyFatFromHK = true
+        } else if let bf = saved?.bodyFatPct {
+            data.bodyFatPct    = bf
+        }
+
+        if let b = hkBMI {
+            data.bmi       = b.value
+            data.bmiFromHK = true
+        } else if let b = saved?.bmi {
+            data.bmi       = b
+        }
+
+        if let l = hkLBM {
+            data.lbmKg      = l.value
+            data.lbmFromHK  = true
+        } else if let l = saved?.leanBodyMassKg {
+            data.lbmKg      = l
+        }
+
+        return data
+    }
+
+    func saveBodyComposition(
+        weightKg: Double?,
+        bodyFatPct: Double?,
+        bmi: Double?,
+        lbmKg: Double?,
+        writeToHK: Bool
+    ) async {
+        let today = Date().isoDateString
+        do {
+            try await bodyCompRepo.upsert(
+                date: today,
+                weightKg: weightKg,
+                bodyFatPct: bodyFatPct,
+                bmi: bmi,
+                leanBodyMassKg: lbmKg,
+                source: "manual"
+            )
+            if let weight = weightKg, let userId = try? await supabase.auth.session.user.id {
+                try await supabase.from("weight_logs")
+                    .insert(NewWeightLog(userId: userId, weightKg: weight, source: "manual"))
+                    .execute()
+            }
+            if writeToHK {
+                let hk  = HealthKitManager.shared
+                let now = Date()
+                if let w  = weightKg   { try? await hk.saveWeight(w, date: now) }
+                if let bf = bodyFatPct { try? await hk.saveBodyFat(bf, date: now) }
+                if let b  = bmi        { try? await hk.saveBMI(b, date: now) }
+                if let l  = lbmKg      { try? await hk.saveLeanBodyMass(l, date: now) }
+            }
+            bodyComp = await buildBodyCompData()
+        } catch {
+            errorMessage = "Could not save body composition."
+        }
     }
 
     func loadHealthData() async {

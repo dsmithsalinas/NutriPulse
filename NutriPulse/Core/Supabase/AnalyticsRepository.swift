@@ -54,6 +54,10 @@ struct AnalyticsRepository {
         }
     }
 
+    func fetchBodyCompositionHistory(days: Int) async throws -> [BodyCompositionLog] {
+        try await BodyCompositionRepository().fetchHistory(days: days)
+    }
+
     func fetchWeightLogs(days: Int) async throws -> [WeightLog] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: .now)

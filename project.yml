@@ -39,8 +39,8 @@ targets:
           UIColorName: ""
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSHealthShareUsageDescription: "NutriPulse reads weight, water, active energy, workouts, HRV, resting HR, and sleep from Apple Health."
-        NSHealthUpdateUsageDescription: "NutriPulse writes weight and water logs to Apple Health."
+        NSHealthShareUsageDescription: "NutriPulse reads weight, body fat, BMI, lean body mass, water, active energy, HRV, resting HR, and sleep from Apple Health."
+        NSHealthUpdateUsageDescription: "NutriPulse writes weight, body fat, BMI, lean body mass, and water logs to Apple Health."
         NSCameraUsageDescription: "NutriPulse uses the camera to scan food barcodes."
         # These land in Info.plist so Config.swift can read them at runtime.
         # Values are set in Configurations/Secrets.xcconfig (gitignored).

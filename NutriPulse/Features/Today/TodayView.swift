@@ -7,7 +7,11 @@ struct TodayView: View {
     // if React let you store class instances that outlive renders.
     @State private var vm = TodayViewModel()
     @State private var showFoodLogger = false
+    @State private var showBodyCompSheet = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(AppState.self) private var appState
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
     var body: some View {
         NavigationStack {
@@ -44,6 +48,12 @@ struct TodayView: View {
                                 Task { await vm.loadHealthData() }
                             }
                         }
+
+                        BodyCompositionCard(
+                            data: vm.bodyComp,
+                            units: units,
+                            onAddTapped: { showBodyCompSheet = true }
+                        )
 
                         WaterCard(
                             intakeMl: vm.waterIntakeMl,
@@ -83,6 +93,20 @@ struct TodayView: View {
                         Image(systemName: "plus")
                             .fontWeight(.semibold)
                     }
+                }
+            }
+            .sheet(isPresented: $showBodyCompSheet) {
+                BodyCompositionSheet(
+                    current: vm.bodyComp,
+                    heightCm: appState.profile?.heightCm
+                ) { weightKg, bodyFatPct, bmi, lbmKg, writeToHK in
+                    await vm.saveBodyComposition(
+                        weightKg: weightKg,
+                        bodyFatPct: bodyFatPct,
+                        bmi: bmi,
+                        lbmKg: lbmKg,
+                        writeToHK: writeToHK
+                    )
                 }
             }
             // onDismiss fires when the sheet is closed — reloads data so new logs appear.

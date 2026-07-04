@@ -12,6 +12,9 @@ final class HealthKitManager {
 
     private let readTypes: Set<HKObjectType> = [
         HKObjectType.quantityType(forIdentifier: .bodyMass)!,
+        HKObjectType.quantityType(forIdentifier: .bodyFatPercentage)!,
+        HKObjectType.quantityType(forIdentifier: .bodyMassIndex)!,
+        HKObjectType.quantityType(forIdentifier: .leanBodyMass)!,
         HKObjectType.quantityType(forIdentifier: .dietaryWater)!,
         HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)!,
         HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!,
@@ -21,6 +24,9 @@ final class HealthKitManager {
 
     private let writeTypes: Set<HKSampleType> = [
         HKSampleType.quantityType(forIdentifier: .bodyMass)!,
+        HKSampleType.quantityType(forIdentifier: .bodyFatPercentage)!,
+        HKSampleType.quantityType(forIdentifier: .bodyMassIndex)!,
+        HKSampleType.quantityType(forIdentifier: .leanBodyMass)!,
         HKSampleType.quantityType(forIdentifier: .dietaryWater)!,
     ]
 
@@ -128,6 +134,41 @@ final class HealthKitManager {
         }
     }
 
+    // MARK: - Body Composition (most recent sample regardless of date)
+
+    func fetchMostRecentWeight() async -> (value: Double, date: Date)? {
+        await fetchMostRecent(identifier: .bodyMass, unit: .gramUnit(with: .kilo))
+    }
+
+    func fetchMostRecentBodyFat() async -> (value: Double, date: Date)? {
+        // HK stores body fat as fraction 0.0–1.0; convert to percentage
+        guard let r = await fetchMostRecent(identifier: .bodyFatPercentage, unit: .percent()) else { return nil }
+        return (r.value * 100, r.date)
+    }
+
+    func fetchMostRecentBMI() async -> (value: Double, date: Date)? {
+        await fetchMostRecent(identifier: .bodyMassIndex, unit: .count())
+    }
+
+    func fetchMostRecentLBM() async -> (value: Double, date: Date)? {
+        await fetchMostRecent(identifier: .leanBodyMass, unit: .gramUnit(with: .kilo))
+    }
+
+    private func fetchMostRecent(identifier: HKQuantityTypeIdentifier, unit: HKUnit) async -> (value: Double, date: Date)? {
+        guard let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return nil }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(sampleType: type, predicate: nil, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
+                guard let sample = samples?.first as? HKQuantitySample else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: (sample.quantity.doubleValue(for: unit), sample.endDate))
+            }
+            store.execute(query)
+        }
+    }
+
     // MARK: - Write
 
     func saveWeight(_ kg: Double, date: Date) async throws {
@@ -139,6 +180,33 @@ final class HealthKitManager {
             store.save(sample) { _, error in
                 if let error { continuation.resume(throwing: error) }
                 else { continuation.resume() }
+            }
+        }
+    }
+
+    func saveBodyFat(_ pct: Double, date: Date) async throws {
+        // Convert display percent → HK fraction before writing
+        try await saveQuantity(pct / 100, unit: .percent(), identifier: .bodyFatPercentage, date: date)
+    }
+
+    func saveBMI(_ bmi: Double, date: Date) async throws {
+        try await saveQuantity(bmi, unit: .count(), identifier: .bodyMassIndex, date: date)
+    }
+
+    func saveLeanBodyMass(_ kg: Double, date: Date) async throws {
+        try await saveQuantity(kg, unit: .gramUnit(with: .kilo), identifier: .leanBodyMass, date: date)
+    }
+
+    private func saveQuantity(_ value: Double, unit: HKUnit, identifier: HKQuantityTypeIdentifier, date: Date) async throws {
+        guard isAvailable, let type = HKQuantityType.quantityType(forIdentifier: identifier) else { return }
+        let sample = HKQuantitySample(
+            type: type,
+            quantity: HKQuantity(unit: unit, doubleValue: value),
+            start: date, end: date
+        )
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            store.save(sample) { _, error in
+                if let error { cont.resume(throwing: error) } else { cont.resume() }
             }
         }
     }
