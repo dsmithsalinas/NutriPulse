@@ -8,9 +8,7 @@ import Foundation
 @Observable
 @MainActor
 final class TodayViewModel {
-    private let foodLogRepo  = FoodLogRepository()
     private let goalRepo     = GoalRepository()
-    private let waterRepo    = WaterRepository()
     private let bodyCompRepo = BodyCompositionRepository()
 
     var selectedDate: Date = .now
@@ -60,14 +58,22 @@ final class TodayViewModel {
         async let bodyCompTask = buildBodyCompData()
 
         do {
-            async let logsTask  = foodLogRepo.fetchLogs(for: selectedDate)
-            async let goalTask  = goalRepo.fetchGoal(for: selectedDate)
-            async let waterTask = waterRepo.fetchTotal(for: selectedDate)
-            let (logs, goal, water) = try await (logsTask, goalTask, waterTask)
-            foodLogs      = logs
-            dailyGoal     = goal
-            waterIntakeMl = water
-            waterGoalMl   = goal?.waterMlTarget ?? 2000
+            let userId = try await supabase.auth.session.user.id
+
+            // Read from LocalStore — instant, works offline
+            foodLogs      = (try? LocalStore.shared.fetchFoodLogs(for: selectedDate, userId: userId)) ?? []
+            dailyGoal     = try? LocalStore.shared.fetchGoal(for: selectedDate)
+            waterIntakeMl = (try? LocalStore.shared.fetchWaterTotal(for: selectedDate, userId: userId)) ?? 0
+            waterGoalMl   = dailyGoal?.waterMlTarget ?? 2000
+
+            // Cache miss on first launch — fetch goal from Supabase and store locally
+            if dailyGoal == nil {
+                if let goal = try? await goalRepo.fetchGoal(for: selectedDate) {
+                    dailyGoal   = goal
+                    waterGoalMl = goal.waterMlTarget
+                    try? LocalStore.shared.upsertGoal(goal)
+                }
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -195,11 +201,28 @@ final class TodayViewModel {
     }
 
     func addWater(_ ml: Double) async {
+        guard let userId = try? await supabase.auth.session.user.id else { return }
         do {
-            try await waterRepo.add(ml, for: selectedDate)
+            try LocalStore.shared.insertWaterLog(
+                id: UUID(), userId: userId,
+                logDate: selectedDate.isoDateString, amountMl: ml
+            )
             waterIntakeMl += ml
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.syncNow() }
         } catch {
             errorMessage = "Couldn't log water."
+        }
+    }
+
+    func deleteLog(id: UUID) async {
+        do {
+            try LocalStore.shared.markFoodLogDeleted(id: id)
+            foodLogs.removeAll { $0.id == id }
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.syncNow() }
+        } catch {
+            errorMessage = "Couldn't delete log."
         }
     }
 

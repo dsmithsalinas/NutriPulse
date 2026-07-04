@@ -73,13 +73,14 @@ final class FoodLoggingViewModel {
             .execute()
             .value
 
-        // 2 — Insert the food log with the denormalized macro snapshot
-        let newLog = NewFoodLog(
+        // 2 — Write food_log locally; SyncEngine pushes to Supabase in the background
+        try LocalStore.shared.insertFoodLog(
+            id: UUID(),
             userId: userId,
-            loggedAt: Date(),
             logDate: date.isoDateString,
-            meal: selectedMeal,
+            meal: selectedMeal.rawValue,
             foodItemId: createdItem.id,
+            foodItemName: trimmedName,
             quantity: quantity,
             caloriesSnapshot: calories,
             proteinGSnapshot: proteinG,
@@ -87,10 +88,7 @@ final class FoodLoggingViewModel {
             fatGSnapshot: fatG,
             fiberGSnapshot: fiberG
         )
-
-        try await supabase
-            .from("food_logs")
-            .insert(newLog)
-            .execute()
+        SyncEngine.shared.refreshPendingCount()
+        Task { await SyncEngine.shared.syncNow() }
     }
 }

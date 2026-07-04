@@ -131,12 +131,14 @@ final class FoodSearchViewModel {
             .execute()
             .value
 
-        let newLog = NewFoodLog(
+        // Write food_log locally — SyncEngine pushes to Supabase in the background
+        try LocalStore.shared.insertFoodLog(
+            id: UUID(),
             userId: userId,
-            loggedAt: Date(),
             logDate: date.isoDateString,
-            meal: selectedMeal,
+            meal: selectedMeal.rawValue,
             foodItemId: item.id,
+            foodItemName: detail.name,
             quantity: quantity,
             caloriesSnapshot: serving.calories,
             proteinGSnapshot: serving.proteinG,
@@ -144,8 +146,8 @@ final class FoodSearchViewModel {
             fatGSnapshot: serving.fatG,
             fiberGSnapshot: serving.fiberG
         )
-
-        try await supabase.from("food_logs").insert(newLog).execute()
+        SyncEngine.shared.refreshPendingCount()
+        Task { await SyncEngine.shared.syncNow() }
 
         if wantsToFavorite {
             struct NewFav: Encodable {

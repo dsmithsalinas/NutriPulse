@@ -120,6 +120,9 @@ struct TodayView: View {
             .task(id: vm.selectedDate) {
                 await vm.loadData()
             }
+            .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
+                Task { await vm.loadData() }
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     Task { await vm.loadHealthData() }
