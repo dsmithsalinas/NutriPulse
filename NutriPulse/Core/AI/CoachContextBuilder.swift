@@ -95,9 +95,11 @@ struct CoachContextBuilder {
     private let analyticsRepo = AnalyticsRepository()
     private let goalRepo = GoalRepository()
     private let glp1Repo = GLP1Repository()
-    private let hk = HealthKitManager.shared
 
     func build(profile: UserProfile?) async -> CoachContextBundle {
+        // HealthKitManager.shared is @MainActor — capture it on main actor first
+        let hk = await MainActor.run { HealthKitManager.shared }
+
         async let logsTask = foodLogRepo.fetchLogs(for: .now)
         async let summariesTask = analyticsRepo.fetchDailySummaries(days: 7)
         async let goalTask = goalRepo.fetchGoal(for: .now)

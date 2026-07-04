@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CoachView: View {
+    let isActive: Bool
     @State private var vm = CoachViewModel()
     @AppStorage("chatHistoryVersion") private var chatHistoryVersion = 0
 
@@ -26,8 +27,12 @@ struct CoachView: View {
                 }
             }
         }
-        .task(id: chatHistoryVersion) {
-            await vm.loadAndInitialize()
+        .onChange(of: isActive) { _, active in
+            guard active else { return }
+            Task { await vm.loadIfNeeded() }
+        }
+        .onChange(of: chatHistoryVersion) {
+            Task { await vm.reload() }
         }
         .alert("Error", isPresented: Binding(
             get: { vm.error != nil },

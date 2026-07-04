@@ -10,13 +10,28 @@ final class CoachViewModel {
     var error: String? = nil
 
     private(set) var profile: UserProfile?
+    private var hasInitialized = false
 
     private let repo = CoachRepository()
     private let contextBuilder = CoachContextBuilder()
 
     // MARK: - Initialization
 
-    func loadAndInitialize() async {
+    // Only runs once — safe to call on every tab selection; no-ops after first run.
+    func loadIfNeeded() async {
+        guard !hasInitialized else { return }
+        hasInitialized = true
+        await loadAndInitialize()
+    }
+
+    // Called after clearing history so the tab reloads fresh.
+    func reload() async {
+        hasInitialized = false
+        messages = []
+        await loadAndInitialize()
+    }
+
+    private func loadAndInitialize() async {
         await loadProfile()
         await loadHistory()
         await maybeGenerateCheckin()
