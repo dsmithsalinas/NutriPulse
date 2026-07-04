@@ -11,4 +11,23 @@ struct GLP1Repository {
             .execute()
             .value
     }
+
+    func fetchAllLogs() async throws -> [GLP1Log] {
+        try await supabase
+            .from("glp1_logs")
+            .select()
+            .order("injected_at", ascending: false)
+            .execute()
+            .value
+    }
+
+    // All-time history in ascending order — used for the titration chart.
+    func fetchHistory() async throws -> [GLP1Log] {
+        try await supabase
+            .from("glp1_logs")
+            .select()
+            .order("injected_at", ascending: true)
+            .execute()
+            .value
+    }
 }

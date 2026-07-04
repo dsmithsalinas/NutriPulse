@@ -39,6 +39,10 @@ struct AnalyticsView: View {
                                 BodyFatChartCard(logs: vm.bodyFatLogs)
                             }
 
+                            if !vm.glp1History.isEmpty {
+                                GLP1DoseChartCard(logs: vm.glp1History)
+                            }
+
                             if vm.loggedDays.isEmpty {
                                 emptyState
                             }
@@ -233,6 +237,72 @@ private struct BodyFatChartCard: View {
             }
             .chartYScale(domain: .automatic(includesZero: false))
             .frame(height: 140)
+        }
+        .padding(Theme.Spacing.md)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+// MARK: - GLP-1 dose titration chart
+
+private struct GLP1DoseChartCard: View {
+    let logs: [GLP1Log]
+
+    private static let palette: [Color] = [.purple, .indigo, .teal, .mint]
+
+    private var sortedMedications: [String] {
+        Array(Set(logs.map(\.medication))).sorted()
+    }
+
+    private func color(for medication: String) -> Color {
+        let idx = sortedMedications.firstIndex(of: medication) ?? 0
+        return Self.palette[idx % Self.palette.count]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            Text("GLP-1 Dose Titration")
+                .font(.headline)
+
+            Chart(logs) { log in
+                LineMark(
+                    x: .value("Date", log.injectedAt, unit: .day),
+                    y: .value("mg", log.doseMg)
+                )
+                .foregroundStyle(color(for: log.medication))
+                .interpolationMethod(.stepEnd)
+
+                PointMark(
+                    x: .value("Date", log.injectedAt, unit: .day),
+                    y: .value("mg", log.doseMg)
+                )
+                .foregroundStyle(color(for: log.medication))
+                .symbolSize(40)
+            }
+            .chartYAxis {
+                AxisMarks { value in
+                    AxisValueLabel("\(value.as(Double.self).map { String(format: "%.2g", $0) } ?? "")mg")
+                    AxisGridLine()
+                }
+            }
+            .chartYScale(domain: .automatic(includesZero: false))
+            .frame(height: 160)
+
+            if sortedMedications.count > 1 {
+                HStack(spacing: Theme.Spacing.sm) {
+                    ForEach(sortedMedications, id: \.self) { med in
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(color(for: med))
+                                .frame(width: 8, height: 8)
+                            Text(med)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
         }
         .padding(Theme.Spacing.md)
         .background(Color(.secondarySystemBackground))

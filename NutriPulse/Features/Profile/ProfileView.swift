@@ -191,6 +191,12 @@ struct ProfileView: View {
                         }
                         .padding(.vertical, 2)
                     }
+                    NavigationLink {
+                        GLP1HistoryView()
+                    } label: {
+                        Text("See All Injections")
+                            .foregroundStyle(Theme.NutrientColor.calories)
+                    }
                 }
             }
         }

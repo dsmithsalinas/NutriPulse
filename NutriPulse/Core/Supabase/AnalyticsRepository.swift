@@ -54,6 +54,10 @@ struct AnalyticsRepository {
         }
     }
 
+    func fetchGLP1History() async throws -> [GLP1Log] {
+        try await GLP1Repository().fetchHistory()
+    }
+
     func fetchBodyCompositionHistory(days: Int) async throws -> [BodyCompositionLog] {
         try await BodyCompositionRepository().fetchHistory(days: days)
     }

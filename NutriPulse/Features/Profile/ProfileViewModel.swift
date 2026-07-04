@@ -150,6 +150,7 @@ final class ProfileViewModel {
             .execute()
             .value
         glp1Logs.insert(saved, at: 0)
+        await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
     }
 
     // MARK: - Private

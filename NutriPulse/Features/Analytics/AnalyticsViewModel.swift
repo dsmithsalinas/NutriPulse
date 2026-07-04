@@ -21,10 +21,11 @@ final class AnalyticsViewModel {
     }
 
     var selectedRange: TimeRange = .week
-    var summaries: [DailySummary]          = []
-    var weightLogs: [WeightLog]            = []
+    var summaries: [DailySummary]             = []
+    var weightLogs: [WeightLog]               = []
     var bodyCompHistory: [BodyCompositionLog] = []
-    var goalCalories: Double?              = nil
+    var glp1History: [GLP1Log]               = []
+    var goalCalories: Double?                 = nil
 
     var bodyFatLogs: [(date: Date, pct: Double)] {
         bodyCompHistory.compactMap { log in
@@ -60,11 +61,13 @@ final class AnalyticsViewModel {
             async let summariesTask  = repo.fetchDailySummaries(days: selectedRange.rawValue)
             async let weightTask     = repo.fetchWeightLogs(days: selectedRange.rawValue)
             async let bodyCompTask   = repo.fetchBodyCompositionHistory(days: selectedRange.rawValue)
+            async let glp1Task       = repo.fetchGLP1History()
             async let goalTask       = goalRepo.fetchGoal(for: .now)
-            let (s, w, bc, g)        = try await (summariesTask, weightTask, bodyCompTask, goalTask)
+            let (s, w, bc, glp1, g)  = try await (summariesTask, weightTask, bodyCompTask, glp1Task, goalTask)
             summaries        = s
             weightLogs       = w
             bodyCompHistory  = bc
+            glp1History      = glp1
             goalCalories     = g?.calories
         } catch {
             errorMessage = error.localizedDescription
