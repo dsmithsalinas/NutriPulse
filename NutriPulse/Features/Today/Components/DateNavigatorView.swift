@@ -24,7 +24,7 @@ struct DateNavigatorView: View {
                 if !isToday {
                     Button("Back to Today", action: onToday)
                         .font(.caption)
-                        .foregroundStyle(Theme.NutrientColor.calories)
+                        .foregroundStyle(Theme.Colors.primary)
                 }
             }
             .animation(.easeInOut(duration: 0.15), value: isToday)

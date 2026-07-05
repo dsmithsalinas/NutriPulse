@@ -9,6 +9,7 @@ struct FoodLoggingView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var vm = FoodLoggingViewModel()
     @State private var searchVM = FoodSearchViewModel()
+    @State private var talkVM = TalkToLogViewModel()
 
     var body: some View {
         NavigationStack {
@@ -22,18 +23,14 @@ struct FoodLoggingView: View {
                 .padding(Theme.Spacing.md)
 
                 switch vm.selectedTab {
+                case .talk:
+                    TalkToLogView(vm: talkVM, date: selectedDate, onLogged: handleLogged)
                 case .manual:
-                    ManualEntryView(vm: vm, date: selectedDate) {
-                        dismiss()
-                    }
+                    ManualEntryView(vm: vm, date: selectedDate, onLogged: handleLogged)
                 case .search:
-                    FoodSearchView(vm: searchVM, date: selectedDate) {
-                        dismiss()
-                    }
+                    FoodSearchView(vm: searchVM, date: selectedDate, onLogged: handleLogged)
                 case .scan:
-                    BarcodeScanView(vm: searchVM, date: selectedDate) {
-                        dismiss()
-                    }
+                    BarcodeScanView(vm: searchVM, date: selectedDate, onLogged: handleLogged)
                 }
             }
             .navigationTitle("Log Food")
@@ -53,7 +50,25 @@ struct FoodLoggingView: View {
             } message: {
                 Text(vm.errorMessage ?? "")
             }
+            .onAppear {
+                Telemetry.logIntentStarted(source: vm.selectedTab.telemetrySource)
+            }
         }
+    }
+
+    // Only the talk flow carries a meaningful confirm-card edit rate — every
+    // other source logs exactly what the user picked, nothing to correct.
+    private func handleLogged(_ source: LogSource) {
+        if source == .talk {
+            Telemetry.logConfirmed(
+                source: source,
+                rowsTotal: talkVM.rows.count,
+                rowsEdited: talkVM.rows.filter(\.wasEdited).count
+            )
+        } else {
+            Telemetry.logConfirmed(source: source)
+        }
+        dismiss()
     }
 }
 

@@ -99,7 +99,6 @@ struct WaterCard: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }

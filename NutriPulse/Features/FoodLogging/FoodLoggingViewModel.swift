@@ -6,12 +6,25 @@ import Supabase
 @MainActor
 final class FoodLoggingViewModel {
     enum LogTab: String, CaseIterable {
+        case talk     = "Talk"
         case manual   = "Manual"
         case search   = "Search"
         case scan     = "Scan"
+
+        // The tab selected when the sheet opens — used only for the
+        // `logIntentStarted` telemetry signal (the eventual `logConfirmed`
+        // source is whichever method actually completes the log).
+        var telemetrySource: LogSource {
+            switch self {
+            case .talk:   .talk
+            case .manual: .manual
+            case .search: .search
+            case .scan:   .scan
+            }
+        }
     }
 
-    var selectedTab: LogTab = .manual
+    var selectedTab: LogTab = .talk
     var selectedMeal: Meal = .current   // pre-selects based on time of day
     var quantity: Double = 1.0
 
@@ -89,6 +102,6 @@ final class FoodLoggingViewModel {
             fiberGSnapshot: fiberG
         )
         SyncEngine.shared.refreshPendingCount()
-        Task { await SyncEngine.shared.syncNow() }
+        Task { await SyncEngine.shared.pushPendingChanges() }
     }
 }

@@ -147,7 +147,7 @@ final class FoodSearchViewModel {
             fiberGSnapshot: serving.fiberG
         )
         SyncEngine.shared.refreshPendingCount()
-        Task { await SyncEngine.shared.syncNow() }
+        Task { await SyncEngine.shared.pushPendingChanges() }
 
         if wantsToFavorite {
             struct NewFav: Encodable {

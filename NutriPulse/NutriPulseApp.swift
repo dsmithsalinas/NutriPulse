@@ -15,6 +15,7 @@ struct NutriPulseApp: App {
     init() {
         LocalStore.shared.configure(with: Self.modelContainer)
         SyncEngine.shared.configure()
+        Telemetry.initialize()
     }
 
     var body: some Scene {
@@ -25,6 +26,7 @@ struct NutriPulseApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                Telemetry.appOpened()
                 Task { await SyncEngine.shared.syncNow() }
             }
         }

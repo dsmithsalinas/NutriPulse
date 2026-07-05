@@ -33,14 +33,14 @@ private struct ActivityCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(level.displayName)
                         .font(.body.weight(isSelected ? .semibold : .regular))
-                        .foregroundStyle(isSelected ? Theme.NutrientColor.calories : .primary)
+                        .foregroundStyle(isSelected ? Theme.Colors.primary : .primary)
                     Text(level.description)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Theme.NutrientColor.calories : Color.secondary)
+                    .foregroundStyle(isSelected ? Theme.Colors.primary : Color.secondary)
                     .font(.title3)
             }
             .padding()
@@ -50,7 +50,7 @@ private struct ActivityCard: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .strokeBorder(
-                                isSelected ? Theme.NutrientColor.calories : .clear,
+                                isSelected ? Theme.Colors.primary : .clear,
                                 lineWidth: 2
                             )
                     )

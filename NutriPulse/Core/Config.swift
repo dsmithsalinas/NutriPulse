@@ -20,4 +20,14 @@ enum Config {
         }
         return value
     }()
+
+    // Telemetry is optional infra, unlike auth — missing config disables it
+    // quietly instead of crashing the app.
+    static let telemetryDeckAppID: String? = {
+        guard let value = Bundle.main.infoDictionary?["TELEMETRYDECK_APP_ID"] as? String,
+              !value.isEmpty, value != "your-telemetrydeck-app-id-here" else {
+            return nil
+        }
+        return value
+    }()
 }

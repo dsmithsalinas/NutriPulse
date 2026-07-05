@@ -67,10 +67,35 @@ final class LocalStore {
         try context.save()
     }
 
+    // Editing an unsynced row just keeps it pendingCreate — it hasn't reached
+    // the server yet, so there's nothing to "update" there, only to create
+    // with the new values. Anything already synced needs a real push, since
+    // SyncEngine's create path upserts with ignoreDuplicates (skips existing
+    // rows rather than updating them).
+    func updateFoodLog(id: UUID, meal: String, quantity: Double) throws {
+        guard let context else { return }
+        let descriptor = FetchDescriptor<SDFoodLog>(predicate: #Predicate { $0.id == id })
+        guard let log = try context.fetch(descriptor).first else { return }
+        log.meal = meal
+        log.quantity = quantity
+        if log.syncState == "synced" {
+            log.syncState = "pendingUpdate"
+        }
+        try context.save()
+    }
+
     func pendingFoodLogs() throws -> [SDFoodLog] {
         guard let context else { return [] }
         let descriptor = FetchDescriptor<SDFoodLog>(
             predicate: #Predicate { $0.syncState == "pendingCreate" }
+        )
+        return try context.fetch(descriptor)
+    }
+
+    func pendingUpdateFoodLogs() throws -> [SDFoodLog] {
+        guard let context else { return [] }
+        let descriptor = FetchDescriptor<SDFoodLog>(
+            predicate: #Predicate { $0.syncState == "pendingUpdate" }
         )
         return try context.fetch(descriptor)
     }
@@ -223,12 +248,15 @@ final class LocalStore {
         let foodCreate = try context.fetchCount(FetchDescriptor<SDFoodLog>(
             predicate: #Predicate { $0.syncState == "pendingCreate" }
         ))
+        let foodUpdate = try context.fetchCount(FetchDescriptor<SDFoodLog>(
+            predicate: #Predicate { $0.syncState == "pendingUpdate" }
+        ))
         let foodDelete = try context.fetchCount(FetchDescriptor<SDFoodLog>(
             predicate: #Predicate { $0.syncState == "pendingDelete" }
         ))
         let waterCreate = try context.fetchCount(FetchDescriptor<SDWaterLog>(
             predicate: #Predicate { $0.syncState == "pendingCreate" }
         ))
-        return foodCreate + foodDelete + waterCreate
+        return foodCreate + foodUpdate + foodDelete + waterCreate
     }
 }

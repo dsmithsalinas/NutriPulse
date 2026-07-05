@@ -111,7 +111,7 @@ struct OnboardingStepLayout<Content: View>: View {
         HStack(spacing: 6) {
             ForEach(1...totalSteps, id: \.self) { i in
                 Capsule()
-                    .fill(i <= step ? Theme.NutrientColor.calories : Color(.systemFill))
+                    .fill(i <= step ? Theme.Colors.primary : Color(.systemFill))
                     .frame(width: i == step ? 24 : 8, height: 8)
                     .animation(.spring(response: 0.3), value: step)
             }
@@ -119,18 +119,11 @@ struct OnboardingStepLayout<Content: View>: View {
     }
 
     private var continueButton: some View {
-        Button(action: onContinue) {
-            Text(continueLabel)
-                .fontWeight(.semibold)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(canContinue ? Theme.NutrientColor.calories : Color(.systemFill))
-                .foregroundStyle(canContinue ? .white : .secondary)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-        }
-        .disabled(!canContinue)
-        .padding(.horizontal, Theme.Spacing.md)
-        .padding(.bottom, Theme.Spacing.sm)
-        .background(.bar)
+        Button(continueLabel, action: onContinue)
+            .buttonStyle(.brandPrimary)
+            .disabled(!canContinue)
+            .padding(.horizontal, Theme.Spacing.md)
+            .padding(.bottom, Theme.Spacing.sm)
+            .background(.bar)
     }
 }

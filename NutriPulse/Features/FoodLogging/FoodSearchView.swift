@@ -3,7 +3,7 @@ import SwiftUI
 struct FoodSearchView: View {
     @Bindable var vm: FoodSearchViewModel
     let date: Date
-    let onLogged: () -> Void
+    let onLogged: (LogSource) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,7 +81,7 @@ struct FoodSearchView: View {
             await vm.search()
         }
         .sheet(item: $vm.selectedResult) { result in
-            FoodDetailSheet(vm: vm, result: result, date: date, onLogged: onLogged)
+            FoodDetailSheet(vm: vm, result: result, date: date, source: .search, onLogged: onLogged)
         }
         .alert("Error", isPresented: Binding(
             get: { vm.errorMessage != nil },
@@ -115,7 +115,10 @@ struct FoodDetailSheet: View {
     @Bindable var vm: FoodSearchViewModel
     let result: FoodSearchResult
     let date: Date
-    let onLogged: () -> Void
+    // FoodDetailSheet is shared by the regular search flow and the barcode
+    // scan flow — each caller hardcodes which one it is.
+    let source: LogSource
+    let onLogged: (LogSource) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -202,26 +205,19 @@ struct FoodDetailSheet: View {
                 do {
                     try await vm.logFood(on: date)
                     vm.selectedResult = nil
-                    onLogged()
+                    onLogged(source)
                 } catch {
                     vm.errorMessage = error.localizedDescription
                 }
             }
         } label: {
-            Group {
-                if vm.isLogging {
-                    ProgressView()
-                } else {
-                    Text("Log Food")
-                        .fontWeight(.semibold)
-                }
+            if vm.isLogging {
+                ProgressView().tint(.white)
+            } else {
+                Text("Log Food")
             }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Theme.NutrientColor.calories)
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
         }
+        .buttonStyle(.brandPrimary)
         .disabled(vm.isLogging || vm.selectedServing == nil)
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.bottom, Theme.Spacing.sm)
@@ -234,7 +230,7 @@ struct FoodDetailSheet: View {
 private struct FavoritesQuickAddList: View {
     let quickAdds: [FavoriteQuickAdd]
     let date: Date
-    let onLogged: () -> Void
+    let onLogged: (LogSource) -> Void
 
     var body: some View {
         List {
@@ -254,7 +250,7 @@ private struct FavoritesQuickAddList: View {
 private struct FavoriteQuickAddRow: View {
     let fav: FavoriteQuickAdd
     let date: Date
-    let onLogged: () -> Void
+    let onLogged: (LogSource) -> Void
 
     @State private var isLogging = false
     private let repo = FavoriteRepository()
@@ -283,7 +279,7 @@ private struct FavoriteQuickAddRow: View {
                         } else {
                             Image(systemName: "plus.circle.fill")
                                 .font(.title3)
-                                .foregroundStyle(Theme.NutrientColor.calories)
+                                .foregroundStyle(Theme.Colors.primary)
                         }
                     }
                     .frame(width: 30, height: 30)
@@ -306,7 +302,7 @@ private struct FavoriteQuickAddRow: View {
         defer { isLogging = false }
         do {
             try await repo.quickLog(fav, on: date)
-            onLogged()
+            onLogged(.favorite)
         } catch {}
     }
 }

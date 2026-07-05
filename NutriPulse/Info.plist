@@ -30,6 +30,8 @@
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>SUPABASE_URL</key>
 	<string>$(SUPABASE_URL)</string>
+	<key>TELEMETRYDECK_APP_ID</key>
+	<string>$(TELEMETRYDECK_APP_ID)</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

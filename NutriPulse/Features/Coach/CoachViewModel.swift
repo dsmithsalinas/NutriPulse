@@ -97,6 +97,7 @@ final class CoachViewModel {
                     NewCoachMessage(userId: userId, role: "assistant", content: reply, messageType: type)
                 )
                 messages.append(saved)
+                Telemetry.checkinMessageViewed(messageType: type)
             }
         } catch { }
         isLoading = false
@@ -139,6 +140,7 @@ final class CoachViewModel {
                 NewCoachMessage(userId: userId, role: "assistant", content: reply, messageType: "chat")
             )
             messages.append(assistantMsg)
+            Telemetry.coachMessageSent(messageType: "chat")
         } catch {
             self.error = "Couldn't reach Pulse right now. Try again."
         }

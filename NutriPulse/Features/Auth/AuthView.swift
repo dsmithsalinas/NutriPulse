@@ -10,7 +10,7 @@ struct AuthView: View {
 
             Image(systemName: "fork.knife.circle.fill")
                 .font(.system(size: 72))
-                .foregroundStyle(Theme.NutrientColor.calories)
+                .foregroundStyle(Theme.Colors.primaryGradient)
 
             Text("NutriPulse")
                 .font(.largeTitle.bold())
@@ -43,20 +43,13 @@ struct AuthView: View {
             Button {
                 Task { await vm.submitEmail() }
             } label: {
-                Group {
-                    if vm.isLoading {
-                        ProgressView()
-                    } else {
-                        Text(vm.isSignUp ? "Create Account" : "Sign In")
-                            .fontWeight(.semibold)
-                    }
+                if vm.isLoading {
+                    ProgressView().tint(.white)
+                } else {
+                    Text(vm.isSignUp ? "Create Account" : "Sign In")
                 }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Theme.NutrientColor.calories)
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
+            .buttonStyle(.brandPrimary)
             .disabled(vm.isLoading || vm.email.isEmpty || vm.password.isEmpty)
 
             // SWIFT CONCEPT — SignInWithAppleButton is a first-party SwiftUI view from

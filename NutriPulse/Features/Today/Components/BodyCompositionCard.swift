@@ -11,14 +11,14 @@ struct BodyCompositionCard: View {
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "scalemass.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Theme.Colors.primary)
                     Text("Body Composition")
                         .fontWeight(.semibold)
                 }
                 Spacer()
                 Button(action: onAddTapped) {
                     Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Theme.Colors.primary)
                         .font(.title3)
                 }
                 .buttonStyle(.plain)
@@ -56,8 +56,7 @@ struct BodyCompositionCard: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }
 

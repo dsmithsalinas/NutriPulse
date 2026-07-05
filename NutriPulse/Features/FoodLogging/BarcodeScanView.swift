@@ -4,7 +4,7 @@ import AVFoundation
 struct BarcodeScanView: View {
     @Bindable var vm: FoodSearchViewModel
     let date: Date
-    let onLogged: () -> Void
+    let onLogged: (LogSource) -> Void
 
     @State private var isScanning = true
     @State private var cameraPermission = AVCaptureDevice.authorizationStatus(for: .video)
@@ -29,7 +29,7 @@ struct BarcodeScanView: View {
             }
         }
         .sheet(item: $vm.selectedResult) { result in
-            FoodDetailSheet(vm: vm, result: result, date: date, onLogged: onLogged)
+            FoodDetailSheet(vm: vm, result: result, date: date, source: .scan, onLogged: onLogged)
         }
         .onChange(of: vm.selectedResult) { _, result in
             if result == nil { isScanning = true }
@@ -229,7 +229,7 @@ private struct ViewfinderOverlay: View {
                     p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
                     p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - cornerLen))
                 }
-                .stroke(Theme.NutrientColor.calories, lineWidth: 3)
+                .stroke(Theme.Colors.primary, lineWidth: 3)
 
                 Text("Align barcode within the frame")
                     .font(.subheadline)

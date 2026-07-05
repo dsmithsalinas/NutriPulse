@@ -14,7 +14,7 @@ struct MainTabView: View {
                 .tag(1)
 
             CoachView(isActive: selectedTab == 2)
-                .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right.fill") }
+                .tabItem { Label("Pulse", systemImage: "bubble.left.and.bubble.right.fill") }
                 .tag(2)
 
             ProfileView()

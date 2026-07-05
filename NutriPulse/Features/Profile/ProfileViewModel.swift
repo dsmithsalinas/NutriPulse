@@ -16,9 +16,11 @@ final class ProfileViewModel {
     var showEditProfile    = false
     var showEditGoals      = false
     var showLogInjection   = false
+    var showSendFeedback   = false
 
     private let goalRepo = GoalRepository()
     private let glp1Repo = GLP1Repository()
+    private let feedbackRepo = FeedbackRepository()
 
     // MARK: - Computed
 
@@ -151,6 +153,12 @@ final class ProfileViewModel {
             .value
         glp1Logs.insert(saved, at: 0)
         await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
+    }
+
+    // MARK: - Feedback
+
+    func submitFeedback(category: FeedbackCategory, message: String) async throws {
+        try await feedbackRepo.submit(category: category, message: message)
     }
 
     // MARK: - Private

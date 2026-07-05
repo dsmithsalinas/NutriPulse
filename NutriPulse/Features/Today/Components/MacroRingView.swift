@@ -7,10 +7,24 @@ struct MacroRingView: View {
     let goal: Double
     let color: Color
     let unit: String
+    // Floors (protein, fiber) read exceeding the goal as a win, so they switch
+    // to a "+X" surplus once met. Ceilings (calories, carbs) keep showing the
+    // negative overage — going past the goal there is the thing to avoid.
+    var isFloor: Bool = false
 
     private var progress: Double {
         guard goal > 0 else { return 0 }
         return min(value / goal, 1.0)
+    }
+
+    // Remaining-to-goal, not the running total — negative once a ceiling is
+    // exceeded, "+X" once a floor is exceeded.
+    private var displayText: String {
+        guard goal > 0 else { return "\(Int(value.rounded()))" }
+        let remaining = goal - value
+        if remaining > 0 { return "\(Int(remaining.rounded()))" }
+        if isFloor && remaining < 0 { return "+\(Int((-remaining).rounded()))" }
+        return "\(Int(remaining.rounded()))"
     }
 
     var body: some View {
@@ -38,7 +52,7 @@ struct MacroRingView: View {
                 }
 
                 VStack(spacing: 0) {
-                    Text(value >= 100 ? "\(Int(value))" : String(format: "%.0f", value))
+                    Text(displayText)
                         .font(.system(.callout, design: .rounded, weight: .bold))
                         .minimumScaleFactor(0.7)
                     Text(unit)
@@ -81,7 +95,8 @@ struct MacroRingsSection: View {
                     value: proteinG,
                     goal: goal?.proteinG ?? 150,
                     color: Theme.NutrientColor.protein,
-                    unit: "g"
+                    unit: "g",
+                    isFloor: true
                 )
                 MacroRingView(
                     label: "Carbs",
@@ -95,13 +110,13 @@ struct MacroRingsSection: View {
                     value: fiberG,
                     goal: goal?.fiberG ?? 25,
                     color: Theme.NutrientColor.fiber,
-                    unit: "g"
+                    unit: "g",
+                    isFloor: true
                 )
             }
             .frame(maxWidth: .infinity)
         }
         .padding(Theme.Spacing.md)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }

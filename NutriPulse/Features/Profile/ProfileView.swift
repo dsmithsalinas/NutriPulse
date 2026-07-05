@@ -18,6 +18,7 @@ struct ProfileView: View {
                 glp1Section
                 healthKitSection
                 coachSection
+                feedbackSection
                 signOutSection
             }
             .listStyle(.insetGrouped)
@@ -36,6 +37,9 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $vm.showLogInjection) {
                 LogInjectionSheet(vm: vm)
+            }
+            .sheet(isPresented: $vm.showSendFeedback) {
+                SendFeedbackSheet(vm: vm)
             }
             .alert("Error", isPresented: Binding(
                 get: { vm.errorMessage != nil },
@@ -70,7 +74,7 @@ struct ProfileView: View {
             HStack(spacing: Theme.Spacing.md) {
                 ZStack {
                     Circle()
-                        .fill(Theme.NutrientColor.calories.gradient)
+                        .fill(Theme.Colors.primaryGradient)
                         .frame(width: 60, height: 60)
                     Text(initials)
                         .font(.title2.bold())
@@ -120,7 +124,7 @@ struct ProfileView: View {
                 row(label: "Activity", value: level.displayName)
             }
             Button("Edit Stats") { vm.showEditProfile = true }
-                .foregroundStyle(Theme.NutrientColor.calories)
+                .foregroundStyle(Theme.Colors.primary)
         }
     }
 
@@ -136,7 +140,7 @@ struct ProfileView: View {
                 row(label: "Fiber",    value: "\(Int(g.fiberG))g")
             }
             Button("Edit Goals") { vm.showEditGoals = true }
-                .foregroundStyle(Theme.NutrientColor.calories)
+                .foregroundStyle(Theme.Colors.primary)
         }
     }
 
@@ -149,7 +153,7 @@ struct ProfileView: View {
                     vm.showLogInjection = true
                 } label: {
                     Label("Set Up GLP-1 Tracker", systemImage: "syringe")
-                        .foregroundStyle(Theme.NutrientColor.calories)
+                        .foregroundStyle(Theme.Colors.primary)
                 }
             } else {
                 if let last = vm.mostRecentInjection {
@@ -177,7 +181,7 @@ struct ProfileView: View {
                     vm.showLogInjection = true
                 } label: {
                     Label("Log Injection", systemImage: "syringe")
-                        .foregroundStyle(Theme.NutrientColor.calories)
+                        .foregroundStyle(Theme.Colors.primary)
                 }
 
                 if !glp1Logs.isEmpty {
@@ -195,7 +199,7 @@ struct ProfileView: View {
                         GLP1HistoryView()
                     } label: {
                         Text("See All Injections")
-                            .foregroundStyle(Theme.NutrientColor.calories)
+                            .foregroundStyle(Theme.Colors.primary)
                     }
                 }
             }
@@ -234,6 +238,19 @@ struct ProfileView: View {
         Section("Pulse Coach") {
             Button("Clear Chat History", role: .destructive) {
                 showClearHistoryConfirm = true
+            }
+        }
+    }
+
+    // MARK: - Feedback
+
+    private var feedbackSection: some View {
+        Section("Support") {
+            Button {
+                vm.showSendFeedback = true
+            } label: {
+                Label("Send Feedback", systemImage: "envelope")
+                    .foregroundStyle(Theme.Colors.primary)
             }
         }
     }

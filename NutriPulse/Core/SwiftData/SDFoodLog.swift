@@ -16,7 +16,7 @@ final class SDFoodLog {
     var fatGSnapshot: Double
     var fiberGSnapshot: Double
     var loggedAt: Date
-    var syncState: String  // "pendingCreate" | "pendingDelete" | "synced"
+    var syncState: String  // "pendingCreate" | "pendingUpdate" | "pendingDelete" | "synced"
 
     init(
         id: UUID = UUID(),

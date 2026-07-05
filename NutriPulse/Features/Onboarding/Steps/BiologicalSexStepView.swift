@@ -32,11 +32,11 @@ private struct SexCard: View {
             HStack {
                 Text(option.displayName)
                     .font(.body.weight(isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? Theme.NutrientColor.calories : .primary)
+                    .foregroundStyle(isSelected ? Theme.Colors.primary : .primary)
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Theme.NutrientColor.calories)
+                        .foregroundStyle(Theme.Colors.primary)
                 } else {
                     Image(systemName: "circle")
                         .foregroundStyle(.quaternary)
@@ -49,7 +49,7 @@ private struct SexCard: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .strokeBorder(
-                                isSelected ? Theme.NutrientColor.calories : .clear,
+                                isSelected ? Theme.Colors.primary : .clear,
                                 lineWidth: 2
                             )
                     )

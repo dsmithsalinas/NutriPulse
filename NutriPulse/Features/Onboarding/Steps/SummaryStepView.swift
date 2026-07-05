@@ -27,8 +27,7 @@ struct SummaryStepView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(Theme.Spacing.lg)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .card()
 
                 // ── Macro breakdown ────────────────────────────────────────
                 VStack(spacing: 0) {
@@ -52,8 +51,7 @@ struct SummaryStepView: View {
                              grams: goals.fiberG,
                              pct: nil)
                 }
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .card()
 
                 // ── Water target ───────────────────────────────────────────
                 HStack {

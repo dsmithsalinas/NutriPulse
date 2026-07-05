@@ -134,8 +134,7 @@ private struct CaloriesChartCard: View {
             .frame(height: 160)
         }
         .padding(Theme.Spacing.md)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }
 
@@ -197,8 +196,7 @@ private struct MacrosChartCard: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }
 
@@ -219,14 +217,14 @@ private struct BodyFatChartCard: View {
                     x: .value("Date", entry.date, unit: .day),
                     y: .value("%", entry.pct)
                 )
-                .foregroundStyle(Color.orange)
+                .foregroundStyle(Theme.Colors.accent)
                 .interpolationMethod(.catmullRom)
 
                 PointMark(
                     x: .value("Date", entry.date, unit: .day),
                     y: .value("%", entry.pct)
                 )
-                .foregroundStyle(Color.orange)
+                .foregroundStyle(Theme.Colors.accent)
                 .symbolSize(40)
             }
             .chartYAxis {
@@ -239,8 +237,7 @@ private struct BodyFatChartCard: View {
             .frame(height: 140)
         }
         .padding(Theme.Spacing.md)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }
 
@@ -305,8 +302,7 @@ private struct GLP1DoseChartCard: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }
 
@@ -349,7 +345,6 @@ private struct WeightChartCard: View {
             .frame(height: 140)
         }
         .padding(Theme.Spacing.md)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 }

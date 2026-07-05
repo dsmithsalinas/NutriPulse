@@ -10,6 +10,7 @@ struct CoachContextBundle: Encodable {
     let dailyGoals: GoalContext?
     let today: TodayContext
     let sevenDayHistory: WeekHistoryContext
+    let recentWins: [String]
     let weightTrend: WeightTrendContext?
     let healthKit: HealthKitContext?
     let glp1: GLP1Context?
@@ -101,7 +102,9 @@ struct CoachContextBuilder {
         let hk = await MainActor.run { HealthKitManager.shared }
 
         async let logsTask = foodLogRepo.fetchLogs(for: .now)
-        async let summariesTask = analyticsRepo.fetchDailySummaries(days: 7)
+        // 30 days so CelebrationEngine can see streaks longer than a week;
+        // the "7-day history" narrative below just slices the tail of this.
+        async let summariesTask = analyticsRepo.fetchDailySummaries(days: 30)
         async let goalTask = goalRepo.fetchGoal(for: .now)
         async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
         async let weightTask = analyticsRepo.fetchWeightLogs(days: 7)
@@ -218,8 +221,9 @@ struct CoachContextBuilder {
             activeCaloriesBurned: activeCal > 0 ? Int(activeCal) : nil
         )
 
-        // 7-day history
-        let loggedDays = summaries.filter { $0.hasData }
+        // 7-day history — tail of the wider window fetched above
+        let recentSummaries = Array(summaries.suffix(7))
+        let loggedDays = recentSummaries.filter { $0.hasData }
         let count = Double(max(loggedDays.count, 1))
         let avgCal  = loggedDays.reduce(0) { $0 + $1.calories  } / count
         let avgPro  = loggedDays.reduce(0) { $0 + $1.proteinG  } / count
@@ -301,6 +305,7 @@ struct CoachContextBuilder {
             dailyGoals: goalCtx,
             today: todayCtx,
             sevenDayHistory: weekCtx,
+            recentWins: CelebrationEngine.detectWins(goal: goal, history: summaries),
             weightTrend: weightTrend,
             healthKit: hkCtx,
             glp1: glp1Ctx

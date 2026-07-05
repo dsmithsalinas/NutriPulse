@@ -19,8 +19,10 @@ struct CoachView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
-                        Image(systemName: "waveform.path.ecg")
-                            .foregroundStyle(.orange)
+                        Image("PulseMark")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
                         Text("Pulse")
                             .fontWeight(.semibold)
                     }
@@ -88,10 +90,10 @@ struct CoachView: View {
                             .font(.caption)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(Color.orange.opacity(0.08))
-                            .foregroundStyle(.orange)
+                            .background(Theme.Colors.primary.opacity(0.08))
+                            .foregroundStyle(Theme.Colors.primary)
                             .clipShape(Capsule())
-                            .overlay(Capsule().strokeBorder(Color.orange.opacity(0.25), lineWidth: 1))
+                            .overlay(Capsule().strokeBorder(Theme.Colors.primary.opacity(0.25), lineWidth: 1))
                     }
                 }
             }
@@ -126,7 +128,7 @@ struct CoachView: View {
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
-                    .foregroundStyle(sendButtonActive ? .orange : .secondary)
+                    .foregroundStyle(sendButtonActive ? Theme.Colors.primary : Color.secondary)
             }
             .disabled(!sendButtonActive)
         }
@@ -163,7 +165,13 @@ private struct MessageBubble: View {
         Text(message.content)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(message.isUser ? Color.orange : Color(.secondarySystemBackground))
+            .background {
+                if message.isUser {
+                    Theme.Colors.primaryGradient
+                } else {
+                    Theme.Colors.surface
+                }
+            }
             .foregroundStyle(message.isUser ? .white : .primary)
             .clipShape(RoundedRectangle(cornerRadius: 16))
     }
@@ -171,11 +179,12 @@ private struct MessageBubble: View {
     private var pulseAvatar: some View {
         ZStack {
             Circle()
-                .fill(Color.orange.opacity(0.12))
+                .fill(Theme.Colors.primary.opacity(0.12))
                 .frame(width: 28, height: 28)
-            Image(systemName: "waveform.path.ecg")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.orange)
+            Image("PulseMark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 16, height: 16)
         }
     }
 }
@@ -201,8 +210,7 @@ private struct PulseTypingIndicator: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .card()
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -214,11 +222,12 @@ private struct PulseTypingIndicator: View {
     private var pulseAvatar: some View {
         ZStack {
             Circle()
-                .fill(Color.orange.opacity(0.12))
+                .fill(Theme.Colors.primary.opacity(0.12))
                 .frame(width: 28, height: 28)
-            Image(systemName: "waveform.path.ecg")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.orange)
+            Image("PulseMark")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 16, height: 16)
         }
     }
 }

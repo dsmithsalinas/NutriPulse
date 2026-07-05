@@ -32,13 +32,13 @@ private struct GoalCard: View {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: goal.icon)
                     .font(.title2)
-                    .foregroundStyle(isSelected ? Theme.NutrientColor.calories : .secondary)
+                    .foregroundStyle(isSelected ? Theme.Colors.primary : .secondary)
                     .frame(width: 36)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(goal.displayName)
                         .font(.body.weight(isSelected ? .semibold : .regular))
-                        .foregroundStyle(isSelected ? Theme.NutrientColor.calories : .primary)
+                        .foregroundStyle(isSelected ? Theme.Colors.primary : .primary)
                     Text(goal.detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -47,7 +47,7 @@ private struct GoalCard: View {
                 Spacer()
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Theme.NutrientColor.calories : Color.secondary)
+                    .foregroundStyle(isSelected ? Theme.Colors.primary : Color.secondary)
                     .font(.title3)
             }
             .padding()
@@ -57,7 +57,7 @@ private struct GoalCard: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .strokeBorder(
-                                isSelected ? Theme.NutrientColor.calories : .clear,
+                                isSelected ? Theme.Colors.primary : .clear,
                                 lineWidth: 2
                             )
                     )

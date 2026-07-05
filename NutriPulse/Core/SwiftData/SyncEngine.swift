@@ -61,6 +61,25 @@ final class SyncEngine {
         await pullTodayWater()
     }
 
+    // Push this device's own pending writes only — no pull. Call this after
+    // a local mutation (log/edit/delete a food entry, add water) so the write
+    // reaches the server promptly without re-fetching the goal, 7 days of
+    // food logs, and today's water on every single action. The full pull
+    // side of syncNow() is reserved for where it actually earns its cost:
+    // app foreground and network reconnect, where other devices/sessions
+    // may have written data this one doesn't have yet.
+    func pushPendingChanges() async {
+        guard !isSyncing, isOnline else { return }
+        isSyncing = true
+        defer {
+            isSyncing = false
+            refreshPendingCount()
+        }
+
+        await pushPendingFoodLogs()
+        await pushPendingWaterLogs()
+    }
+
     // MARK: - Push food logs
 
     private func pushPendingFoodLogs() async {
@@ -69,6 +88,19 @@ final class SyncEngine {
                 do {
                     try await supabase.from("food_logs")
                         .upsert(FoodLogInsert(from: log), onConflict: "id", ignoreDuplicates: true)
+                        .execute()
+                    try? LocalStore.shared.markFoodLogSynced(id: log.id)
+                } catch { }
+            }
+        }
+        // Unlike creates, this is a real UPDATE — the row already exists
+        // remotely, and upsert's ignoreDuplicates would otherwise skip it.
+        if let toUpdate = try? LocalStore.shared.pendingUpdateFoodLogs() {
+            for log in toUpdate {
+                do {
+                    try await supabase.from("food_logs")
+                        .update(FoodLogUpdate(meal: log.meal, quantity: log.quantity))
+                        .eq("id", value: log.id)
                         .execute()
                     try? LocalStore.shared.markFoodLogSynced(id: log.id)
                 } catch { }
@@ -192,6 +224,14 @@ private struct FoodLogInsert: Encodable {
         case fatGSnapshot     = "fat_g_snapshot"
         case fiberGSnapshot   = "fiber_g_snapshot"
     }
+}
+
+// Only the fields an edit can actually change — meal and quantity. Macro
+// values are a per-serving snapshot from whatever source resolved them
+// (FatSecret, Claude's estimate, manual entry) and aren't user-editable.
+private struct FoodLogUpdate: Encodable {
+    let meal: String
+    let quantity: Double
 }
 
 private struct WaterLogInsert: Encodable {

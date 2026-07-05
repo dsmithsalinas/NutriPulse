@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct TodayView: View {
     // SWIFT CONCEPT — @State on a class type works with @Observable in iOS 17.
@@ -8,6 +9,8 @@ struct TodayView: View {
     @State private var vm = TodayViewModel()
     @State private var showFoodLogger = false
     @State private var showBodyCompSheet = false
+    @State private var ringCelebrationTrigger = 0
+    @State private var editingLog: FoodLog? = nil
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppState.self) private var appState
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
@@ -36,6 +39,7 @@ struct TodayView: View {
                             fiberG:   vm.totalFiberG,
                             goal:     vm.dailyGoal
                         )
+                        .celebrationBeat(trigger: ringCelebrationTrigger)
 
                         if HealthKitManager.shared.isAvailable {
                             HealthStatsCard(
@@ -69,7 +73,12 @@ struct TodayView: View {
                             ForEach(Meal.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { meal in
                                 let logs = vm.logsByMeal[meal] ?? []
                                 if !logs.isEmpty {
-                                    MealSectionView(meal: meal, logs: logs)
+                                    MealSectionView(
+                                        meal: meal,
+                                        logs: logs,
+                                        onEdit: { editingLog = $0 },
+                                        onDelete: { log in Task { await vm.deleteLog(id: log.id) } }
+                                    )
                                 }
                             }
                         }
@@ -117,8 +126,21 @@ struct TodayView: View {
             }) {
                 FoodLoggingView(selectedDate: vm.selectedDate)
             }
+            .sheet(item: $editingLog) { log in
+                EditFoodLogSheet(
+                    log: log,
+                    onSave: { meal, quantity in
+                        await vm.editLog(id: log.id, meal: meal, quantity: quantity)
+                    }
+                )
+            }
             .task(id: vm.selectedDate) {
                 await vm.loadData()
+            }
+            .onChange(of: vm.justClosedAllRings) { _, justClosed in
+                guard vm.isToday, justClosed else { return }
+                ringCelebrationTrigger += 1
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
             }
             .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
                 Task { await vm.loadData() }

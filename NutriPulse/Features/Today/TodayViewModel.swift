@@ -46,11 +46,29 @@ final class TodayViewModel {
     var sleepHours: Double?     = nil
 
     var netCalories: Double { totalCalories - activeCalories }
+
+    // Drives the free ring-closing celebration beat — no server round trip,
+    // just today's totals against today's goal. See CelebrationEngine for the
+    // richer, Coach-facing win detection (streaks, firsts).
+    var allRingsClosed: Bool {
+        guard let goal = dailyGoal else { return false }
+        return totalCalories >= goal.calories
+            && totalProteinG >= goal.proteinG
+            && totalCarbsG   >= goal.carbsG
+            && totalFiberG   >= goal.fiberG
+    }
+
+    // True for exactly one loadData() call — the one where allRingsClosed flips
+    // false → true. Computed atomically around the reload so there's no window
+    // where a view's .onChange could race against an in-flight async load.
+    private(set) var justClosedAllRings = false
+
     var healthDataAvailable: Bool {
         activeCalories > 0 || restingHeartRate != nil || hrv != nil || sleepHours != nil
     }
 
     func loadData() async {
+        let wasClosed = allRingsClosed
         isLoading    = true
         errorMessage = nil
         defer { isLoading = false }
@@ -77,6 +95,8 @@ final class TodayViewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+
+        justClosedAllRings = !wasClosed && allRingsClosed
 
         bodyComp = await bodyCompTask
         await loadHealthData()
@@ -209,7 +229,7 @@ final class TodayViewModel {
             )
             waterIntakeMl += ml
             SyncEngine.shared.refreshPendingCount()
-            Task { await SyncEngine.shared.syncNow() }
+            Task { await SyncEngine.shared.pushPendingChanges() }
         } catch {
             errorMessage = "Couldn't log water."
         }
@@ -220,9 +240,22 @@ final class TodayViewModel {
             try LocalStore.shared.markFoodLogDeleted(id: id)
             foodLogs.removeAll { $0.id == id }
             SyncEngine.shared.refreshPendingCount()
-            Task { await SyncEngine.shared.syncNow() }
+            Task { await SyncEngine.shared.pushPendingChanges() }
         } catch {
             errorMessage = "Couldn't delete log."
+        }
+    }
+
+    func editLog(id: UUID, meal: Meal, quantity: Double) async {
+        do {
+            try LocalStore.shared.updateFoodLog(id: id, meal: meal.rawValue, quantity: quantity)
+            if let userId = try? await supabase.auth.session.user.id {
+                foodLogs = try LocalStore.shared.fetchFoodLogs(for: selectedDate, userId: userId)
+            }
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+        } catch {
+            errorMessage = "Couldn't save changes."
         }
     }
 

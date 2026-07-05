@@ -24,8 +24,7 @@ struct HealthStatsCard: View {
             }
         }
         .padding(Theme.Spacing.md)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .card()
     }
 
     // MARK: Data view
@@ -88,6 +87,7 @@ struct HealthStatsCard: View {
                     .foregroundStyle(.tertiary)
             }
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: Sub-views

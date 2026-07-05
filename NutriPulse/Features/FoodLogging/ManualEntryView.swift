@@ -6,7 +6,7 @@ struct ManualEntryView: View {
     // Think of it as the SwiftUI equivalent of passing a ref to a React child component.
     @Bindable var vm: FoodLoggingViewModel
     let date: Date
-    let onLogged: () -> Void
+    let onLogged: (LogSource) -> Void
 
     var body: some View {
         Form {
@@ -56,27 +56,20 @@ struct ManualEntryView: View {
             Task {
                 do {
                     try await vm.logManualFood(on: date)
-                    onLogged()
+                    onLogged(.manual)
                 } catch {
                     vm.errorMessage = error.localizedDescription
                 }
             }
         } label: {
-            Group {
-                if vm.isLoading {
-                    ProgressView()
-                } else {
-                    Text("Log \(vm.quantity.formatted()) × \(vm.name.isEmpty ? "food" : vm.name)")
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                }
+            if vm.isLoading {
+                ProgressView().tint(.white)
+            } else {
+                Text("Log \(vm.quantity.formatted()) × \(vm.name.isEmpty ? "food" : vm.name)")
+                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(vm.canLog ? Theme.NutrientColor.calories : Color(.systemFill))
-            .foregroundStyle(vm.canLog ? .white : .secondary)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
         }
+        .buttonStyle(.brandPrimary)
         .disabled(!vm.canLog || vm.isLoading)
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.bottom, Theme.Spacing.sm)
