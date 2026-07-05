@@ -4,6 +4,7 @@ struct CoachView: View {
     let isActive: Bool
     @State private var vm = CoachViewModel()
     @AppStorage("chatHistoryVersion") private var chatHistoryVersion = 0
+    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -26,6 +27,10 @@ struct CoachView: View {
                         Text("Pulse")
                             .fontWeight(.semibold)
                     }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { isInputFocused = false }
                 }
             }
         }
@@ -62,6 +67,7 @@ struct CoachView: View {
                 }
                 .padding(.vertical, 8)
             }
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: vm.messages.count) {
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom") }
             }
@@ -118,6 +124,7 @@ struct CoachView: View {
             TextField("Ask Pulse…", text: $vm.inputText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...4)
+                .focused($isInputFocused)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Color(.secondarySystemBackground))
