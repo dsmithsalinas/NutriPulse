@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — NutriPulse</title>
+<style>
+  :root {
+    --ink:      #14163A;
+    --ink-soft: #2A2C52;
+    --indigo:   #6366F1;
+    --violet:   #8B5CF6;
+    --ground:   #F6F5FC;
+    --card:     #FFFFFF;
+    --muted:    #64678A;
+    --line:     #E7E4F3;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --maxw: 760px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #F1F0FA; --ink-soft: #D8D7EC; --ground: #14163A;
+      --card: #1B1D45; --muted: #9A9CC2; --line: #2E3062;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--font); -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+  }
+  .wrap { max-width: var(--maxw); margin-inline: auto; padding: clamp(24px, 6vw, 64px) 20px 96px; }
+  a { color: var(--indigo); }
+  header { margin-bottom: 8px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; color: var(--ink-soft); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, var(--indigo), var(--violet)); }
+  h1 { font-size: clamp(28px, 4.5vw, 38px); letter-spacing: -0.02em; margin: 20px 0 4px; }
+  .updated { color: var(--muted); font-size: 14px; margin-bottom: 40px; }
+  h2 { font-size: 19px; letter-spacing: -0.01em; margin: 40px 0 12px; color: var(--ink); }
+  p, li { color: var(--ink-soft); font-size: 15.5px; }
+  ul { padding-left: 22px; }
+  li { margin: 6px 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 20px; margin: 16px 0;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin: 12px 0; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+  footer { margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand"><span class="dot"></span> NutriPulse</div>
+    <h1>Privacy Policy</h1>
+    <div class="updated">Last updated: July 4, 2026</div>
+  </header>
+
+  <p>This policy explains what information NutriPulse collects, how it's used, and who it's shared with. NutriPulse is a nutrition and wellness tracking app; some of what it handles — food logs, weight, GLP-1 medication schedules, and optional Apple Health data — is health information, so we've tried to be specific rather than generic here.</p>
+
+  <h2>Information we collect</h2>
+  <div class="card">
+    <table>
+      <tr><th>Category</th><th>What</th></tr>
+      <tr><td>Account</td><td>Email address, and name/sex/date of birth/activity level if you complete onboarding.</td></tr>
+      <tr><td>Nutrition &amp; activity logs</td><td>Food and water entries (manual, searched, scanned, or described in your own words to Pulse), daily macro/calorie goals, and body weight you log.</td></tr>
+      <tr><td>GLP-1 tracking</td><td>Medication, dose, injection site and timing — only if you choose to use this feature.</td></tr>
+      <tr><td>Apple Health (optional)</td><td>Sleep, resting heart rate, heart rate variability, and active energy burned — only if you connect Apple Health, and only to show it to you and give Pulse context.</td></tr>
+      <tr><td>Pulse chat</td><td>Messages you send to the in-app AI coach, and the responses it gives.</td></tr>
+      <tr><td>Feedback</td><td>Anything you submit via the in-app "Send Feedback" form.</td></tr>
+      <tr><td>Usage analytics</td><td>Anonymous product-usage signals (e.g. a log was saved, a chat message was sent) — never the content of what you logged or said.</td></tr>
+    </table>
+  </div>
+
+  <h2>How we use it</h2>
+  <ul>
+    <li>To run the core features: tracking your nutrition, showing your trends, and powering Pulse's coaching.</li>
+    <li>To give Pulse the context it needs to answer well — when you message Pulse, a snapshot of your relevant data (today's log, recent history, goals, weight trend, connected Health data, and GLP-1 schedule if applicable) is sent along with your message so it can respond specifically to you, not generically.</li>
+    <li>To understand product usage in aggregate, so we know what's working — never at the level of reading your individual logs or conversations.</li>
+    <li>To respond to feedback and support requests.</li>
+  </ul>
+
+  <h2>Who we share it with</h2>
+  <p>We don't sell your data. It's shared only with the service providers that make the app work, each limited to what they need to do their job:</p>
+  <div class="card">
+    <table>
+      <tr><th>Provider</th><th>Purpose</th><th>What they receive</th></tr>
+      <tr><td>Supabase</td><td>Database, authentication, file/edge-function hosting</td><td>All account and log data described above — this is where it's stored.</td></tr>
+      <tr><td>Anthropic (Claude)</td><td>Powers the Pulse AI coach and natural-language food logging</td><td>Your message plus the data-context snapshot described above, and the food description text you type when using talk-to-log.</td></tr>
+      <tr><td>FatSecret</td><td>Nutrition database for food search and barcode lookup</td><td>The food name or barcode you search for. Not your account identity.</td></tr>
+      <tr><td>TelemetryDeck</td><td>Anonymous product analytics</td><td>Anonymous usage signals only — no log content, no messages, no personal identifiers.</td></tr>
+      <tr><td>Apple</td><td>Sign in with Apple, HealthKit, push notifications</td><td>Standard to those Apple frameworks; governed by Apple's own privacy terms.</td></tr>
+    </table>
+  </div>
+
+  <h2>Data retention &amp; deletion</h2>
+  <p>Your data is kept for as long as your account exists. You can permanently delete your account and all associated data at any time from <strong>Profile → Delete Account</strong> in the app. This is immediate and irreversible — it removes your logs, goals, weight history, GLP-1 records, chat history, and feedback.</p>
+
+  <h2>Security</h2>
+  <p>Data is encrypted in transit (TLS) and at rest in our database provider. Access to your data is scoped to your account via row-level security — no other user can read it, and our AI coach only ever sees your own data when responding to you.</p>
+
+  <h2>Children's privacy</h2>
+  <p>NutriPulse is not directed at children under 13, and we don't knowingly collect data from them.</p>
+
+  <h2>Your rights</h2>
+  <p>You can access, correct, or export your data through the app itself (it's designed to always show you exactly what's been logged), and delete your account and all data at any time as described above. If you have a request we haven't made self-service yet, contact us using the details below.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes in a material way, we'll update the date at the top of this page.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy or your data: <a href="mailto:dusteallen@me.com">dusteallen@me.com</a></p>
+
+  <footer>NutriPulse — this document is a factual description of current data practices, not legal advice. Have it reviewed by counsel before relying on it for App Store submission or regulatory compliance.</footer>
+
+</div>
+</body>
+</html>
