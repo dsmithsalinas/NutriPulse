@@ -30,4 +30,9 @@ enum Config {
         }
         return value
     }()
+
+    // Served from marketing/privacy.html via GitHub Pages once this repo is
+    // pushed and Pages is enabled (Settings → Pages → Deploy from branch:
+    // main, folder: / root). Not live until then.
+    static let privacyPolicyURL = URL(string: "https://dsmithsalinas.github.io/NutriPulse/marketing/privacy.html")!
 }

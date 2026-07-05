@@ -11,6 +11,7 @@ final class ProfileViewModel {
     var glp1Logs: [GLP1Log]      = []
     var isLoading                = false
     var errorMessage: String?    = nil
+    var isDeletingAccount        = false
 
     // Sheet presentation flags
     var showEditProfile    = false
@@ -21,6 +22,7 @@ final class ProfileViewModel {
     private let goalRepo = GoalRepository()
     private let glp1Repo = GLP1Repository()
     private let feedbackRepo = FeedbackRepository()
+    private let accountRepo = AccountRepository()
 
     // MARK: - Computed
 
@@ -159,6 +161,19 @@ final class ProfileViewModel {
 
     func submitFeedback(category: FeedbackCategory, message: String) async throws {
         try await feedbackRepo.submit(category: category, message: message)
+    }
+
+    // MARK: - Account deletion
+
+    func deleteAccount() async {
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        do {
+            try await accountRepo.deleteAccount()
+            try? await supabase.auth.signOut()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     // MARK: - Private

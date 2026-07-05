@@ -6,6 +6,7 @@ struct ProfileView: View {
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
     @AppStorage("chatHistoryVersion") private var chatHistoryVersion = 0
     @State private var showClearHistoryConfirm = false
+    @State private var showDeleteAccountConfirm = false
 
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
@@ -20,6 +21,7 @@ struct ProfileView: View {
                 coachSection
                 feedbackSection
                 signOutSection
+                deleteAccountSection
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Profile")
@@ -63,6 +65,18 @@ struct ProfileView: View {
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text("This permanently deletes all messages with Pulse.")
+            }
+            .confirmationDialog(
+                "Delete your account?",
+                isPresented: $showDeleteAccountConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Account", role: .destructive) {
+                    Task { await vm.deleteAccount() }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This permanently deletes your account and all your data — logs, goals, weight history, and chat history. This cannot be undone.")
             }
         }
     }
@@ -252,6 +266,10 @@ struct ProfileView: View {
                 Label("Send Feedback", systemImage: "envelope")
                     .foregroundStyle(Theme.Colors.primary)
             }
+            Link(destination: Config.privacyPolicyURL) {
+                Label("Privacy Policy", systemImage: "hand.raised")
+                    .foregroundStyle(Theme.Colors.primary)
+            }
         }
     }
 
@@ -262,6 +280,17 @@ struct ProfileView: View {
             Button("Sign Out", role: .destructive) {
                 Task { try? await supabase.auth.signOut() }
             }
+        }
+    }
+
+    // MARK: - Delete Account
+
+    private var deleteAccountSection: some View {
+        Section {
+            Button("Delete Account", role: .destructive) {
+                showDeleteAccountConfirm = true
+            }
+            .disabled(vm.isDeletingAccount)
         }
     }
 
