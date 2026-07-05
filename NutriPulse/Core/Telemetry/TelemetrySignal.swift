@@ -40,6 +40,17 @@ enum TelemetrySignal: String {
     /// Supabase (`feedback` table), not TelemetryDeck — this signal is only for
     /// tracking submission rate. Parameters: `category` (bug | idea | general).
     case feedbackSubmitted = "feedback.submitted"
+
+    // MARK: App health
+
+    /// Fired on the launch after an uncaught exception/fatal signal ended the
+    /// previous session. See `CrashReporter`.
+    case previousSessionCrashed = "app.previousSessionCrashed"
+
+    /// Fired when the on-disk SwiftData store failed to open and the app fell
+    /// back to an in-memory store for the session (data won't persist across
+    /// launches, but the app stays usable instead of hard-crashing at launch).
+    case localStoreFallback = "app.localStoreFallback"
 }
 
 // Parameter values for `TelemetrySignal.logIntentStarted` / `.logConfirmed`'s

@@ -74,4 +74,14 @@ enum Telemetry {
             parameters: ["category": category.rawValue]
         )
     }
+
+    // MARK: - App health
+
+    static func previousSessionCrashed() {
+        TelemetryDeck.signal(TelemetrySignal.previousSessionCrashed.rawValue)
+    }
+
+    static func localStoreFallback() {
+        TelemetryDeck.signal(TelemetrySignal.localStoreFallback.rawValue)
+    }
 }

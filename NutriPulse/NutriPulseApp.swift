@@ -9,10 +9,20 @@ struct NutriPulseApp: App {
 
     static let modelContainer: ModelContainer = {
         let schema = Schema([SDFoodLog.self, SDWaterLog.self, SDDailyGoal.self])
-        return try! ModelContainer(for: schema)
+        do {
+            return try ModelContainer(for: schema)
+        } catch {
+            // A corrupt/incompatible on-disk store should never hard-crash
+            // launch. Fall back to an in-memory store for this session (data
+            // won't persist across launches) and log it so we know it happened.
+            Task { @MainActor in Telemetry.localStoreFallback() }
+            let config = ModelConfiguration(isStoredInMemoryOnly: true)
+            return try! ModelContainer(for: schema, configurations: config)
+        }
     }()
 
     init() {
+        CrashReporter.install()
         LocalStore.shared.configure(with: Self.modelContainer)
         SyncEngine.shared.configure()
         Telemetry.initialize()

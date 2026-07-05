@@ -21,6 +21,9 @@ packages:
   Supabase:
     url: https://github.com/supabase/supabase-swift
     from: "2.0.0"
+  TelemetryDeck:
+    url: https://github.com/TelemetryDeck/SwiftSDK
+    from: "2.0.0"
 
 targets:
   NutriPulse:
@@ -46,6 +49,7 @@ targets:
         # Values are set in Configurations/Secrets.xcconfig (gitignored).
         SUPABASE_URL: "$(SUPABASE_URL)"
         SUPABASE_ANON_KEY: "$(SUPABASE_ANON_KEY)"
+        TELEMETRYDECK_APP_ID: "$(TELEMETRYDECK_APP_ID)"
     entitlements:
       path: NutriPulse/NutriPulse.entitlements
       properties:
@@ -65,6 +69,8 @@ targets:
     dependencies:
       - package: Supabase
         product: Supabase
+      - package: TelemetryDeck
+        product: TelemetryDeck
 
   NutriPulseTests:
     type: bundle.unit-test
