@@ -83,3 +83,6 @@ targets:
     settings:
       base:
         SWIFT_VERSION: "5.9"
+        # Without this the test bundle can't code sign ("target does not have an
+        # Info.plist file"), so `xcodebuild test` could never run at all.
+        GENERATE_INFOPLIST_FILE: YES
