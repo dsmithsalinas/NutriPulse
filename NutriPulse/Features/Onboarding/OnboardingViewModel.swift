@@ -191,32 +191,45 @@ final class OnboardingViewModel {
     }
 
     // ── Save (called from SummaryStepView) ───────────────────────────────────
-    func save(userId: UUID) async throws {
+    //
+    // These four writes are not a transaction, so any of them can fail after an
+    // earlier one committed and the user will tap "Start Tracking" again. Two
+    // properties make that safe:
+    //
+    // IDEMPOTENT — every write converges on the same rows when repeated. The
+    // client-generated ids below (stable for the life of this ViewModel) are what
+    // make the weight and GLP-1 writes safe to retry; a plain INSERT added a fresh
+    // starting-weight row on every attempt.
+    //
+    // ORDERED — profiles.full_name is written LAST, because it is the flag
+    // AppState.needsOnboarding reads to decide onboarding is done. Writing it
+    // first meant that killing the app mid-save left a user marked "onboarded"
+    // with no daily_goals row: straight to the Today screen with no targets, and
+    // no way back into onboarding to create them.
+    private let startingWeightLogId = UUID()
+    private let initialGLP1LogId    = UUID()
+
+    @discardableResult
+    func save(userId: UUID) async throws -> UserProfile {
         isLoading = true
         defer { isLoading = false }
 
         let goals = calculatedGoals
 
-        // 1. Fill in the profile row the trigger created at sign-up
-        try await supabase
-            .from("profiles")
-            .update(UpdateProfile(
-                fullName: fullName.trimmingCharacters(in: .whitespaces),
-                dob: dob.isoDateString,
-                sex: sex.rawValue,
-                heightCm: heightCm,
-                activityLevel: activityLevel.rawValue
-            ))
-            .eq("id", value: userId)
-            .execute()
-
-        // 2. Record starting weight
+        // 1. Record starting weight (idempotent on the client-generated id)
         try await supabase
             .from("weight_logs")
-            .insert(NewWeightLog(userId: userId, weightKg: weightKg))
+            .upsert(OnboardingWeightLog(
+                id: startingWeightLogId,
+                userId: userId,
+                weightKg: weightKg
+            ), onConflict: "id")
             .execute()
 
-        // 3. Create initial daily goal (upsert handles re-runs of onboarding)
+        // 2. Create initial daily goal. The conflict target must be named explicitly:
+        //    a bare upsert() resolves on the primary key (a fresh uuid every call),
+        //    so it never saw the UNIQUE (user_id, effective_date) collision and a
+        //    second run of onboarding died on a duplicate-key error.
         try await supabase
             .from("daily_goals")
             .upsert(NewDailyGoal(
@@ -228,23 +241,82 @@ final class OnboardingViewModel {
                 fatG: goals.fatG,
                 fiberG: goals.fiberG,
                 waterMlTarget: goals.waterMlTarget
-            ))
+            ), onConflict: "user_id,effective_date")
             .execute()
 
-        // 4. GLP-1 log (optional — skipped if user didn't set it up)
+        // 3. GLP-1 log (optional — skipped if user didn't set it up)
         if isOnGLP1 {
             let nextDue = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: glp1LastInjected) ?? glp1LastInjected
             try await supabase
                 .from("glp1_logs")
-                .insert(NewGLP1Log(
+                .upsert(OnboardingGLP1Log(
+                    id: initialGLP1LogId,
                     userId: userId,
                     injectedAt: glp1LastInjected,
                     medication: glp1Medication.rawValue,
                     doseMg: glp1DoseMg,
                     site: InjectionSite.leftAbdomen.rawValue,
                     nextDueAt: nextDue
-                ))
+                ), onConflict: "id")
                 .execute()
         }
+
+        // 4. Commit the profile last — this is what marks onboarding complete.
+        //    Returning the saved row lets the caller update AppState without a
+        //    second network round trip that could fail and strand the user.
+        let savedProfile: UserProfile = try await supabase
+            .from("profiles")
+            .update(UpdateProfile(
+                fullName: fullName.trimmingCharacters(in: .whitespaces),
+                dob: dob.isoDateString,
+                sex: sex.rawValue,
+                heightCm: heightCm,
+                activityLevel: activityLevel.rawValue
+            ))
+            .eq("id", value: userId)
+            .select()
+            .single()
+            .execute()
+            .value
+
+        return savedProfile
+    }
+}
+
+// ─── Idempotent insert payloads ──────────────────────────────────────────────
+// Identical to NewWeightLog / NewGLP1Log but carrying a client-supplied primary
+// key, so an interrupted onboarding can be retried without duplicating rows.
+
+private struct OnboardingWeightLog: Encodable {
+    let id: UUID
+    let userId: UUID
+    let weightKg: Double
+    var source: String = "manual"
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId   = "user_id"
+        case weightKg = "weight_kg"
+        case source
+    }
+}
+
+private struct OnboardingGLP1Log: Encodable {
+    let id: UUID
+    let userId: UUID
+    let injectedAt: Date
+    let medication: String
+    let doseMg: Double
+    let site: String
+    let nextDueAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId     = "user_id"
+        case injectedAt = "injected_at"
+        case medication
+        case doseMg     = "dose_mg"
+        case site
+        case nextDueAt  = "next_due_at"
     }
 }

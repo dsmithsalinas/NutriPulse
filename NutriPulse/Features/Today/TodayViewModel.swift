@@ -12,6 +12,12 @@ final class TodayViewModel {
     private let bodyCompRepo = BodyCompositionRepository()
 
     var selectedDate: Date = .now
+    // Whether `selectedDate` is the user's "today" rather than a day they
+    // deliberately navigated back to. iOS keeps suspended apps alive for days,
+    // so without this the date set at init silently becomes yesterday and every
+    // log written from this screen lands on the wrong day. See snapToTodayIfDayChanged().
+    private var isTrackingToday = true
+
     var foodLogs: [FoodLog]   = []
     var dailyGoal: DailyGoal? = nil
     var isLoading             = false
@@ -80,7 +86,7 @@ final class TodayViewModel {
 
             // Read from LocalStore — instant, works offline
             foodLogs      = (try? LocalStore.shared.fetchFoodLogs(for: selectedDate, userId: userId)) ?? []
-            dailyGoal     = try? LocalStore.shared.fetchGoal(for: selectedDate)
+            dailyGoal     = try? LocalStore.shared.fetchGoal(for: selectedDate, userId: userId)
             waterIntakeMl = (try? LocalStore.shared.fetchWaterTotal(for: selectedDate, userId: userId)) ?? 0
             waterGoalMl   = dailyGoal?.waterMlTarget ?? 2000
 
@@ -261,12 +267,27 @@ final class TodayViewModel {
 
     func goToPreviousDay() {
         selectedDate = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) ?? selectedDate
+        isTrackingToday = selectedDate.isToday
     }
 
     func goToNextDay() {
         guard !selectedDate.isToday else { return }  // don't navigate into the future
         selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
+        isTrackingToday = selectedDate.isToday
     }
 
-    func goToToday() { selectedDate = .now }
+    func goToToday() {
+        selectedDate = .now
+        isTrackingToday = true
+    }
+
+    // Called on foreground and on the system's significant-time-change notification
+    // (which fires at midnight). If the user was sitting on "today" and the calendar
+    // day rolled over underneath them, move them to the real today — otherwise the
+    // next thing they log gets stamped with yesterday's date. A user who deliberately
+    // navigated to a past day stays where they are.
+    func snapToTodayIfDayChanged() {
+        guard isTrackingToday, !selectedDate.isToday else { return }
+        selectedDate = .now
+    }
 }

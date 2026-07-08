@@ -85,11 +85,25 @@ Deno.serve(async (req) => {
 
     const systemPrompt = buildSystemPrompt(context, messageType)
 
+    // The Anthropic Messages API requires the first message to come from the user.
+    // Our conversations routinely open with an assistant-authored check-in (see
+    // CoachViewModel.maybeGenerateCheckin), so a naive passthrough sends an
+    // assistant-first history and gets a 400 — which, because the failed user turn
+    // is already persisted, repeats on every retry until the check-in falls out of
+    // the window. Drop leading assistant turns, and defensively reject rows that
+    // aren't well-formed user/assistant messages.
+    const cleanHistory = (history as { role: string; content: string }[])
+      .filter(
+        (m) =>
+          (m.role === 'user' || m.role === 'assistant') &&
+          typeof m.content === 'string' &&
+          m.content.trim() !== ''
+      )
+    const firstUserIdx = cleanHistory.findIndex((m) => m.role === 'user')
+    const trimmedHistory = firstUserIdx === -1 ? [] : cleanHistory.slice(firstUserIdx)
+
     const apiMessages = [
-      ...(history as { role: string; content: string }[]).map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
+      ...trimmedHistory.map((m) => ({ role: m.role, content: m.content })),
       { role: 'user', content: message },
     ]
 

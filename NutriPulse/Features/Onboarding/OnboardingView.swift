@@ -57,10 +57,13 @@ struct OnboardingView: View {
                 return
             }
             do {
-                try await vm.save(userId: userId)
-                // fetchProfile() re-evaluates AppState.needsOnboarding → RootView
+                // save() returns the persisted profile, so we apply it directly rather
+                // than re-fetching. A failed re-fetch used to leave needsOnboarding true
+                // even though the save succeeded, pushing the user into a retry loop.
+                // Updating the profile re-evaluates AppState.needsOnboarding → RootView
                 // switches to MainTabView automatically.
-                await appState.fetchProfile()
+                let savedProfile = try await vm.save(userId: userId)
+                appState.setProfile(savedProfile)
             } catch {
                 vm.errorMessage = error.localizedDescription
             }

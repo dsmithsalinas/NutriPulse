@@ -55,29 +55,32 @@ final class LocalStore {
         try context.save()
     }
 
+    // Always tombstone, never hard-delete. A pendingCreate row may have its create
+    // request in flight right now — dropping it locally would leave the server row
+    // orphaned, and the next pull would faithfully resurrect the entry the user
+    // just deleted. A DELETE against a row that was never created is a harmless
+    // no-op, so tombstoning is safe in both directions.
     func markFoodLogDeleted(id: UUID) throws {
         guard let context else { return }
         let descriptor = FetchDescriptor<SDFoodLog>(predicate: #Predicate { $0.id == id })
         guard let log = try context.fetch(descriptor).first else { return }
-        if log.syncState == "pendingCreate" {
-            context.delete(log)
-        } else {
-            log.syncState = "pendingDelete"
-        }
+        log.syncState = "pendingDelete"
+        log.revision += 1
         try context.save()
     }
 
-    // Editing an unsynced row just keeps it pendingCreate — it hasn't reached
-    // the server yet, so there's nothing to "update" there, only to create
-    // with the new values. Anything already synced needs a real push, since
-    // SyncEngine's create path upserts with ignoreDuplicates (skips existing
-    // rows rather than updating them).
+    // Editing an unsynced row keeps it pendingCreate — it hasn't reached the server
+    // yet, so there's nothing to "update" there, only to create with the new values.
+    // Anything already synced needs a real push, since SyncEngine's create path
+    // upserts with ignoreDuplicates (skips existing rows rather than updating them).
+    // The revision bump is what lets an in-flight push detect that it raced this edit.
     func updateFoodLog(id: UUID, meal: String, quantity: Double) throws {
         guard let context else { return }
         let descriptor = FetchDescriptor<SDFoodLog>(predicate: #Predicate { $0.id == id })
         guard let log = try context.fetch(descriptor).first else { return }
         log.meal = meal
         log.quantity = quantity
+        log.revision += 1
         if log.syncState == "synced" {
             log.syncState = "pendingUpdate"
         }
@@ -108,18 +111,43 @@ final class LocalStore {
         return try context.fetch(descriptor)
     }
 
-    func markFoodLogSynced(id: UUID) throws {
+    // ── Push completion (compare-and-set) ────────────────────────────────────
+    // Each of these runs *after* a network round trip, during which the user may
+    // have edited or deleted the row. They only commit the "synced" transition if
+    // the row is still in the state the push assumed. Unconditionally writing
+    // "synced" here is what used to resurrect deleted logs and revert live edits.
+
+    func markFoodLogCreated(id: UUID, pushedRevision: Int) throws {
         guard let context else { return }
         let descriptor = FetchDescriptor<SDFoodLog>(predicate: #Predicate { $0.id == id })
         guard let log = try context.fetch(descriptor).first else { return }
+        // Deleted mid-flight → leave the tombstone alone; the delete push handles it.
+        guard log.syncState == "pendingCreate" else { return }
+        if log.revision == pushedRevision {
+            log.syncState = "synced"
+        } else {
+            // Edited mid-flight. The remote row exists now, so the newer values need
+            // a real UPDATE — another ignoreDuplicates upsert would silently skip them.
+            log.syncState = "pendingUpdate"
+        }
+        try context.save()
+    }
+
+    func markFoodLogUpdated(id: UUID, pushedRevision: Int) throws {
+        guard let context else { return }
+        let descriptor = FetchDescriptor<SDFoodLog>(predicate: #Predicate { $0.id == id })
+        guard let log = try context.fetch(descriptor).first else { return }
+        // Changed again or deleted mid-flight → keep the pending state so it pushes again.
+        guard log.syncState == "pendingUpdate", log.revision == pushedRevision else { return }
         log.syncState = "synced"
         try context.save()
     }
 
-    func removeFoodLog(id: UUID) throws {
+    func removeFoodLogAfterDelete(id: UUID) throws {
         guard let context else { return }
         let descriptor = FetchDescriptor<SDFoodLog>(predicate: #Predicate { $0.id == id })
         guard let log = try context.fetch(descriptor).first else { return }
+        guard log.syncState == "pendingDelete" else { return }
         context.delete(log)
         try context.save()
     }
@@ -206,14 +234,17 @@ final class LocalStore {
 
     // MARK: - Daily Goals
 
-    func fetchGoal(for date: Date) throws -> DailyGoal? {
+    // Filtering by userId matters even though this is "just a cache": goals are the
+    // one cached entity with no natural per-user scoping in the UI, so an unowned
+    // row would silently supply another account's calorie targets.
+    func fetchGoal(for date: Date, userId: UUID) throws -> DailyGoal? {
         guard let context else { return nil }
         let dateStr = date.isoDateString
         let descriptor = FetchDescriptor<SDDailyGoal>(
             sortBy: [SortDescriptor(\.effectiveDate, order: .reverse)]
         )
         return try context.fetch(descriptor)
-            .first { $0.effectiveDate <= dateStr }?
+            .first { $0.userId == userId && $0.effectiveDate <= dateStr }?
             .asDailyGoal
     }
 
@@ -222,6 +253,7 @@ final class LocalStore {
         let id = goal.id
         let descriptor = FetchDescriptor<SDDailyGoal>(predicate: #Predicate { $0.id == id })
         if let existing = try context.fetch(descriptor).first {
+            existing.userId        = goal.userId
             existing.effectiveDate = goal.effectiveDate
             existing.calories      = goal.calories
             existing.proteinG      = goal.proteinG
@@ -231,13 +263,30 @@ final class LocalStore {
             existing.waterMlTarget = goal.waterMlTarget
         } else {
             let sdGoal = SDDailyGoal(
-                id: goal.id, effectiveDate: goal.effectiveDate,
+                id: goal.id, userId: goal.userId, effectiveDate: goal.effectiveDate,
                 calories: goal.calories, proteinG: goal.proteinG,
                 carbsG: goal.carbsG, fatG: goal.fatG,
                 fiberG: goal.fiberG, waterMlTarget: goal.waterMlTarget
             )
             context.insert(sdGoal)
         }
+        try context.save()
+    }
+
+    // MARK: - Sign-out / account deletion
+
+    // Wipes every cached row. Called on sign-out (which covers account deletion, since
+    // that signs out too). Three things go wrong without it:
+    //   1. The next account on this device reads the previous user's cached goals.
+    //   2. The previous user's unsynced rows get pushed under the new user's JWT,
+    //      are rejected by RLS, and stick at "pending" forever, inflating the badge.
+    //   3. "Delete Account" promises the data is gone while it sits in plaintext
+    //      SQLite on the device.
+    func wipeAll() throws {
+        guard let context else { return }
+        try context.delete(model: SDFoodLog.self)
+        try context.delete(model: SDWaterLog.self)
+        try context.delete(model: SDDailyGoal.self)
         try context.save()
     }
 

@@ -5,6 +5,11 @@ import Foundation
 @Model
 final class SDDailyGoal {
     @Attribute(.unique) var id: UUID
+    // Optional so SwiftData can migrate existing stores in place. Rows cached before
+    // this field existed carry nil and are simply ignored by fetchGoal — they get
+    // overwritten (with an owner) on the next pull. Without an owner, the next user
+    // to sign in on this device inherited the previous user's calorie and macro targets.
+    var userId: UUID?
     var effectiveDate: String
     var calories: Double
     var proteinG: Double
@@ -15,6 +20,7 @@ final class SDDailyGoal {
 
     init(
         id: UUID,
+        userId: UUID?,
         effectiveDate: String,
         calories: Double,
         proteinG: Double,
@@ -24,6 +30,7 @@ final class SDDailyGoal {
         waterMlTarget: Double
     ) {
         self.id            = id
+        self.userId        = userId
         self.effectiveDate = effectiveDate
         self.calories      = calories
         self.proteinG      = proteinG
@@ -33,10 +40,11 @@ final class SDDailyGoal {
         self.waterMlTarget = waterMlTarget
     }
 
-    var asDailyGoal: DailyGoal {
-        DailyGoal(
+    var asDailyGoal: DailyGoal? {
+        guard let userId else { return nil }
+        return DailyGoal(
             id: id,
-            userId: UUID(),  // placeholder — userId not needed for display
+            userId: userId,
             effectiveDate: effectiveDate,
             calories: calories,
             proteinG: proteinG,

@@ -279,7 +279,7 @@ private struct GLP1DoseChartCard: View {
             }
             .chartYAxis {
                 AxisMarks { value in
-                    AxisValueLabel("\(value.as(Double.self).map { String(format: "%.2g", $0) } ?? "")mg")
+                    AxisValueLabel("\(value.as(Double.self)?.glp1DoseString ?? "")mg")
                     AxisGridLine()
                 }
             }

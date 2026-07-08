@@ -570,7 +570,7 @@ private struct LogInjectionSheet: View {
                     }
                     Picker("Dose", selection: $doseMg) {
                         ForEach(medication.availableDoses, id: \.self) { dose in
-                            Text("\(dose, specifier: "%.2g") mg").tag(dose)
+                            Text("\(dose.glp1DoseString) mg").tag(dose)
                         }
                     }
                 }
