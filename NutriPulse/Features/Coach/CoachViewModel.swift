@@ -8,6 +8,8 @@ final class CoachViewModel {
     var inputText: String = ""
     var isLoading: Bool = false
     var error: String? = nil
+    private(set) var canLoadOlder = false
+    private(set) var isLoadingOlder = false
 
     private(set) var profile: UserProfile?
     private var hasInitialized = false
@@ -25,8 +27,15 @@ final class CoachViewModel {
     }
 
     // Called after clearing history so the tab reloads fresh.
+    //
+    // The flag must be restored. Leaving it false meant the next tap on the Pulse tab ran
+    // loadAndInitialize a second time — and worse, if the user switched to Pulse while this
+    // reload was still in flight, loadIfNeeded's guard passed (flag still false) and a
+    // concurrent init started. Both saw `messages` empty, both cleared maybeGenerateCheckin's
+    // 8-hour cutoff before either appended, and two check-ins were generated, two Claude
+    // calls billed, both persisted.
     func reload() async {
-        hasInitialized = false
+        hasInitialized = true
         messages = []
         await loadAndInitialize()
     }
@@ -52,10 +61,29 @@ final class CoachViewModel {
         } catch { }
     }
 
+    private static let historyPageSize = 30
+
     private func loadHistory() async {
         do {
-            messages = try await repo.fetchHistory()
+            messages = try await repo.fetchHistory(limit: Self.historyPageSize)
+            // A full page means there is probably more behind it.
+            canLoadOlder = messages.count == Self.historyPageSize
         } catch { }
+    }
+
+    // Everything older than the newest 30 messages used to be unreachable in the UI,
+    // forever, though it was still in the database.
+    func loadOlderMessages() async {
+        guard canLoadOlder, !isLoadingOlder, let oldest = messages.first else { return }
+        isLoadingOlder = true
+        defer { isLoadingOlder = false }
+        do {
+            let older = try await repo.fetchHistory(limit: Self.historyPageSize, before: oldest.createdAt)
+            canLoadOlder = older.count == Self.historyPageSize
+            messages.insert(contentsOf: older, at: 0)
+        } catch {
+            self.error = "Couldn't load older messages."
+        }
     }
 
     // MARK: - Auto-generated messages
@@ -113,12 +141,16 @@ final class CoachViewModel {
         isLoading = true
         error = nil
 
+        // Tracks how far we got, so a failure can restore exactly what the user lost.
+        var userMessageWasPersisted = false
+
         do {
             let userId = try await supabase.auth.session.user.id
 
             let userMsg: CoachMessage = try await repo.save(
                 NewCoachMessage(userId: userId, role: "user", content: text, messageType: "chat")
             )
+            userMessageWasPersisted = true
             messages.append(userMsg)
 
             let context = await contextBuilder.build(profile: profile)
@@ -136,13 +168,33 @@ final class CoachViewModel {
                 return
             }
 
-            let assistantMsg: CoachMessage = try await repo.save(
-                NewCoachMessage(userId: userId, role: "assistant", content: reply, messageType: "chat")
+            // Show the reply BEFORE persisting it. By this point Claude has answered and the
+            // tokens are paid for; if the second save threw — a connection dropped between
+            // the two calls — the old code jumped to `catch`, discarded the reply entirely,
+            // and told the user "Couldn't reach Pulse" even though Pulse had answered.
+            let assistantMsg = CoachMessage(
+                id: UUID(), userId: userId, role: "assistant",
+                content: reply, messageType: "chat", createdAt: .now
             )
             messages.append(assistantMsg)
             Telemetry.coachMessageSent(messageType: "chat")
+
+            do {
+                _ = try await repo.save(
+                    NewCoachMessage(userId: userId, role: "assistant", content: reply, messageType: "chat")
+                )
+            } catch {
+                // The reply is on screen and useful; it just won't survive a relaunch.
+                self.error = "Pulse replied, but the message couldn't be saved to your history."
+            }
         } catch {
             self.error = "Couldn't reach Pulse right now. Try again."
+            // `inputText = ""` happened before any network call. If the user's message never
+            // reached the server there is nothing to retry and nothing on screen — the text
+            // they typed was simply gone. Put it back in the composer.
+            if !userMessageWasPersisted {
+                inputText = text
+            }
         }
 
         isLoading = false
@@ -154,6 +206,7 @@ final class CoachViewModel {
         do {
             try await repo.clearHistory()
             messages = []
+            canLoadOlder = false
         } catch {
             self.error = "Couldn't clear history."
         }

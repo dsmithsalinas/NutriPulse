@@ -2,10 +2,18 @@ import Foundation
 import Supabase
 
 struct CoachRepository {
-    func fetchHistory(limit: Int = 30) async throws -> [CoachMessage] {
-        let results: [CoachMessage] = try await supabase
-            .from("coach_messages")
-            .select()
+    // `before` pages backwards through history: pass the createdAt of the oldest message
+    // you already hold. Without it, anything past the newest 30 messages was unreachable
+    // in the UI forever, even though it was still in the database.
+    func fetchHistory(limit: Int = 30, before: Date? = nil) async throws -> [CoachMessage] {
+        // Filters must be applied before .order(): PostgrestFilterBuilder narrows to a
+        // PostgrestTransformBuilder, which has no .lt.
+        var query = supabase.from("coach_messages").select()
+        if let before {
+            query = query.lt("created_at", value: before.ISO8601Format())
+        }
+
+        let results: [CoachMessage] = try await query
             .order("created_at", ascending: false)
             .limit(limit)
             .execute()
