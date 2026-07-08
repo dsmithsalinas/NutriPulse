@@ -42,7 +42,11 @@ final class FoodLoggingViewModel {
     var isLoading = false
     var errorMessage: String? = nil
 
-    var canLog: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty && calories > 0 }
+    // `calories > 0` made water, black coffee, and diet soda impossible to log manually —
+    // the button was permanently disabled for a legitimate, common entry, with nothing
+    // explaining why. Negative macros can't get in here: MacroField strips the sign as you
+    // type (see DecimalInput.sanitize).
+    var canLog: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     func logManualFood(on date: Date) async throws {
         isLoading = true

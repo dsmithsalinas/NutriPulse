@@ -24,7 +24,13 @@ struct BarcodeScanView: View {
             vm.resetScanState()
             if cameraPermission == .notDetermined {
                 AVCaptureDevice.requestAccess(for: .video) { granted in
-                    cameraPermission = granted ? .authorized : .denied
+                    // requestAccess calls back on an arbitrary queue. Assigning @State from
+                    // there is undefined behaviour: it trips the main-thread checker and the
+                    // view can fail to re-render, stranding the user on the black camera
+                    // screen after they tapped Allow.
+                    Task { @MainActor in
+                        cameraPermission = granted ? .authorized : .denied
+                    }
                 }
             }
         }
@@ -48,8 +54,11 @@ struct BarcodeScanView: View {
 
     private var cameraLayer: some View {
         ZStack {
-            BarcodeScannerRepresentable(isScanning: isScanning) { barcode in
+            BarcodeScannerRepresentable(isScanning: isScanning) { rawValue, symbology in
                 isScanning = false
+                // FatSecret wants a GTIN-13. Passing a compressed UPC-E code straight through
+                // meant every small-package product came back "Barcode Not Found".
+                let barcode = BarcodeNormalizer.gtin13(value: rawValue, symbology: symbology) ?? rawValue
                 Task { await vm.lookupBarcode(barcode) }
             }
             .ignoresSafeArea()
@@ -100,7 +109,10 @@ struct BarcodeScanView: View {
 
 private struct BarcodeScannerRepresentable: UIViewRepresentable {
     let isScanning: Bool
-    let onScanned: (String) -> Void
+    // The symbology matters: EAN-8 and UPC-E are both eight digits, and only the symbology
+    // distinguishes them. Guessing from the string alone would expand an EAN-8 as if it
+    // were a compressed UPC-A.
+    let onScanned: (String, BarcodeSymbology) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onScanned: onScanned) }
 
@@ -119,11 +131,11 @@ private struct BarcodeScannerRepresentable: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
-        let onScanned: (String) -> Void
+        let onScanned: (String, BarcodeSymbology) -> Void
         private var session: AVCaptureSession?
         private var hasReported = false
 
-        init(onScanned: @escaping (String) -> Void) {
+        init(onScanned: @escaping (String, BarcodeSymbology) -> Void) {
             self.onScanned = onScanned
         }
 
@@ -175,7 +187,15 @@ private struct BarcodeScannerRepresentable: UIViewRepresentable {
             else { return }
             hasReported = true
             pause()
-            onScanned(value)
+
+            let symbology: BarcodeSymbology
+            switch obj.type {
+            case .upce:  symbology = .upce
+            case .ean8:  symbology = .ean8
+            case .ean13: symbology = .ean13
+            default:     symbology = .other
+            }
+            onScanned(value, symbology)
         }
     }
 }

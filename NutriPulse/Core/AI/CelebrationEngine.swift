@@ -42,9 +42,13 @@ enum CelebrationEngine {
             }
         }
 
+        // `history` is only the last 30 days (CoachContextBuilder fetches 30), so "ever" was
+        // a claim the data can't support: hit fiber in month one, lapse for 31 days, hit it
+        // again, and Pulse confidently announced a first-time achievement — the prompt tells
+        // Claude these are "real, already-detected accomplishments". Say what we actually know.
         let priorFiberHits = history.dropLast().filter { $0.fiberG >= goal.fiberG }.count
         if today.fiberG >= goal.fiberG, priorFiberHits == 0 {
-            wins.append("First time ever hitting the fiber goal.")
+            wins.append("First fiber-goal hit in the last 30 days.")
         }
 
         return wins

@@ -5,6 +5,11 @@ import Supabase
 @Observable
 @MainActor
 final class AuthViewModel {
+    // Apple hands over the user's name ONLY on the very first authorization, ever — never
+    // again, not even after deleting and reinstalling the app. It was read off the credential
+    // and thrown away. Stash it so onboarding can pre-fill the name step; onboarding clears it.
+    static let pendingAppleFullNameKey = "pendingAppleFullName"
+
     var email = ""
     var password = ""
     var isLoading = false
@@ -42,6 +47,17 @@ final class AuthViewModel {
                 errorMessage = "Apple Sign In credential was invalid."
                 return
             }
+            // Capture the name BEFORE the network call — it's on this credential and will
+            // never appear on another one.
+            if let nameComponents = credential.fullName {
+                let name = PersonNameComponentsFormatter.localizedString(
+                    from: nameComponents, style: .default
+                ).trimmingCharacters(in: .whitespaces)
+                if !name.isEmpty {
+                    UserDefaults.standard.set(name, forKey: Self.pendingAppleFullNameKey)
+                }
+            }
+
             try await supabase.auth.signInWithIdToken(
                 credentials: .init(provider: .apple, idToken: idToken)
             )

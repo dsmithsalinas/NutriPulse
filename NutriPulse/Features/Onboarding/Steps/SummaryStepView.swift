@@ -59,7 +59,10 @@ struct SummaryStepView: View {
                         .foregroundStyle(Theme.NutrientColor.water)
                     Text("Water target")
                     Spacer()
-                    Text("\(Int(goals.waterMlTarget / 1000 * 10) / 10) L / day")
+                    // Int(2625/1000*10) / 10 is 26 / 10 = 2 — integer division. Every user's
+                    // water target was floored to a whole litre; 2,625 ml displayed as "2 L".
+                    // The `* 10 ... / 10` was clearly reaching for one decimal place.
+                    Text(String(format: "%.1f L / day", goals.waterMlTarget / 1000))
                         .fontWeight(.semibold)
                 }
                 .padding()

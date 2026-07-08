@@ -45,20 +45,32 @@ final class SyncEngine {
         pendingCount = (try? LocalStore.shared.pendingCount()) ?? 0
     }
 
+    // Set when a push is requested while one is already running. The request used to be
+    // dropped on the floor: syncNow() runs on every app foreground and holds `isSyncing`
+    // across five sequential network calls, so a food log entered in that window returned
+    // immediately from pushPendingChanges() with nothing scheduled. It stayed pendingCreate
+    // until the *next* foreground — the badge stuck up, the server stale — and app-open is
+    // the most common moment to log something.
+    private var needsAnotherPush = false
+
     func syncNow() async {
-        guard !isSyncing, isOnline else { return }
-        isSyncing = true
-        defer {
-            isSyncing = false
-            refreshPendingCount()
-            lastSyncAt = .now
+        guard !isSyncing, isOnline else {
+            if isSyncing { needsAnotherPush = true }
+            return
         }
+        isSyncing = true
 
         await pushPendingFoodLogs()
         await pushPendingWaterLogs()
         await pullGoal()
         await pullRecentFoodLogs()
         await pullTodayWater()
+
+        isSyncing = false
+        refreshPendingCount()
+        lastSyncAt = .now
+
+        await flushIfRequested()
     }
 
     // Push this device's own pending writes only — no pull. Call this after
@@ -69,15 +81,35 @@ final class SyncEngine {
     // app foreground and network reconnect, where other devices/sessions
     // may have written data this one doesn't have yet.
     func pushPendingChanges() async {
-        guard !isSyncing, isOnline else { return }
-        isSyncing = true
-        defer {
-            isSyncing = false
-            refreshPendingCount()
+        guard isOnline else { return }
+        // A push requested mid-sync is queued as a trailing flush rather than dropped.
+        guard !isSyncing else {
+            needsAnotherPush = true
+            return
         }
+        isSyncing = true
 
         await pushPendingFoodLogs()
         await pushPendingWaterLogs()
+
+        isSyncing = false
+        refreshPendingCount()
+
+        await flushIfRequested()
+    }
+
+    // Runs at most one trailing pass, and only if something was actually requested while we
+    // held the lock. Loops rather than recursing so a burst of requests coalesces.
+    private func flushIfRequested() async {
+        while needsAnotherPush, isOnline, !isSyncing {
+            needsAnotherPush = false
+            isSyncing = true
+            await pushPendingFoodLogs()
+            await pushPendingWaterLogs()
+            isSyncing = false
+            refreshPendingCount()
+        }
+        needsAnotherPush = false
     }
 
     // MARK: - Push food logs

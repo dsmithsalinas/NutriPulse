@@ -8,6 +8,9 @@ final class FoodSearchViewModel {
     var searchQuery = ""
     var results: [FoodSearchResult] = []
     var isSearching = false
+    private(set) var canLoadMoreResults = false
+    private(set) var isLoadingMoreResults = false
+    private var searchPage = 0
 
     // Set when the user taps a result — triggers the detail sheet
     var selectedResult: FoodSearchResult? = nil
@@ -47,14 +50,52 @@ final class FoodSearchViewModel {
         let q = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else {
             results = []
+            canLoadMoreResults = false
             return
         }
         isSearching = true
         defer { isSearching = false }
         do {
             results = try await client.search(query: q)
+            searchPage = 0
+            canLoadMoreResults = results.count == FatSecretClient.pageSize
         } catch {
-            // Errors during typing are silent; the results list stays empty
+            // The old comment claimed "the results list stays empty" — it didn't. On error
+            // `results` kept the *previous* query's contents, so searching "banana" offline
+            // right after "apple" showed apple results under the word banana, with no error.
+            //
+            // Cancellation lands here too: .task(id:) cancels the in-flight request on every
+            // keystroke and that propagates through URLSession. Clearing on cancellation
+            // would make the list flicker on every character typed.
+            guard !Task.isCancelled else { return }
+            results = []
+            canLoadMoreResults = false
+        }
+    }
+
+    // FatSecret's `page` parameter was plumbed all the way to the edge function and then
+    // never used: search() only ever asked for page 0, capped at 25 results. A generic query
+    // like "chicken" silently truncated and the food the user wanted could be unreachable.
+    func loadMoreResults() async {
+        guard canLoadMoreResults, !isLoadingMoreResults else { return }
+        let q = searchQuery.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return }
+
+        isLoadingMoreResults = true
+        defer { isLoadingMoreResults = false }
+
+        let nextPage = searchPage + 1
+        do {
+            let more = try await client.search(query: q, page: nextPage)
+            guard !Task.isCancelled else { return }
+            searchPage = nextPage
+            canLoadMoreResults = more.count == FatSecretClient.pageSize
+            // The same food can surface on two pages; don't render it twice.
+            let existingIds = Set(results.map(\.id))
+            results.append(contentsOf: more.filter { !existingIds.contains($0.id) })
+        } catch {
+            guard !Task.isCancelled else { return }
+            canLoadMoreResults = false
         }
     }
 

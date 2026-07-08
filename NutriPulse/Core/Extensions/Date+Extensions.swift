@@ -28,6 +28,19 @@ extension Date {
 
     var isoDateString: String { isoDateString(in: .current) }
 
+    // The exact inverse of isoDateString: "2024-03-15" → that day's midnight, in the given
+    // zone. Anything that parses a `log_date` MUST read it back in the zone it was written
+    // in. Reading it as UTC midnight (`logDate + "T00:00:00Z"`) put a US Pacific user's
+    // body-fat point at 5pm the previous day, one column left of the calories and weight
+    // charts built from the same log.
+    static func fromISODateString(_ string: String, in timeZone: TimeZone = .current) -> Date? {
+        let parts = string.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    }
+
     // "Friday, March 15, 2024" — FormatStyle resolves locale and timezone at call time,
     // unlike a cached DateFormatter, which freezes both.
     var displayDateString: String { formatted(date: .complete, time: .omitted) }

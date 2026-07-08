@@ -57,6 +57,21 @@ struct CoachView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 8) {
+                    if vm.canLoadOlder {
+                        Button {
+                            Task { await vm.loadOlderMessages() }
+                        } label: {
+                            if vm.isLoadingOlder {
+                                ProgressView()
+                            } else {
+                                Text("Load earlier messages")
+                                    .font(.footnote)
+                            }
+                        }
+                        .disabled(vm.isLoadingOlder)
+                        .padding(.bottom, 4)
+                    }
+
                     ForEach(vm.messages) { msg in
                         MessageBubble(message: msg)
                     }
@@ -68,7 +83,10 @@ struct CoachView: View {
                 .padding(.vertical, 8)
             }
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: vm.messages.count) {
+            // Keyed on the newest message, not the count: prepending a page of older
+            // messages changes the count too, and would yank the user back to the bottom
+            // of the conversation they just scrolled up from.
+            .onChange(of: vm.messages.last?.id) {
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom") }
             }
             .onChange(of: vm.isLoading) { _, loading in
@@ -168,8 +186,20 @@ private struct MessageBubble: View {
         .padding(.horizontal, 12)
     }
 
+    // `Text(String)` does not parse markdown — only the LocalizedStringKey initializer
+    // does. The system prompt permits bullet lists and never bans **bold**, which Claude
+    // uses freely, so assistant replies rendered literal asterisks. Parsing inline-only
+    // keeps line breaks intact (`.inlineOnlyPreservingWhitespace`), and any content that
+    // fails to parse falls back to the raw string rather than disappearing.
+    private var attributedContent: AttributedString {
+        (try? AttributedString(
+            markdown: message.content,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(message.content)
+    }
+
     private var bubbleText: some View {
-        Text(message.content)
+        Text(attributedContent)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background {
