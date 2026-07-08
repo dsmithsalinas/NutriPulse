@@ -58,10 +58,12 @@ final class TodayViewModel {
     // richer, Coach-facing win detection (streaks, firsts).
     var allRingsClosed: Bool {
         guard let goal = dailyGoal else { return false }
-        return totalCalories >= goal.calories
-            && totalProteinG >= goal.proteinG
-            && totalCarbsG   >= goal.carbsG
-            && totalFiberG   >= goal.fiberG
+        return goal.ringsClosed(
+            calories: totalCalories,
+            proteinG: totalProteinG,
+            carbsG:   totalCarbsG,
+            fiberG:   totalFiberG
+        )
     }
 
     // True for exactly one loadData() call — the one where allRingsClosed flips
