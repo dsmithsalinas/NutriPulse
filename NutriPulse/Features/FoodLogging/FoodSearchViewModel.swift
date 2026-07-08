@@ -107,7 +107,9 @@ final class FoodSearchViewModel {
         let userId = try await supabase.auth.session.user.id
 
         // Upsert the food_item so logging the same FatSecret food twice doesn't duplicate rows.
-        // The UNIQUE (source, external_id) constraint resolves the conflict.
+        // The conflict target must include user_id: the constraint is per-owner, because
+        // RLS only lets a user UPDATE their own rows (a global key made the upsert collide
+        // with another user's row and fail with a 42501).
         let newItem = NewFoodItem(
             userId: userId,
             source: "fatsecret",
@@ -125,7 +127,7 @@ final class FoodSearchViewModel {
 
         let item: FoodItem = try await supabase
             .from("food_items")
-            .upsert(newItem, onConflict: "source,external_id")
+            .upsert(newItem, onConflict: "user_id,source,external_id")
             .select()
             .single()
             .execute()

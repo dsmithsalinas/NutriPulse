@@ -129,7 +129,7 @@ final class TalkToLogViewModel {
         let item: FoodItem = if row.source == "fatsecret" {
             try await supabase
                 .from("food_items")
-                .upsert(newItem, onConflict: "source,external_id")
+                .upsert(newItem, onConflict: "user_id,source,external_id")
                 .select()
                 .single()
                 .execute()
