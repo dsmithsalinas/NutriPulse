@@ -66,6 +66,12 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
+        # iPhone only. XcodeGen's default (1,2) claimed iPad support, which trips the store
+        # validator — "All interface orientations must be supported unless the app requires
+        # full screen" — because this app is portrait-only. It has no iPad layout either, so
+        # iPad reviewers and TestFlight testers would get a stretched phone UI, and the App
+        # Store listing would demand iPad screenshots.
+        TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - package: Supabase
         product: Supabase
