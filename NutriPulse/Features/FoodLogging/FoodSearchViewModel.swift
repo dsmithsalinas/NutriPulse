@@ -71,6 +71,10 @@ final class FoodSearchViewModel {
         selectedServing = nil
         wantsToFavorite = false
         detailError = nil
+        // Reset per-food state. `quantity` persisted across foods: log 5 servings of
+        // rice, open a different food, and its sheet was pre-filled at 5 servings —
+        // logged as 5 by anyone who didn't happen to look at the stepper.
+        quantity = 1.0
         isLoadingDetail = true
         // Only the newest request may clear the spinner — a stale one finishing later
         // would otherwise dismiss the loading state of the request still in flight.
@@ -122,6 +126,7 @@ final class FoodSearchViewModel {
         detail = nil
         selectedServing = nil
         detailError = nil
+        quantity = 1.0
         isLoadingDetail = true
 
         do {

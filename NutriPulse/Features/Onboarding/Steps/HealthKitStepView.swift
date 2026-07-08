@@ -4,7 +4,10 @@ struct HealthKitStepView: View {
     let onContinue: () -> Void
 
     @State private var isConnecting = false
-    @State private var isConnected = false
+    // nil = haven't asked yet. Set from the *outcome* of the request, not from
+    // isHealthDataAvailable() — which is a device capability and true on every iPhone, so
+    // denying every permission still produced a green "Apple Health connected" checkmark.
+    @State private var didGrantAccess: Bool? = nil
 
     var body: some View {
         OnboardingStepLayout(
@@ -35,23 +38,30 @@ struct HealthKitStepView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
 
-                if isConnected {
+                if let didGrantAccess {
                     HStack(spacing: Theme.Spacing.sm) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Text("Apple Health connected")
+                        Image(systemName: didGrantAccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            .foregroundStyle(didGrantAccess ? .green : .orange)
+                        Text(didGrantAccess
+                             ? "Apple Health connected"
+                             : "No Health access granted — you can enable it later in the Health app")
                             .fontWeight(.medium)
+                            .multilineTextAlignment(.leading)
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.green.opacity(0.1))
+                    .background((didGrantAccess ? Color.green : Color.orange).opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 } else {
                     Button {
                         isConnecting = true
                         Task {
                             try? await HealthKitManager.shared.requestAuthorization()
-                            isConnected = HealthKitManager.shared.isAvailable
+                            // HealthKit never discloses read grants, so this reflects write
+                            // access. A reads-only grant reads as "not connected" here —
+                            // wrong, but far rarer than the deny-everything case this
+                            // catches, and it no longer claims a connection that isn't there.
+                            didGrantAccess = HealthKitManager.shared.isSharingAuthorized
                             isConnecting = false
                         }
                     } label: {

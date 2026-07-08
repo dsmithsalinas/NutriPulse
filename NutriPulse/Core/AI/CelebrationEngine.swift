@@ -15,12 +15,16 @@ enum CelebrationEngine {
         guard let goal, let today = history.last, today.hasData else { return [] }
         var wins: [String] = []
 
-        let allRingsClosed = today.calories >= goal.calories
-            && today.proteinG >= goal.proteinG
-            && today.carbsG   >= goal.carbsG
-            && today.fiberG   >= goal.fiberG
+        // Same definition the Today screen's haptic uses — calories and carbs are ceilings,
+        // protein and fiber are floors. See DailyGoal.ringsClosed.
+        let allRingsClosed = goal.ringsClosed(
+            calories: today.calories,
+            proteinG: today.proteinG,
+            carbsG:   today.carbsG,
+            fiberG:   today.fiberG
+        )
         if allRingsClosed {
-            wins.append("Closed every ring today (calories, protein, carbs, and fiber all hit).")
+            wins.append("Closed every ring today — calories landed in range, and protein, carbs, and fiber all hit.")
         }
 
         let loggedDaysInWindow = history.filter(\.hasData).count

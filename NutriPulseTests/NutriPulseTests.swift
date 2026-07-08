@@ -78,6 +78,101 @@ final class GLP1DoseFormattingTests: XCTestCase {
     }
 }
 
+// MARK: - GLP-1 decoding
+
+final class GLP1LogDecodingTests: XCTestCase {
+
+    // site and next_due_at are nullable columns. Decoding them as non-optional threw a
+    // DecodingError for the entire array on a single NULL row, blanking the GLP-1 card and
+    // the titration chart — one bad row took out the whole feature.
+    func testDecodesRowWithNullSiteAndNextDue() throws {
+        let json = """
+        [
+          {"id":"\(UUID().uuidString)","user_id":"\(UUID().uuidString)",
+           "injected_at":"2026-07-01T12:00:00Z","medication":"Mounjaro","dose_mg":12.5,
+           "site":null,"next_due_at":null},
+          {"id":"\(UUID().uuidString)","user_id":"\(UUID().uuidString)",
+           "injected_at":"2026-07-08T12:00:00Z","medication":"Mounjaro","dose_mg":12.5,
+           "site":"Left Thigh","next_due_at":"2026-07-15T12:00:00Z"}
+        ]
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let logs = try decoder.decode([GLP1Log].self, from: json)
+
+        XCTAssertEqual(logs.count, 2, "one NULL row must not take the rest down with it")
+        XCTAssertNil(logs[0].site)
+        XCTAssertNil(logs[0].nextDueAt)
+        XCTAssertEqual(logs[1].site, "Left Thigh")
+        XCTAssertNotNil(logs[1].nextDueAt)
+    }
+}
+
+// MARK: - Ring closure semantics
+
+final class RingClosureTests: XCTestCase {
+
+    // 1800 kcal, 135g protein, 180g carbs, 30g fiber
+    private let goal = DailyGoal(
+        id: UUID(), userId: UUID(), effectiveDate: "2026-07-07",
+        calories: 1800, proteinG: 135, carbsG: 180, fatG: 60, fiberG: 30, waterMlTarget: 2000
+    )
+
+    private func closed(_ cal: Double, _ pro: Double = 140, _ carb: Double = 170, _ fib: Double = 32) -> Bool {
+        goal.ringsClosed(calories: cal, proteinG: pro, carbsG: carb, fiberG: fib)
+    }
+
+    func testHittingTheTargetCloses() {
+        XCTAssertTrue(closed(1750))
+        XCTAssertTrue(closed(1800), "exactly on the calorie goal")
+        XCTAssertTrue(closed(1620), "the 90% band floor")
+    }
+
+    // The bug: calories and carbs are ceilings, but both the haptic and CelebrationEngine
+    // tested `>=`, so a 3200-calorie day earned a success haptic and a compliment from Pulse.
+    func testOvereatingDoesNotClose() {
+        XCTAssertFalse(closed(3200))
+        XCTAssertFalse(closed(1801), "one calorie over the ceiling")
+    }
+
+    func testUndereatingDoesNotClose() {
+        XCTAssertFalse(closed(900))
+        XCTAssertFalse(closed(1619), "just under the 90% band floor")
+    }
+
+    func testCarbCeilingIsNotAFloor() {
+        XCTAssertFalse(closed(1750, 140, 181, 32), "carbs one gram over the ceiling")
+        XCTAssertTrue(closed(1750, 140, 100, 32), "well under the carb ceiling is fine")
+    }
+
+    func testProteinAndFiberAreFloors() {
+        XCTAssertFalse(closed(1750, 134, 170, 32), "protein under the floor")
+        XCTAssertFalse(closed(1750, 140, 170, 29), "fiber under the floor")
+        XCTAssertTrue(closed(1750, 300, 170, 90), "way over the floors is still a win")
+    }
+
+    // A zero calorie goal is corrupt data, not a day where every ring is trivially closed.
+    func testZeroGoalNeverCloses() {
+        let zeroGoal = DailyGoal(
+            id: UUID(), userId: UUID(), effectiveDate: "2026-07-07",
+            calories: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0, waterMlTarget: 2000
+        )
+        XCTAssertFalse(zeroGoal.ringsClosed(calories: 0, proteinG: 0, carbsG: 0, fiberG: 0))
+    }
+
+    // The Today haptic and Pulse's recentWins must never disagree — that was the whole bug.
+    func testCelebrationEngineAgreesWithRingsClosed() {
+        let overate = DailySummary(date: .now, calories: 3200, proteinG: 140, carbsG: 170, fatG: 60, fiberG: 32)
+        let wins = CelebrationEngine.detectWins(goal: goal, history: [overate])
+        XCTAssertFalse(
+            wins.contains { $0.contains("Closed every ring") },
+            "Pulse must not congratulate a 3200-calorie day on an 1800-calorie goal"
+        )
+    }
+}
+
 // MARK: - Decimal text input
 
 final class DecimalInputTests: XCTestCase {
@@ -263,6 +358,79 @@ final class LocalStoreSyncStateTests: XCTestCase {
         try LocalStore.shared.markFoodLogDeleted(id: id)
         try LocalStore.shared.removeFoodLogAfterDelete(id: id)
         XCTAssertNil(try row(id))
+    }
+
+    // MARK: Pull reconciliation
+
+    private func remoteLog(id: UUID, meal: Meal, quantity: Double, logDate: String = "2026-07-07") -> FoodLog {
+        FoodLog(
+            id: id, userId: userId, loggedAt: Date(), logDate: logDate, meal: meal,
+            foodItemId: UUID(), quantity: quantity,
+            caloriesSnapshot: 100, proteinGSnapshot: 2, carbsGSnapshot: 20,
+            fatGSnapshot: 1, fiberGSnapshot: 1,
+            foodItems: FoodItemSummary(name: "Rice", brand: nil, servingDesc: nil)
+        )
+    }
+
+    // The pull applied quantity and macros but never `meal`, so moving an item from lunch
+    // to dinner on another device never reached this one.
+    func testPullAppliesMealChange() throws {
+        let id = try insertLog()
+        try LocalStore.shared.markFoodLogCreated(id: id, pushedRevision: try XCTUnwrap(row(id)).revision)
+        XCTAssertEqual(try XCTUnwrap(row(id)).meal, "lunch")
+
+        try LocalStore.shared.upsertFoodLog(from: remoteLog(id: id, meal: .dinner, quantity: 1))
+
+        XCTAssertEqual(try XCTUnwrap(row(id)).meal, "dinner")
+    }
+
+    // A log deleted on another device used to live here forever — phantom calories in
+    // Today's totals that disagreed with Analytics.
+    func testPruneRemovesRowsTheServerNoLongerHas() throws {
+        let kept = try insertLog()
+        let deletedRemotely = try insertLog()
+        for id in [kept, deletedRemotely] {
+            try LocalStore.shared.markFoodLogCreated(id: id, pushedRevision: try XCTUnwrap(row(id)).revision)
+        }
+
+        try LocalStore.shared.pruneDeletedFoodLogs(
+            userId: userId, since: "2026-07-01", remoteIds: [kept]
+        )
+
+        XCTAssertNotNil(try row(kept))
+        XCTAssertNil(try row(deletedRemotely))
+    }
+
+    // Pruning must never touch rows with local changes still waiting to be pushed.
+    func testPruneSparesUnsyncedRows() throws {
+        let pendingCreate = try insertLog()
+
+        let pendingUpdate = try insertLog()
+        try LocalStore.shared.markFoodLogCreated(id: pendingUpdate, pushedRevision: try XCTUnwrap(row(pendingUpdate)).revision)
+        try LocalStore.shared.updateFoodLog(id: pendingUpdate, meal: "dinner", quantity: 2)
+
+        let pendingDelete = try insertLog()
+        try LocalStore.shared.markFoodLogCreated(id: pendingDelete, pushedRevision: try XCTUnwrap(row(pendingDelete)).revision)
+        try LocalStore.shared.markFoodLogDeleted(id: pendingDelete)
+
+        // Server returned none of them.
+        try LocalStore.shared.pruneDeletedFoodLogs(userId: userId, since: "2026-07-01", remoteIds: [])
+
+        XCTAssertNotNil(try row(pendingCreate), "never pushed — pruning it would lose the log")
+        XCTAssertNotNil(try row(pendingUpdate), "edit not yet pushed")
+        XCTAssertNotNil(try row(pendingDelete), "tombstone still needs to reach the server")
+    }
+
+    func testPruneIgnoresRowsOutsideTheWindowAndOtherUsers() throws {
+        let old = try insertLog()
+        try LocalStore.shared.markFoodLogCreated(id: old, pushedRevision: try XCTUnwrap(row(old)).revision)
+
+        // Window starts after this row's logDate ("2026-07-07").
+        try LocalStore.shared.pruneDeletedFoodLogs(userId: userId, since: "2026-07-08", remoteIds: [])
+        XCTAssertNotNil(try row(old), "outside the pulled window — the server was never asked about it")
+
+        try LocalStore.shared.pruneDeletedFoodLogs(userId: UUID(), since: "2026-07-01", remoteIds: [])
+        XCTAssertNotNil(try row(old), "belongs to a different user")
     }
 
     // MARK: Goal ownership

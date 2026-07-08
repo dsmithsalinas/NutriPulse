@@ -159,6 +159,13 @@ final class LocalStore {
         if let existing = try context.fetch(descriptor).first {
             // Don't overwrite records with local pending changes
             guard existing.syncState == "synced" else { return }
+            // `meal` and `logDate` are as editable as `quantity` — the push side sends
+            // meal in FoodLogUpdate — but only quantity and the macro snapshots were
+            // applied here. Move an item from lunch to dinner on another device and it
+            // stayed under lunch on this one, forever, every pull.
+            existing.meal              = remote.meal.rawValue
+            existing.logDate           = remote.logDate
+            existing.loggedAt          = remote.loggedAt
             existing.quantity          = remote.quantity
             existing.caloriesSnapshot  = remote.caloriesSnapshot
             existing.proteinGSnapshot  = remote.proteinGSnapshot
@@ -183,6 +190,29 @@ final class LocalStore {
             )
             context.insert(log)
         }
+        try context.save()
+    }
+
+    // Removes local rows that the server no longer has. The pull only ever upserted, so
+    // a log deleted on another device lived on here forever — phantom calories in Today's
+    // totals that disagreed with Analytics (which reads Supabase directly).
+    //
+    // Scoped to the pulled window and to rows we believe are already on the server:
+    //   * "synced" only — pendingCreate hasn't been pushed yet, pendingUpdate/Delete have
+    //     local changes that still need to go up. Pruning any of those would lose data.
+    //   * `remoteIds` must come from a *successful* pull, or every local row looks deleted.
+    func pruneDeletedFoodLogs(userId: UUID, since startDate: String, remoteIds: Set<UUID>) throws {
+        guard let context else { return }
+        // Filtered in Swift rather than in the #Predicate: SwiftData won't translate a
+        // String >= comparison, and the pulled window is at most a few dozen rows.
+        let stale = try context.fetch(FetchDescriptor<SDFoodLog>()).filter { log in
+            log.userId == userId
+                && log.syncState == "synced"
+                && log.logDate >= startDate
+                && !remoteIds.contains(log.id)
+        }
+        guard !stale.isEmpty else { return }
+        for log in stale { context.delete(log) }
         try context.save()
     }
 

@@ -16,6 +16,17 @@ struct TodayView: View {
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
+    // Health permissions live in the Health app (Sharing → Apps), not in this app's
+    // Settings page, so openSettingsURLString would drop the user somewhere with no
+    // Health controls at all. Fall back to it only if the Health app can't be opened.
+    private func openHealthApp() {
+        if let health = URL(string: "x-apple-health://"), UIApplication.shared.canOpenURL(health) {
+            UIApplication.shared.open(health)
+        } else if let settings = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settings)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -47,10 +58,11 @@ struct TodayView: View {
                                 netCalories:    vm.netCalories,
                                 restingHR:      vm.restingHeartRate,
                                 hrv:            vm.hrv,
-                                sleepHours:     vm.sleepHours
-                            ) {
-                                Task { await vm.loadHealthData() }
-                            }
+                                sleepHours:     vm.sleepHours,
+                                hasRequestedAuthorization: HealthKitManager.shared.hasRequestedAuthorization,
+                                onConnect:       { Task { await vm.requestHealthAuthorization() } },
+                                onOpenHealthApp: openHealthApp
+                            )
                         }
 
                         BodyCompositionCard(
