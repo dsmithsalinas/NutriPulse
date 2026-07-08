@@ -78,6 +78,56 @@ final class GLP1DoseFormattingTests: XCTestCase {
     }
 }
 
+// MARK: - Barcode normalization
+
+final class BarcodeNormalizerTests: XCTestCase {
+
+    // The scanner accepts .upce but forwarded the compressed code verbatim; FatSecret's
+    // find_id_for_barcode wants a GTIN-13, so every small-package product came back
+    // "Barcode Not Found" even when FatSecret had it.
+    func testExpandsUPCEToUPCA() {
+        XCTAssertEqual(BarcodeNormalizer.expandUPCE("04252614"), "042100005264")
+    }
+
+    func testUPCEBecomesThirteenDigits() {
+        XCTAssertEqual(BarcodeNormalizer.gtin13(value: "04252614", symbology: .upce), "0042100005264")
+    }
+
+    // Each trailing digit selects a different zero-reinsertion rule.
+    func testEveryUPCECompressionRule() {
+        // last digit 0-2: M1 M2 [last] 0000 M3 M4 M5
+        XCTAssertEqual(BarcodeNormalizer.expandUPCE("01278906")?.prefix(11), "01200000789")
+        // last digit 3: M1 M2 M3 00000 M4 M5
+        XCTAssertEqual(BarcodeNormalizer.expandUPCE("01234531")?.prefix(11), "01230000045")
+        // last digit 4: M1 M2 M3 M4 00000 M5
+        XCTAssertEqual(BarcodeNormalizer.expandUPCE("01234541")?.prefix(11), "01234000005")
+        // last digit 5-9: M1..M5 0000 [last]
+        XCTAssertEqual(BarcodeNormalizer.expandUPCE("05673894")?.prefix(11), "05673800009")
+    }
+
+    // EAN-8 and UPC-E are both eight digits — only the symbology distinguishes them, so an
+    // EAN-8 must be zero-padded, never expanded as if it were a compressed UPC-A.
+    func testEAN8IsPaddedNotExpanded() {
+        XCTAssertEqual(BarcodeNormalizer.gtin13(value: "04252614", symbology: .ean8), "0000004252614")
+    }
+
+    func testEAN13PassesThroughAndUPCAIsPadded() {
+        XCTAssertEqual(BarcodeNormalizer.gtin13(value: "5000112637922", symbology: .ean13), "5000112637922")
+        XCTAssertEqual(BarcodeNormalizer.gtin13(value: "042100005264", symbology: .ean13), "0042100005264")
+    }
+
+    func testRejectsGarbage() {
+        XCTAssertNil(BarcodeNormalizer.gtin13(value: "abc", symbology: .other))
+        XCTAssertNil(BarcodeNormalizer.gtin13(value: "12345678901234", symbology: .other), "longer than GTIN-13")
+        XCTAssertNil(BarcodeNormalizer.expandUPCE("12345"), "too short for UPC-E")
+        XCTAssertNil(BarcodeNormalizer.expandUPCE("92345678"), "number system must be 0 or 1")
+    }
+
+    func testCheckDigit() {
+        XCTAssertEqual(BarcodeNormalizer.upcCheckDigit("04210000526"), "4")
+    }
+}
+
 // MARK: - Date → ISO day string
 
 final class ISODateStringTests: XCTestCase {

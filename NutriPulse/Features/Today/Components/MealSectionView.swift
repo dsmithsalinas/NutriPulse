@@ -15,7 +15,12 @@ struct MealSectionView: View {
                 Label(meal.displayName, systemImage: meal.icon)
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text("\(Int(mealCalories)) kcal")
+                // .rounded() everywhere. Int(Double) truncates toward zero, and the header
+                // truncated the SUM while rows truncated each item: two 99.6 kcal rows showed
+                // "99" and "99" under a header reading "199". Quantity steps by 0.25, so
+                // fractional totals are routine — and the rings, which already used .rounded(),
+                // then disagreed with both.
+                Text("\(Int(mealCalories.rounded())) kcal")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -62,9 +67,9 @@ private struct FoodLogRowView: View {
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(Int(log.totalCalories)) kcal")
+                        Text("\(Int(log.totalCalories.rounded())) kcal")
                             .font(.subheadline.weight(.medium))
-                        Text("P \(Int(log.totalProteinG))g · C \(Int(log.totalCarbsG))g")
+                        Text("P \(Int(log.totalProteinG.rounded()))g · C \(Int(log.totalCarbsG.rounded()))g")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

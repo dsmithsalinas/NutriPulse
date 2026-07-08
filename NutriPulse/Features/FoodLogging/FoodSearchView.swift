@@ -47,23 +47,39 @@ struct FoodSearchView: View {
                         text: "No results for \"\(vm.searchQuery)\""
                     )
                 } else {
-                    List(vm.results) { result in
-                        Button {
-                            Task { await vm.loadDetail(for: result) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(result.name)
-                                    .font(.body)
-                                    .foregroundStyle(.primary)
-                                if let brand = result.brand {
-                                    Text(brand)
+                    List {
+                        ForEach(vm.results) { result in
+                            Button {
+                                Task { await vm.loadDetail(for: result) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(result.name)
+                                        .font(.body)
+                                        .foregroundStyle(.primary)
+                                    if let brand = result.brand {
+                                        Text(brand)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text(result.description)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.tertiary)
+                                        .lineLimit(1)
                                 }
-                                Text(result.description)
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(1)
+                            }
+                            // Fetch the next page when the last row comes into view. FatSecret
+                            // caps a page at 25; without this, "chicken" silently truncated and
+                            // the food the user wanted could be unreachable.
+                            .onAppear {
+                                guard result.id == vm.results.last?.id else { return }
+                                Task { await vm.loadMoreResults() }
+                            }
+                        }
+                        if vm.isLoadingMoreResults {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
                             }
                         }
                     }

@@ -9,6 +9,10 @@ import Supabase
 //   supabase functions deploy search-food
 //   supabase functions deploy get-food
 struct FatSecretClient {
+    // Must match maxResults in supabase/functions/search-food. A full page is how the
+    // caller knows to offer "load more".
+    static let pageSize = 25
+
     func search(query: String, page: Int = 0) async throws -> [FoodSearchResult] {
         struct Payload: Encodable { let query: String; let page: Int }
         struct Response: Decodable { let results: [FoodSearchResult] }
