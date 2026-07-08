@@ -64,6 +64,17 @@ enum GLP1Medication: String, CaseIterable, Identifiable {
     }
 }
 
+// ─── Dose formatting ─────────────────────────────────────────────────────────
+
+extension Double {
+    // Renders a dose exactly: 12.5 → "12.5", 10.0 → "10", 0.25 → "0.25".
+    // Never use "%g"-family format specifiers here — they round to significant
+    // digits, so "%.2g" silently turns Mounjaro's 12.5 mg step into "12".
+    var glp1DoseString: String {
+        formatted(.number.precision(.fractionLength(0...2)))
+    }
+}
+
 // ─── Injection sites (rotation order) ────────────────────────────────────────
 
 enum InjectionSite: String, CaseIterable, Identifiable {
