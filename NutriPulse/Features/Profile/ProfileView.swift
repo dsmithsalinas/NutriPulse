@@ -229,12 +229,28 @@ struct ProfileView: View {
         Section("Apple Health") {
             if HealthKitManager.shared.isAvailable {
                 HStack {
-                    Label("Connected", systemImage: "heart.fill")
-                        .foregroundStyle(.red)
+                    // isAvailable is a device capability — true on every iPhone. Reporting
+                    // it as "Connected" told users who had denied every permission that
+                    // Health was hooked up. Read grants are never disclosed by HealthKit,
+                    // so the honest states are "we've been granted something we can verify"
+                    // and "we haven't".
+                    if HealthKitManager.shared.isSharingAuthorized {
+                        Label("Connected", systemImage: "heart.fill")
+                            .foregroundStyle(.red)
+                    } else if HealthKitManager.shared.hasRequestedAuthorization {
+                        Label("Access not granted", systemImage: "heart.slash")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Label("Not connected", systemImage: "heart.slash")
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer()
-                    Button("Settings") {
-                        if let url = URL(string: UIApplication.openSettingsURLString) {
-                            UIApplication.shared.open(url)
+                    // Health permissions live in the Health app, not this app's Settings page.
+                    Button("Health App") {
+                        if let health = URL(string: "x-apple-health://"), UIApplication.shared.canOpenURL(health) {
+                            UIApplication.shared.open(health)
+                        } else if let settings = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(settings)
                         }
                     }
                     .font(.subheadline)

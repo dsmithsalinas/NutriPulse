@@ -46,12 +46,14 @@ final class TodayViewModel {
     var bodyComp = BodyCompositionData()
 
     // HealthKit data for the selected date
-    var activeCalories: Double  = 0
+    // nil = HealthKit reported nothing (no data, or read access denied — HealthKit won't
+    // say which). 0 would be a claim we can't support.
+    var activeCalories: Double? = nil
     var restingHeartRate: Double? = nil
     var hrv: Double?            = nil
     var sleepHours: Double?     = nil
 
-    var netCalories: Double { totalCalories - activeCalories }
+    var netCalories: Double { totalCalories - (activeCalories ?? 0) }
 
     // Drives the free ring-closing celebration beat — no server round trip,
     // just today's totals against today's goal. See CelebrationEngine for the
@@ -72,7 +74,7 @@ final class TodayViewModel {
     private(set) var justClosedAllRings = false
 
     var healthDataAvailable: Bool {
-        activeCalories > 0 || restingHeartRate != nil || hrv != nil || sleepHours != nil
+        activeCalories != nil || restingHeartRate != nil || hrv != nil || sleepHours != nil
     }
 
     func loadData() async {
@@ -213,10 +215,13 @@ final class TodayViewModel {
         }
     }
 
+    // Reads only. Requesting authorization here meant the system prompt fired the instant
+    // Today appeared, and — because iOS shows it exactly once per type — the card's
+    // "Connect Apple Health" button was then permanently a no-op. Asking now belongs to
+    // the onboarding step and to an explicit tap; see requestHealthAuthorization().
     func loadHealthData() async {
         let hk = HealthKitManager.shared
         guard hk.isAvailable else { return }
-        try? await hk.requestAuthorization()
         async let cal    = hk.fetchActiveCalories(for: selectedDate)
         async let hr     = hk.fetchRestingHeartRate(for: selectedDate)
         async let hrvVal = hk.fetchHRV(for: selectedDate)
@@ -226,6 +231,14 @@ final class TodayViewModel {
         restingHeartRate = heartRate
         hrv              = heartRateVar
         sleepHours       = sleepTime
+    }
+
+    // Triggered by the card's "Connect Apple Health" row. Only meaningful before the
+    // system prompt has been shown; afterwards the card sends the user to the Health app
+    // instead, since iOS will never present that sheet again.
+    func requestHealthAuthorization() async {
+        try? await HealthKitManager.shared.requestAuthorization()
+        await loadHealthData()
     }
 
     func addWater(_ ml: Double) async {

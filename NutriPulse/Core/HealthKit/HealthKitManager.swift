@@ -6,9 +6,45 @@ import Observation
 final class HealthKitManager {
     static let shared = HealthKitManager()
 
+    // Device capability ONLY — true on every iPhone, whatever the user granted. This was
+    // being used as "Apple Health is connected", so onboarding showed a green
+    // "Apple Health connected" checkmark and Profile showed "Connected" even for a user
+    // who had just denied every permission.
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
+    private static let didRequestKey = "healthKitAuthorizationRequested"
+
+    // HealthKit never reveals whether *read* access was granted — denied reads simply
+    // return no samples, indistinguishable from "no data". Write access it does reveal.
+    // So the honest question isn't "are we connected" but "have we asked yet", and that's
+    // what drives the UI: not-asked → offer to connect; asked-but-empty → point at the
+    // Health app rather than claiming a connection or reporting a confident zero.
+    //
+    // Stored rather than computed from UserDefaults so @Observable tracks it: a user who
+    // taps Connect and then denies everything produces no other state change, and a
+    // computed property would leave the dead "Connect" button on screen.
+    private(set) var hasRequestedAuthorization: Bool
+
+    // Best available proxy for "the user granted us something". Read-only grants report
+    // false here, which is why it gates only the onboarding/profile copy — never whether
+    // we bother querying.
+    var isSharingAuthorized: Bool {
+        writeTypes.contains { store.authorizationStatus(for: $0) == .sharingAuthorized }
+    }
+
     private let store = HKHealthStore()
+
+    private init() {
+        // Assign before touching `store` / `writeTypes`: reading them inside a closure
+        // captures self, which isn't legal until every stored property is initialized.
+        hasRequestedAuthorization = UserDefaults.standard.bool(forKey: Self.didRequestKey)
+        if !hasRequestedAuthorization {
+            // Installed before this flag existed: a decided share status proves we asked.
+            hasRequestedAuthorization = writeTypes.contains {
+                store.authorizationStatus(for: $0) != .notDetermined
+            }
+        }
+    }
 
     private let readTypes: Set<HKObjectType> = [
         HKObjectType.quantityType(forIdentifier: .bodyMass)!,
@@ -33,12 +69,20 @@ final class HealthKitManager {
     func requestAuthorization() async throws {
         guard isAvailable else { return }
         try await store.requestAuthorization(toShare: writeTypes, read: readTypes)
+        // iOS presents the permission sheet exactly once per type. Record that we've been
+        // through it, so the UI can stop offering a "Connect" button that does nothing.
+        UserDefaults.standard.set(true, forKey: Self.didRequestKey)
+        hasRequestedAuthorization = true
     }
 
     // MARK: - Active Calories
 
-    func fetchActiveCalories(for date: Date) async -> Double {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else { return 0 }
+    // Returns nil when HealthKit has nothing to report — which includes the case where the
+    // user denied read access, since HealthKit deliberately makes those indistinguishable.
+    // Coalescing to 0 here made the Today card state "0 kcal" as though it were a measured
+    // fact, and it was the only fetcher that didn't return an optional.
+    func fetchActiveCalories(for date: Date) async -> Double? {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else { return nil }
         let (start, end) = dayInterval(for: date)
         let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
         return await withCheckedContinuation { continuation in
@@ -47,7 +91,7 @@ final class HealthKitManager {
                 quantitySamplePredicate: predicate,
                 options: .cumulativeSum
             ) { _, stats, _ in
-                continuation.resume(returning: stats?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0)
+                continuation.resume(returning: stats?.sumQuantity()?.doubleValue(for: .kilocalorie()))
             }
             store.execute(query)
         }

@@ -148,7 +148,7 @@ struct CoachContextBuilder {
         goal: DailyGoal?,
         glp1Log: GLP1Log?,
         weightLogs: [WeightLog],
-        activeCal: Double,
+        activeCal: Double?,
         sleep: Double?,
         hr: Double?,
         hrv: Double?
@@ -220,7 +220,8 @@ struct CoachContextBuilder {
                 carbsPct:    pct(totalCarb, goal?.carbsG),
                 fatPct:      pct(totalFat,  goal?.fatG)
             ),
-            activeCaloriesBurned: activeCal > 0 ? Int(activeCal) : nil
+            // nil when HealthKit reported nothing — don't tell Pulse the user burned zero.
+            activeCaloriesBurned: activeCal.map { Int($0.rounded()) }
         )
 
         // 7-day history — tail of the wider window fetched above
