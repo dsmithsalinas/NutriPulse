@@ -126,9 +126,14 @@ final class ProfileViewModel {
             fiberG:        fiberG,
             waterMlTarget: goal?.waterMlTarget ?? 2000
         )
+        // daily_goals has UNIQUE (user_id, effective_date) and effectiveDate is today, so a
+        // plain INSERT threw a raw Postgres duplicate-key error straight into the alert the
+        // second time a user edited their goals on the same day — and the change was lost.
+        // The conflict target must be named: a bare upsert() resolves on the primary key,
+        // which is a fresh uuid every call and therefore never collides.
         let saved: DailyGoal = try await supabase
             .from("daily_goals")
-            .insert(newGoal)
+            .upsert(newGoal, onConflict: "user_id,effective_date")
             .select()
             .single()
             .execute()

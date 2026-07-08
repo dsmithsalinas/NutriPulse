@@ -16,6 +16,7 @@ struct BodyCompositionSheet: View {
     @State private var lbmText       = ""
     @State private var writeToHK     = false
     @State private var isSaving      = false
+    @State private var errorMessage: String? = nil
 
     private let hkAvailable = HealthKitManager.shared.isAvailable
 
@@ -75,6 +76,14 @@ struct BodyCompositionSheet: View {
                 }
             }
             .onAppear { prefill() }
+            .alert("Check your numbers", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK") { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
         }
     }
 
@@ -92,23 +101,60 @@ struct BodyCompositionSheet: View {
         if let l  = current.lbmKg      { lbmText     = String(format: "%.1f", units.weightInput(from: l)) }
     }
 
+    // `Double("75,5")` is nil. .decimalPad shows a comma for German, French, Spanish and
+    // Brazilian users, so every value they typed parsed to nil, got silently dropped, and
+    // the sheet dismissed as though it had saved. DecimalInput handles the locale's
+    // separator (and strips a pasted "-").
+    private func parse(_ text: String) -> Double? {
+        let cleaned = DecimalInput.sanitize(text.trimmed)
+        guard !cleaned.isEmpty else { return nil }
+        return DecimalInput.value(from: cleaned)
+    }
+
     private func recalculateBMI() {
         guard let h = heightCm, h > 0,
-              let inputVal = Double(weightText.trimmed), inputVal > 0 else { return }
+              let inputVal = parse(weightText), inputVal > 0 else { return }
         let kg      = units.kgFrom(inputVal)
         let heightM = h / 100
         let bmi     = kg / (heightM * heightM)
         bmiText = String(format: "%.1f", bmi)
     }
 
+    // Plausibility bounds. Without them a fat-fingered "224" for body fat was stored as
+    // 224% and charted, while the HealthKit write threw an out-of-range error that `try?`
+    // swallowed — leaving Supabase and Apple Health silently disagreeing.
+    private static let bodyFatRange = 1.0...75.0
+    private static let bmiRange     = 8.0...100.0
+    private static let weightKgRange = 20.0...500.0
+
+    private func validationError() -> String? {
+        if let bf = parse(bodyFatText), !Self.bodyFatRange.contains(bf) {
+            return "Body fat should be between \(Int(Self.bodyFatRange.lowerBound))% and \(Int(Self.bodyFatRange.upperBound))%."
+        }
+        if let bmi = parse(bmiText), !Self.bmiRange.contains(bmi) {
+            return "BMI should be between \(Int(Self.bmiRange.lowerBound)) and \(Int(Self.bmiRange.upperBound))."
+        }
+        for (text, label) in [(weightText, "Weight"), (lbmText, "Lean body mass")] {
+            if let value = parse(text), !Self.weightKgRange.contains(units.kgFrom(value)) {
+                return "\(label) looks out of range. Check the value and try again."
+            }
+        }
+        return nil
+    }
+
     private func save() async {
+        if let error = validationError() {
+            errorMessage = error
+            return
+        }
+
         isSaving = true
         defer { isSaving = false }
 
-        let weightKg   = Double(weightText.trimmed).map  { units.kgFrom($0) }
-        let bodyFatPct = Double(bodyFatText.trimmed)
-        let bmi        = Double(bmiText.trimmed)
-        let lbmKg      = Double(lbmText.trimmed).map     { units.kgFrom($0) }
+        let weightKg   = parse(weightText).map { units.kgFrom($0) }
+        let bodyFatPct = parse(bodyFatText)
+        let bmi        = parse(bmiText)
+        let lbmKg      = parse(lbmText).map   { units.kgFrom($0) }
 
         await onSave(weightKg, bodyFatPct, bmi, lbmKg, writeToHK)
         dismiss()
