@@ -147,8 +147,18 @@ struct TodayView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
+                    // The day may have rolled over while the app was suspended.
+                    // Snapping first mutates vm.selectedDate, which re-fires the
+                    // .task(id:) above and reloads the correct day's data.
+                    vm.snapToTodayIfDayChanged()
                     Task { await vm.loadHealthData() }
                 }
+            }
+            // Fires at midnight (and on timezone changes) while the app is foregrounded.
+            .onReceive(NotificationCenter.default.publisher(
+                for: UIApplication.significantTimeChangeNotification
+            )) { _ in
+                vm.snapToTodayIfDayChanged()
             }
         }
     }
