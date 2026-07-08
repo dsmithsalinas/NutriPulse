@@ -193,13 +193,19 @@ final class OnboardingViewModel {
     // ── Save (called from SummaryStepView) ───────────────────────────────────
     //
     // These four writes are not a transaction, so any of them can fail after an
-    // earlier one committed and the user will tap "Start Tracking" again. Every
-    // write below is therefore idempotent: re-running save() on the same
-    // ViewModel converges on the same rows instead of duplicating them.
+    // earlier one committed and the user will tap "Start Tracking" again. Two
+    // properties make that safe:
     //
-    // Client-generated ids (stable for the life of this ViewModel) are what make
-    // the weight and GLP-1 writes safe to repeat — a plain INSERT added a fresh
-    // starting-weight row on every retry.
+    // IDEMPOTENT — every write converges on the same rows when repeated. The
+    // client-generated ids below (stable for the life of this ViewModel) are what
+    // make the weight and GLP-1 writes safe to retry; a plain INSERT added a fresh
+    // starting-weight row on every attempt.
+    //
+    // ORDERED — profiles.full_name is written LAST, because it is the flag
+    // AppState.needsOnboarding reads to decide onboarding is done. Writing it
+    // first meant that killing the app mid-save left a user marked "onboarded"
+    // with no daily_goals row: straight to the Today screen with no targets, and
+    // no way back into onboarding to create them.
     private let startingWeightLogId = UUID()
     private let initialGLP1LogId    = UUID()
 
@@ -210,24 +216,7 @@ final class OnboardingViewModel {
 
         let goals = calculatedGoals
 
-        // 1. Fill in the profile row the trigger created at sign-up. Returning the
-        //    saved row lets the caller update AppState without a second round trip.
-        let savedProfile: UserProfile = try await supabase
-            .from("profiles")
-            .update(UpdateProfile(
-                fullName: fullName.trimmingCharacters(in: .whitespaces),
-                dob: dob.isoDateString,
-                sex: sex.rawValue,
-                heightCm: heightCm,
-                activityLevel: activityLevel.rawValue
-            ))
-            .eq("id", value: userId)
-            .select()
-            .single()
-            .execute()
-            .value
-
-        // 2. Record starting weight (idempotent on the client-generated id)
+        // 1. Record starting weight (idempotent on the client-generated id)
         try await supabase
             .from("weight_logs")
             .upsert(OnboardingWeightLog(
@@ -237,7 +226,7 @@ final class OnboardingViewModel {
             ), onConflict: "id")
             .execute()
 
-        // 3. Create initial daily goal. The conflict target must be named explicitly:
+        // 2. Create initial daily goal. The conflict target must be named explicitly:
         //    a bare upsert() resolves on the primary key (a fresh uuid every call),
         //    so it never saw the UNIQUE (user_id, effective_date) collision and a
         //    second run of onboarding died on a duplicate-key error.
@@ -255,7 +244,7 @@ final class OnboardingViewModel {
             ), onConflict: "user_id,effective_date")
             .execute()
 
-        // 4. GLP-1 log (optional — skipped if user didn't set it up)
+        // 3. GLP-1 log (optional — skipped if user didn't set it up)
         if isOnGLP1 {
             let nextDue = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: glp1LastInjected) ?? glp1LastInjected
             try await supabase
@@ -271,6 +260,24 @@ final class OnboardingViewModel {
                 ), onConflict: "id")
                 .execute()
         }
+
+        // 4. Commit the profile last — this is what marks onboarding complete.
+        //    Returning the saved row lets the caller update AppState without a
+        //    second network round trip that could fail and strand the user.
+        let savedProfile: UserProfile = try await supabase
+            .from("profiles")
+            .update(UpdateProfile(
+                fullName: fullName.trimmingCharacters(in: .whitespaces),
+                dob: dob.isoDateString,
+                sex: sex.rawValue,
+                heightCm: heightCm,
+                activityLevel: activityLevel.rawValue
+            ))
+            .eq("id", value: userId)
+            .select()
+            .single()
+            .execute()
+            .value
 
         return savedProfile
     }
