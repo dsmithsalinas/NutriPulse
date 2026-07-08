@@ -78,6 +78,95 @@ final class GLP1DoseFormattingTests: XCTestCase {
     }
 }
 
+// MARK: - Date → ISO day string
+
+final class ISODateStringTests: XCTestCase {
+
+    private let newYork = TimeZone(identifier: "America/New_York")!
+    private let tokyo   = TimeZone(identifier: "Asia/Tokyo")!
+
+    private func date(_ iso: String) -> Date {
+        let f = ISO8601DateFormatter()
+        return f.date(from: iso)!
+    }
+
+    // The whole point: the day depends on the zone you ask in. The old cached
+    // DateFormatter froze TimeZone.current at first use, so after a timezone change the
+    // app kept writing log_date in the old zone while isToday had already moved.
+    func testDayDependsOnTimeZone() {
+        let instant = date("2024-03-16T03:30:00Z")   // Mar 15, 11:30pm EDT / Mar 16, 12:30pm JST
+        XCTAssertEqual(instant.isoDateString(in: newYork), "2024-03-15")
+        XCTAssertEqual(instant.isoDateString(in: tokyo),   "2024-03-16")
+    }
+
+    func testZeroPadsMonthAndDay() {
+        XCTAssertEqual(date("2024-01-05T12:00:00Z").isoDateString(in: .gmt), "2024-01-05")
+    }
+
+    // Zero-padded ISO strings are compared lexicographically in LocalStore.fetchGoal and
+    // pruneDeletedFoodLogs. That only holds if every component is fixed-width.
+    func testLexicographicOrderingMatchesChronology() {
+        let earlier = date("2024-09-30T12:00:00Z").isoDateString(in: .gmt)
+        let later   = date("2024-10-01T12:00:00Z").isoDateString(in: .gmt)
+        XCTAssertTrue(earlier < later)
+        XCTAssertEqual(earlier, "2024-09-30")
+        XCTAssertEqual(later,   "2024-10-01")
+    }
+
+    func testMidnightBoundaryBelongsToTheNewDay() {
+        XCTAssertEqual(date("2024-03-15T04:00:00Z").isoDateString(in: newYork), "2024-03-15",
+                       "00:00 EDT is still the 15th")
+        XCTAssertEqual(date("2024-03-15T03:59:59Z").isoDateString(in: newYork), "2024-03-14",
+                       "one second earlier is the 14th")
+    }
+}
+
+// MARK: - Height unit conversion
+
+final class HeightConversionTests: XCTestCase {
+
+    private let imperial = UnitSystem.imperial
+
+    // 172 cm is 67.7 inches. Truncating gave 67 → displayed 5'7" → saved back 170.18 cm.
+    func testTotalInchesRoundsRatherThanTruncates() {
+        XCTAssertEqual(UnitSystem.totalInches(fromCm: 172), 68)
+        XCTAssertEqual(imperial.feetFrom(172), 5)
+        XCTAssertEqual(imperial.inchesFrom(172), 8)
+    }
+
+    // Flooring the feet and separately rounding the remainder produced "5 ft 12 in".
+    func testNeverProducesTwelveInches() {
+        for cm in stride(from: 120.0, through: 220.0, by: 0.25) {
+            let inches = imperial.inchesFrom(cm)
+            XCTAssertTrue((0...11).contains(Int(inches)), "\(cm) cm produced \(inches) inches")
+        }
+        XCTAssertEqual(imperial.feetFrom(182), 6, "182 cm is 6 ft 0 in, not 5 ft 12 in")
+        XCTAssertEqual(imperial.inchesFrom(182), 0)
+    }
+
+    func testFormatHeightRounds() {
+        XCTAssertEqual(imperial.formatHeight(172), "5'8\"")
+        XCTAssertEqual(imperial.formatHeight(170), "5'7\"")
+    }
+
+    // Opening Edit Stats and tapping Save without touching anything must not change height.
+    // cm → ft/in → cm is lossy (whole inches only), so the conversion has to be skipped.
+    func testUnchangedImperialHeightRoundTripsExactly() {
+        for storedCm in [170.0, 172.0, 175.3, 182.0, 160.9] {
+            let feet   = imperial.feetFrom(storedCm)
+            let inches = imperial.inchesFrom(storedCm)
+            let saved  = imperial.cmFrom(feet: feet, inches: inches, unchangedFrom: storedCm)
+            XCTAssertEqual(saved, storedCm, "reopening and saving rewrote \(storedCm) cm")
+        }
+    }
+
+    // A real edit still converts.
+    func testEditedImperialHeightConverts() {
+        let saved = imperial.cmFrom(feet: 6, inches: 0, unchangedFrom: 172)
+        XCTAssertEqual(saved, 182.88, accuracy: 0.001)
+    }
+}
+
 // MARK: - GLP-1 decoding
 
 final class GLP1LogDecodingTests: XCTestCase {
