@@ -130,6 +130,11 @@ struct FoodDetailSheet: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let detail = vm.detail {
                     detailForm(detail: detail)
+                } else {
+                    // Reached whenever the load failed. Without this branch the sheet
+                    // rendered empty — no macros, no Log button, no error, no way out
+                    // but Cancel.
+                    loadFailedView
                 }
             }
             .navigationTitle(result.name)
@@ -137,7 +142,7 @@ struct FoodDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        vm.selectedResult = nil
+                        vm.cancelDetail()
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -149,6 +154,29 @@ struct FoodDetailSheet: View {
                     }
                 }
             }
+            // Must live inside the sheet. Bound to the presenting view, this alert never
+            // appeared: a failed "Log Food" just stopped the spinner and did nothing.
+            .alert("Couldn't log food", isPresented: Binding(
+                get: { vm.logError != nil },
+                set: { if !$0 { vm.logError = nil } }
+            )) {
+                Button("OK") { vm.logError = nil }
+            } message: {
+                Text(vm.logError ?? "")
+            }
+        }
+    }
+
+    private var loadFailedView: some View {
+        ContentUnavailableView {
+            Label("Couldn't load this food", systemImage: "wifi.exclamationmark")
+        } description: {
+            Text(vm.detailError ?? "Something went wrong.")
+        } actions: {
+            Button("Try Again") {
+                Task { await vm.loadDetail(for: result) }
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -207,7 +235,7 @@ struct FoodDetailSheet: View {
                     vm.selectedResult = nil
                     onLogged(source)
                 } catch {
-                    vm.errorMessage = error.localizedDescription
+                    vm.logError = error.localizedDescription
                 }
             }
         } label: {
