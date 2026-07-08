@@ -28,8 +28,11 @@ final class ProfileViewModel {
 
     var mostRecentInjection: GLP1Log? { glp1Logs.first }
 
+    // A log with no next_due_at simply has no countdown, rather than breaking the screen.
+    var nextInjectionDue: Date? { mostRecentInjection?.nextDueAt }
+
     var nextInjectionCountdown: String? {
-        guard let due = mostRecentInjection?.nextDueAt else { return nil }
+        guard let due = nextInjectionDue else { return nil }
         let cal = Calendar.current
         let days = cal.dateComponents([.day],
             from: cal.startOfDay(for: .now),
@@ -43,14 +46,15 @@ final class ProfileViewModel {
     }
 
     var isInjectionOverdue: Bool {
-        guard let due = mostRecentInjection?.nextDueAt else { return false }
+        guard let due = nextInjectionDue else { return false }
         return due < .now
     }
 
     // Round-robin suggestion based on the last used site
     var suggestedNextSite: InjectionSite {
         let sites = InjectionSite.allCases
-        guard let lastStr = glp1Logs.first?.site,
+        guard let lastLog = glp1Logs.first,
+              let lastStr = lastLog.site,
               let last = InjectionSite(rawValue: lastStr),
               let idx = sites.firstIndex(of: last)
         else { return .leftAbdomen }

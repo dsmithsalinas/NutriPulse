@@ -176,7 +176,7 @@ struct ProfileView: View {
                 }
 
                 if let countdown = vm.nextInjectionCountdown,
-                   let due = vm.mostRecentInjection?.nextDueAt {
+                   let due = vm.nextInjectionDue {
                     HStack {
                         Label("Next injection", systemImage: "calendar")
                         Spacer()
@@ -203,7 +203,8 @@ struct ProfileView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(log.injectedAt, style: .date)
                                 .font(.subheadline)
-                            Text("\(log.doseMg.formatted())mg · \(log.site)")
+                            Text(log.site.map { "\(log.doseMg.glp1DoseString)mg · \($0)" }
+                                 ?? "\(log.doseMg.glp1DoseString)mg")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

@@ -84,7 +84,9 @@ struct CoachContextBundle: Encodable {
         let medication: String
         let doseMg: Double
         let lastInjected: String
-        let nextDue: String
+        // nil when the log carries no next_due_at. Pulse must not infer a schedule
+        // from a missing one — it isn't allowed to advise on dosing or timing anyway.
+        let nextDue: String?
         let overdue: Bool
     }
 }
@@ -284,10 +286,14 @@ struct CoachContextBuilder {
             let df = DateFormatter()
             df.dateFormat = "MMMM d"
             let lastStr = "\(rel.localizedString(for: log.injectedAt, relativeTo: .now)) (\(df.string(from: log.injectedAt)))"
-            let isOverdue = log.nextDueAt < .now
-            let nextStr = isOverdue
-                ? "overdue since \(df.string(from: log.nextDueAt))"
-                : "\(rel.localizedString(for: log.nextDueAt, relativeTo: .now)) (\(df.string(from: log.nextDueAt)))"
+            // next_due_at is nullable. Absent means "we don't know when the next dose is" —
+            // which is emphatically not "overdue".
+            let isOverdue = log.nextDueAt.map { $0 < .now } ?? false
+            let nextStr = log.nextDueAt.map { due in
+                isOverdue
+                    ? "overdue since \(df.string(from: due))"
+                    : "\(rel.localizedString(for: due, relativeTo: .now)) (\(df.string(from: due)))"
+            }
             glp1Ctx = .init(
                 medication: log.medication,
                 doseMg: log.doseMg,

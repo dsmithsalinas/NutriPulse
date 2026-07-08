@@ -6,8 +6,13 @@ struct GLP1Log: Codable, Identifiable {
     let injectedAt: Date
     let medication: String
     let doseMg: Double
-    let site: String
-    let nextDueAt: Date
+    // Nullable in the database (glp1_logs.site, glp1_logs.next_due_at). This app always
+    // writes both, but decoding them as non-optional meant a single row created anywhere
+    // else — the SQL editor, support tooling, an older or newer client — threw a
+    // DecodingError for the *entire array*, blanking the GLP-1 card and the titration
+    // chart rather than skipping one row.
+    let site: String?
+    let nextDueAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id

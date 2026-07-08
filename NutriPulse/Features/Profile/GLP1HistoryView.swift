@@ -11,7 +11,7 @@ struct GLP1HistoryView: View {
                     Text(log.medication)
                         .fontWeight(.semibold)
                     Spacer()
-                    Text("\(log.doseMg.formatted())mg")
+                    Text("\(log.doseMg.glp1DoseString)mg")
                         .foregroundStyle(.secondary)
                 }
                 HStack {
@@ -19,9 +19,11 @@ struct GLP1HistoryView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(log.site)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    if let site = log.site {
+                        Text(site)
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             }
             .padding(.vertical, 2)
