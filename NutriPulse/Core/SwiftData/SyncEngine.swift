@@ -157,6 +157,7 @@ final class SyncEngine {
 
     private func pullRecentFoodLogs() async {
         do {
+            let userId = try await supabase.auth.session.user.id
             let cal = Calendar.current
             let startDate = cal.date(byAdding: .day, value: -7, to: cal.startOfDay(for: .now))!
             let logs: [FoodLog] = try await supabase
@@ -168,6 +169,15 @@ final class SyncEngine {
             for log in logs {
                 try? LocalStore.shared.upsertFoodLog(from: log)
             }
+            // Reconcile deletions. Anything synced in this window that the server didn't
+            // return was deleted on another device. Only reachable because the fetch above
+            // succeeded — on failure we throw and leave the cache alone rather than
+            // interpreting "no rows" as "everything was deleted".
+            try? LocalStore.shared.pruneDeletedFoodLogs(
+                userId: userId,
+                since: startDate.isoDateString,
+                remoteIds: Set(logs.map(\.id))
+            )
         } catch { }
     }
 
