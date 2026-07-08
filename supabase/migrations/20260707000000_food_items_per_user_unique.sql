@@ -38,12 +38,14 @@ BEGIN
   FROM pg_constraint con
   WHERE con.conrelid = 'public.food_items'::regclass
     AND con.contype  = 'u'
+    -- attname is `name`, not `text`. Postgres has no name[] = text[] operator,
+    -- so both sides must be cast explicitly.
     AND (
-      SELECT array_agg(att.attname ORDER BY att.attname)
+      SELECT array_agg(att.attname::TEXT ORDER BY att.attname::TEXT)
       FROM unnest(con.conkey) AS k(attnum)
       JOIN pg_attribute att
         ON att.attrelid = con.conrelid AND att.attnum = k.attnum
-    ) = ARRAY['external_id', 'source'];
+    ) = ARRAY['external_id', 'source']::TEXT[];
 
   IF old_constraint IS NOT NULL THEN
     EXECUTE format('ALTER TABLE public.food_items DROP CONSTRAINT %I', old_constraint);
