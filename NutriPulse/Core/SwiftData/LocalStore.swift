@@ -234,14 +234,17 @@ final class LocalStore {
 
     // MARK: - Daily Goals
 
-    func fetchGoal(for date: Date) throws -> DailyGoal? {
+    // Filtering by userId matters even though this is "just a cache": goals are the
+    // one cached entity with no natural per-user scoping in the UI, so an unowned
+    // row would silently supply another account's calorie targets.
+    func fetchGoal(for date: Date, userId: UUID) throws -> DailyGoal? {
         guard let context else { return nil }
         let dateStr = date.isoDateString
         let descriptor = FetchDescriptor<SDDailyGoal>(
             sortBy: [SortDescriptor(\.effectiveDate, order: .reverse)]
         )
         return try context.fetch(descriptor)
-            .first { $0.effectiveDate <= dateStr }?
+            .first { $0.userId == userId && $0.effectiveDate <= dateStr }?
             .asDailyGoal
     }
 
@@ -250,6 +253,7 @@ final class LocalStore {
         let id = goal.id
         let descriptor = FetchDescriptor<SDDailyGoal>(predicate: #Predicate { $0.id == id })
         if let existing = try context.fetch(descriptor).first {
+            existing.userId        = goal.userId
             existing.effectiveDate = goal.effectiveDate
             existing.calories      = goal.calories
             existing.proteinG      = goal.proteinG
@@ -259,13 +263,30 @@ final class LocalStore {
             existing.waterMlTarget = goal.waterMlTarget
         } else {
             let sdGoal = SDDailyGoal(
-                id: goal.id, effectiveDate: goal.effectiveDate,
+                id: goal.id, userId: goal.userId, effectiveDate: goal.effectiveDate,
                 calories: goal.calories, proteinG: goal.proteinG,
                 carbsG: goal.carbsG, fatG: goal.fatG,
                 fiberG: goal.fiberG, waterMlTarget: goal.waterMlTarget
             )
             context.insert(sdGoal)
         }
+        try context.save()
+    }
+
+    // MARK: - Sign-out / account deletion
+
+    // Wipes every cached row. Called on sign-out (which covers account deletion, since
+    // that signs out too). Three things go wrong without it:
+    //   1. The next account on this device reads the previous user's cached goals.
+    //   2. The previous user's unsynced rows get pushed under the new user's JWT,
+    //      are rejected by RLS, and stick at "pending" forever, inflating the badge.
+    //   3. "Delete Account" promises the data is gone while it sits in plaintext
+    //      SQLite on the device.
+    func wipeAll() throws {
+        guard let context else { return }
+        try context.delete(model: SDFoodLog.self)
+        try context.delete(model: SDWaterLog.self)
+        try context.delete(model: SDDailyGoal.self)
         try context.save()
     }
 

@@ -42,4 +42,11 @@ final class FavoritesStore {
     func insertId(_ foodItemId: UUID) {
         favoritedIds.insert(foodItemId)
     }
+
+    // Called on sign-out. This is a process-lifetime singleton, so without an explicit
+    // reset the next account sees the previous user's favorite stars until relaunch.
+    func reset() {
+        favoritedIds = []
+        isLoaded = false
+    }
 }

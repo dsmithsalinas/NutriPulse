@@ -86,7 +86,7 @@ final class TodayViewModel {
 
             // Read from LocalStore — instant, works offline
             foodLogs      = (try? LocalStore.shared.fetchFoodLogs(for: selectedDate, userId: userId)) ?? []
-            dailyGoal     = try? LocalStore.shared.fetchGoal(for: selectedDate)
+            dailyGoal     = try? LocalStore.shared.fetchGoal(for: selectedDate, userId: userId)
             waterIntakeMl = (try? LocalStore.shared.fetchWaterTotal(for: selectedDate, userId: userId)) ?? 0
             waterGoalMl   = dailyGoal?.waterMlTarget ?? 2000
 
