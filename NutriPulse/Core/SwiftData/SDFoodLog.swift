@@ -18,6 +18,12 @@ final class SDFoodLog {
     var loggedAt: Date
     var syncState: String  // "pendingCreate" | "pendingUpdate" | "pendingDelete" | "synced"
 
+    // Bumped on every local mutation. SyncEngine captures it before a push and
+    // refuses to mark the row "synced" if it changed while the request was in
+    // flight — otherwise an edit or delete made during those few hundred
+    // milliseconds gets silently stamped over. See LocalStore.markFoodLogCreated.
+    var revision: Int
+
     init(
         id: UUID = UUID(),
         userId: UUID,
@@ -32,7 +38,8 @@ final class SDFoodLog {
         fatGSnapshot: Double,
         fiberGSnapshot: Double,
         loggedAt: Date = .now,
-        syncState: String = "pendingCreate"
+        syncState: String = "pendingCreate",
+        revision: Int = 0
     ) {
         self.id                = id
         self.userId            = userId
@@ -48,6 +55,7 @@ final class SDFoodLog {
         self.fiberGSnapshot    = fiberGSnapshot
         self.loggedAt          = loggedAt
         self.syncState         = syncState
+        self.revision          = revision
     }
 
     var asFoodLog: FoodLog {

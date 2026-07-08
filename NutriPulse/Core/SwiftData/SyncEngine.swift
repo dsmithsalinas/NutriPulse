@@ -82,14 +82,21 @@ final class SyncEngine {
 
     // MARK: - Push food logs
 
+    // SDFoodLog is a reference type and the user can mutate it (edit, delete) during
+    // any of the awaits below. Every value the request depends on — including the
+    // revision the completion handler compares against — is therefore snapshotted
+    // into locals *before* the await, never re-read from `log` afterwards.
     private func pushPendingFoodLogs() async {
         if let pending = try? LocalStore.shared.pendingFoodLogs() {
             for log in pending {
+                let id       = log.id
+                let revision = log.revision
+                let payload  = FoodLogInsert(from: log)
                 do {
                     try await supabase.from("food_logs")
-                        .upsert(FoodLogInsert(from: log), onConflict: "id", ignoreDuplicates: true)
+                        .upsert(payload, onConflict: "id", ignoreDuplicates: true)
                         .execute()
-                    try? LocalStore.shared.markFoodLogSynced(id: log.id)
+                    try? LocalStore.shared.markFoodLogCreated(id: id, pushedRevision: revision)
                 } catch { }
             }
         }
@@ -97,20 +104,26 @@ final class SyncEngine {
         // remotely, and upsert's ignoreDuplicates would otherwise skip it.
         if let toUpdate = try? LocalStore.shared.pendingUpdateFoodLogs() {
             for log in toUpdate {
+                let id       = log.id
+                let revision = log.revision
+                let payload  = FoodLogUpdate(meal: log.meal, quantity: log.quantity)
                 do {
                     try await supabase.from("food_logs")
-                        .update(FoodLogUpdate(meal: log.meal, quantity: log.quantity))
-                        .eq("id", value: log.id)
+                        .update(payload)
+                        .eq("id", value: id)
                         .execute()
-                    try? LocalStore.shared.markFoodLogSynced(id: log.id)
+                    try? LocalStore.shared.markFoodLogUpdated(id: id, pushedRevision: revision)
                 } catch { }
             }
         }
+        // A tombstone for a row that never reached the server deletes zero rows —
+        // no error, and the local row is cleaned up either way.
         if let toDelete = try? LocalStore.shared.deletedFoodLogs() {
             for log in toDelete {
+                let id = log.id
                 do {
-                    try await supabase.from("food_logs").delete().eq("id", value: log.id).execute()
-                    try? LocalStore.shared.removeFoodLog(id: log.id)
+                    try await supabase.from("food_logs").delete().eq("id", value: id).execute()
+                    try? LocalStore.shared.removeFoodLogAfterDelete(id: id)
                 } catch { }
             }
         }
