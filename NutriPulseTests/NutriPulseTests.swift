@@ -163,11 +163,114 @@ final class ISODateStringTests: XCTestCase {
         XCTAssertEqual(later,   "2024-10-01")
     }
 
+    // Anything that parses a log_date must read it back in the zone it was written in. The
+    // body-fat chart parsed it as UTC midnight and plotted a day earlier than the calories and
+    // weight charts built from the same log.
+    func testISODateStringRoundTripsInTheSameZone() throws {
+        for zone in [newYork, tokyo, TimeZone.gmt] {
+            let original = try XCTUnwrap(Date.fromISODateString("2026-07-06", in: zone))
+            XCTAssertEqual(original.isoDateString(in: zone), "2026-07-06")
+        }
+    }
+
+    func testParsingAsUTCWouldShiftTheDayWestOfUTC() throws {
+        // The old code did `logDate + "T00:00:00Z"`.
+        let asUTC = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-06T00:00:00Z"))
+        XCTAssertEqual(asUTC.isoDateString(in: newYork), "2026-07-05", "this is the bug")
+
+        let parsedLocally = try XCTUnwrap(Date.fromISODateString("2026-07-06", in: newYork))
+        XCTAssertEqual(parsedLocally.isoDateString(in: newYork), "2026-07-06", "this is the fix")
+    }
+
+    func testRejectsMalformedDateStrings() {
+        XCTAssertNil(Date.fromISODateString("not-a-date"))
+        XCTAssertNil(Date.fromISODateString("2026-07"))
+    }
+
     func testMidnightBoundaryBelongsToTheNewDay() {
         XCTAssertEqual(date("2024-03-15T04:00:00Z").isoDateString(in: newYork), "2024-03-15",
                        "00:00 EDT is still the 15th")
         XCTAssertEqual(date("2024-03-15T03:59:59Z").isoDateString(in: newYork), "2024-03-14",
                        "one second earlier is the 14th")
+    }
+}
+
+// MARK: - Goal calculation
+
+final class GoalCalculatorTests: XCTestCase {
+
+    // Mifflin-St Jeor. These must not drift: the extraction out of OnboardingViewModel has to
+    // be behaviour-preserving.
+    func testMifflinStJeorMatchesTheFormula() {
+        // 10(80) + 6.25(180) − 5(30) + 5 = 800 + 1125 − 150 + 5
+        XCTAssertEqual(
+            GoalCalculator.bmr(sex: .male, ageYears: 30, heightCm: 180, weightKg: 80),
+            1780, accuracy: 0.001
+        )
+        // ...− 161
+        XCTAssertEqual(
+            GoalCalculator.bmr(sex: .female, ageYears: 30, heightCm: 180, weightKg: 80),
+            1614, accuracy: 0.001
+        )
+    }
+
+    // `.other` is the average of the male and female formulas, as the original code computed it.
+    func testOtherSexAveragesTheTwoFormulas() {
+        let male   = GoalCalculator.bmr(sex: .male,   ageYears: 30, heightCm: 180, weightKg: 80)
+        let female = GoalCalculator.bmr(sex: .female, ageYears: 30, heightCm: 180, weightKg: 80)
+        XCTAssertEqual(
+            GoalCalculator.bmr(sex: .other, ageYears: 30, heightCm: 180, weightKg: 80),
+            (male + female) / 2, accuracy: 0.001
+        )
+    }
+
+    // An aggressive deficit must never recommend a starvation target.
+    func testCalorieFloorClampsAggressiveDeficits() {
+        let goals = GoalCalculator.goals(
+            sex: .female, ageYears: 60, heightCm: 150, weightKg: 45,
+            activity: .sedentary, weightGoal: .lose
+        )
+        XCTAssertEqual(goals.calories, GoalCalculator.calorieFloor)
+        XCTAssertGreaterThan(goals.calories, 0, "never negative")
+    }
+
+    func testMacroSplitAndMinimums() {
+        let goals = GoalCalculator.macros(calories: 2000, weightKg: 80)
+        XCTAssertEqual(goals.proteinG, 150)   // 30% / 4
+        XCTAssertEqual(goals.carbsG,   200)   // 40% / 4
+        XCTAssertEqual(goals.fatG,      67)   // 30% / 9, rounded
+        XCTAssertEqual(goals.fiberG,    28)   // 14g per 1000 kcal
+        XCTAssertEqual(goals.waterMlTarget, 2800)  // 35 ml/kg
+    }
+
+    func testFiberAndWaterMinimums() {
+        let goals = GoalCalculator.macros(calories: 1200, weightKg: 45)
+        XCTAssertEqual(goals.fiberG, 25, "floor, not 16.8")
+        XCTAssertEqual(goals.waterMlTarget, 2000, "floor, not 1575")
+    }
+
+    // Retargeting must preserve the user's current adjustment — the deficit they chose, or a
+    // target they hand-tuned — rather than re-deriving from a WeightGoal profiles doesn't store.
+    func testRetargetPreservesTheUsersDeficit() {
+        // Living 500 kcal under maintenance; maintenance drops by 200 after weight loss.
+        let goals = GoalCalculator.retargeted(
+            currentCalories: 2000, oldTDEE: 2500, newTDEE: 2300, newWeightKg: 80
+        )
+        XCTAssertEqual(goals.calories, 1800, "the 500 kcal deficit follows the new TDEE")
+    }
+
+    func testRetargetPreservesAManualSurplus() {
+        let goals = GoalCalculator.retargeted(
+            currentCalories: 2750, oldTDEE: 2500, newTDEE: 2600, newWeightKg: 90
+        )
+        XCTAssertEqual(goals.calories, 2850, "the +250 surplus is kept")
+    }
+
+    func testRetargetRespectsTheFloor() {
+        let goals = GoalCalculator.retargeted(
+            currentCalories: 1300, oldTDEE: 1800, newTDEE: 1500, newWeightKg: 50
+        )
+        XCTAssertEqual(goals.calories, GoalCalculator.calorieFloor)
     }
 }
 

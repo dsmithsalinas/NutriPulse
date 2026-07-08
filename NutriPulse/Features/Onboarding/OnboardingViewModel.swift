@@ -128,6 +128,14 @@ final class OnboardingViewModel {
     // Step 1 – Name
     var fullName = ""
 
+    init() {
+        // Sign in with Apple surrenders the user's name exactly once, on first authorization.
+        // AuthViewModel stashes it; use it to pre-fill rather than asking for what we know.
+        if let appleName = UserDefaults.standard.string(forKey: AuthViewModel.pendingAppleFullNameKey) {
+            fullName = appleName
+        }
+    }
+
     // Step 2 – Biological sex
     var sex: BiologicalSex = .male
 
@@ -160,33 +168,15 @@ final class OnboardingViewModel {
     // Male:   BMR = 10W + 6.25H − 5A + 5
     // Female: BMR = 10W + 6.25H − 5A − 161
     // Other:  average of the two (no single validated formula)
+    // Lives in GoalCalculator now, so Profile can reuse it when stats change.
     var calculatedGoals: CalculatedGoals {
-        let ageYears = Double(Calendar.current.dateComponents([.year], from: dob, to: .now).year ?? 30)
-
-        let bmr: Double
-        switch sex {
-        case .male:
-            bmr = 10 * weightKg + 6.25 * heightCm - 5 * ageYears + 5
-        case .female:
-            bmr = 10 * weightKg + 6.25 * heightCm - 5 * ageYears - 161
-        case .other:
-            let maleBMR   = 10 * weightKg + 6.25 * heightCm - 5 * ageYears + 5
-            let femaleBMR = 10 * weightKg + 6.25 * heightCm - 5 * ageYears - 161
-            bmr = (maleBMR + femaleBMR) / 2
-        }
-
-        let tdee = bmr * activityLevel.multiplier
-        let target = max(1200, (tdee + goal.calorieAdjustment)).rounded()
-
-        // Macro split: 30% protein / 40% carbs / 30% fat
-        // Water: 35 ml per kg body weight (min 2 L)
-        return CalculatedGoals(
-            calories:     target,
-            proteinG:     (target * 0.30 / 4).rounded(),
-            carbsG:       (target * 0.40 / 4).rounded(),
-            fatG:         (target * 0.30 / 9).rounded(),
-            fiberG:       max(25, (target / 1000 * 14)).rounded(),
-            waterMlTarget: max(2000, (weightKg * 35)).rounded()
+        GoalCalculator.goals(
+            sex: sex,
+            ageYears: GoalCalculator.ageYears(fromDOB: dob),
+            heightCm: heightCm,
+            weightKg: weightKg,
+            activity: activityLevel,
+            weightGoal: goal
         )
     }
 
@@ -284,6 +274,9 @@ final class OnboardingViewModel {
             .single()
             .execute()
             .value
+
+        // The name now lives on the profile row; the one-shot Apple stash has done its job.
+        UserDefaults.standard.removeObject(forKey: AuthViewModel.pendingAppleFullNameKey)
 
         return savedProfile
     }

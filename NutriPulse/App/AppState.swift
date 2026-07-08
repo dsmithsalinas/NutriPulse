@@ -75,6 +75,7 @@ final class AppState {
     private static let accountScopedDefaultsKeys = [
         "lastHKWeightSyncDate",
         "chatHistoryVersion",
+        AuthViewModel.pendingAppleFullNameKey,
     ]
 
     // Selects into an array rather than .single() on purpose: .single() throws when

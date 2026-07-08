@@ -295,7 +295,15 @@ struct ProfileView: View {
     private var signOutSection: some View {
         Section {
             Button("Sign Out", role: .destructive) {
-                Task { try? await supabase.auth.signOut() }
+                // `try?` swallowed the failure: the user tapped Sign Out, nothing happened,
+                // and nothing said why.
+                Task {
+                    do {
+                        try await supabase.auth.signOut()
+                    } catch {
+                        vm.errorMessage = "Couldn't sign out. Check your connection and try again."
+                    }
+                }
             }
         }
     }
@@ -351,6 +359,24 @@ private struct EditProfileSheet: View {
     @State private var weightInput   = 70.0   // in user's preferred unit
     @State private var isSaving      = false
 
+    // Matches DobStepView: at least 13 (App Store minimum), at most 120.
+    private static let dobRange: ClosedRange<Date> = {
+        let cal = Calendar.current
+        let oldest = cal.date(byAdding: .year, value: -120, to: .now) ?? .distantPast
+        let youngest = cal.date(byAdding: .year, value: -13, to: .now) ?? .now
+        return oldest...youngest
+    }()
+
+    @State private var pendingRecalc: RecalcSuggestion? = nil
+
+    // Surfaced after saving stats that move the BMR. Never applied silently: the user may
+    // have hand-tuned their targets in Edit Goals, and overwriting that without asking is
+    // worse than letting the numbers drift.
+    private struct RecalcSuggestion {
+        let goals: CalculatedGoals
+        let currentCalories: Double
+    }
+
     private let dobFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
@@ -365,8 +391,10 @@ private struct EditProfileSheet: View {
                     TextField("Full name", text: $name)
                 }
                 Section("Body") {
+                    // `...Date.now` let a user set their DOB to today — "Age: 0 years" in Body
+                    // Stats, and a nonsense BMR. Onboarding enforces 13–120; match it.
                     DatePicker("Date of birth", selection: $dob,
-                               in: ...Date.now, displayedComponents: .date)
+                               in: Self.dobRange, displayedComponents: .date)
                     Picker("Sex", selection: $sex) {
                         ForEach(BiologicalSex.allCases) { s in
                             Text(s.displayName).tag(s)
@@ -431,6 +459,32 @@ private struct EditProfileSheet: View {
                 }
             }
             .onAppear { prefill() }
+            .alert(
+                "Recalculate your targets?",
+                isPresented: Binding(
+                    get: { pendingRecalc != nil },
+                    set: { if !$0 { pendingRecalc = nil } }
+                ),
+                presenting: pendingRecalc
+            ) { suggestion in
+                Button("Keep current", role: .cancel) {
+                    pendingRecalc = nil
+                    dismiss()
+                }
+                Button("Recalculate") {
+                    let goals = suggestion.goals
+                    pendingRecalc = nil
+                    Task {
+                        try? await vm.updateGoals(
+                            calories: goals.calories, proteinG: goals.proteinG,
+                            carbsG: goals.carbsG, fatG: goals.fatG, fiberG: goals.fiberG
+                        )
+                        dismiss()
+                    }
+                }
+            } message: { suggestion in
+                Text("Your new stats give \(Int(suggestion.goals.calories)) kcal a day (currently \(Int(suggestion.currentCalories))).")
+            }
         }
     }
 
@@ -461,6 +515,10 @@ private struct EditProfileSheet: View {
             : heightCm
         let finalWeightKg = units.kgFrom(weightInput)
 
+        // Snapshot the old stats before the update overwrites them.
+        let oldProfile = vm.profile
+        let oldWeightKg = vm.latestWeight?.weightKg
+
         let update = UpdateProfile(
             fullName: name.trimmingCharacters(in: .whitespaces),
             dob: dobFormatter.string(from: dob),
@@ -471,10 +529,63 @@ private struct EditProfileSheet: View {
         do {
             try await vm.updateProfile(update)
             if logWeight { try await vm.logWeight(finalWeightKg) }
-            dismiss()
+
+            if let suggestion = recalcSuggestion(
+                oldProfile: oldProfile,
+                oldWeightKg: oldWeightKg,
+                newHeightCm: finalHeightCm,
+                newWeightKg: logWeight ? finalWeightKg : oldWeightKg
+            ) {
+                pendingRecalc = suggestion   // the alert dismisses us
+            } else {
+                dismiss()
+            }
         } catch {
             vm.errorMessage = error.localizedDescription
         }
+    }
+
+    // Stats that move BMR — weight, height, activity, sex, age — used to leave the calorie and
+    // macro targets untouched, so a user who lost 20 lb kept eating for their old body.
+    //
+    // The suggestion preserves whatever adjustment they're currently living with (the deficit
+    // chosen at onboarding, or a target hand-tuned in Edit Goals) rather than re-deriving from
+    // a WeightGoal that `profiles` doesn't even store.
+    private func recalcSuggestion(
+        oldProfile: UserProfile?,
+        oldWeightKg: Double?,
+        newHeightCm: Double,
+        newWeightKg: Double?
+    ) -> RecalcSuggestion? {
+        guard
+            let currentCalories = vm.goal?.calories,
+            let oldProfile,
+            let oldSexRaw = oldProfile.sex, let oldSex = BiologicalSex(rawValue: oldSexRaw),
+            let oldActivityRaw = oldProfile.activityLevel, let oldActivity = ActivityLevel(rawValue: oldActivityRaw),
+            let oldHeightCm = oldProfile.heightCm,
+            let oldDOBString = oldProfile.dob, let oldDOB = dobFormatter.date(from: oldDOBString),
+            let oldWeightKg, let newWeightKg
+        else { return nil }
+
+        let oldTDEE = GoalCalculator.tdee(
+            sex: oldSex, ageYears: GoalCalculator.ageYears(fromDOB: oldDOB),
+            heightCm: oldHeightCm, weightKg: oldWeightKg, activity: oldActivity
+        )
+        let newTDEE = GoalCalculator.tdee(
+            sex: sex, ageYears: GoalCalculator.ageYears(fromDOB: dob),
+            heightCm: newHeightCm, weightKg: newWeightKg, activity: activity
+        )
+
+        let goals = GoalCalculator.retargeted(
+            currentCalories: currentCalories,
+            oldTDEE: oldTDEE,
+            newTDEE: newTDEE,
+            newWeightKg: newWeightKg
+        )
+
+        // Don't nag over rounding noise.
+        guard abs(goals.calories - currentCalories) >= 25 else { return nil }
+        return RecalcSuggestion(goals: goals, currentCalories: currentCalories)
     }
 }
 
