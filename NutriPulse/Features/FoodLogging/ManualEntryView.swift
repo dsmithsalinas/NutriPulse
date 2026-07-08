@@ -83,20 +83,33 @@ private struct MacroField: View {
     @Binding var value: Double
     let unit: String
 
+    @State private var text: String = ""
+
     var body: some View {
         HStack {
             Text(label)
             Spacer()
-            // SWIFT CONCEPT — TextField(value:format:) in iOS 15+ binds directly to a
-            // numeric type and handles keyboard/parsing automatically.
-            // It's like <input type="number"> but type-safe.
-            TextField("0", value: $value, format: .number)
+            // Bound to a String, not a Double. TextField(value:format:) commits to its
+            // binding only on submit or focus loss, and .decimalPad has no return key —
+            // so typing "250" into Calories and tapping Log left `calories` at 0, leaving
+            // the button disabled with no explanation. Editing a macro last and then
+            // tapping Log silently discarded that correction.
+            //
+            // Parsing per keystroke keeps the ViewModel in sync, which also lets `canLog`
+            // enable the Log button the moment calories are entered. See DecimalInput.
+            TextField("0", text: $text)
                 .multilineTextAlignment(.trailing)
                 .keyboardType(.decimalPad)
                 .frame(width: 80)
+                .onChange(of: text) { _, newText in
+                    let cleaned = DecimalInput.sanitize(newText)
+                    if cleaned != newText { text = cleaned }
+                    value = DecimalInput.value(from: cleaned)
+                }
             Text(unit)
                 .foregroundStyle(.secondary)
                 .frame(width: 36, alignment: .leading)
         }
+        .onAppear { text = DecimalInput.text(from: value) }
     }
 }

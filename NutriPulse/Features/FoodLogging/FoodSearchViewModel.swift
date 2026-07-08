@@ -20,9 +20,23 @@ final class FoodSearchViewModel {
     var quantity: Double = 1.0
 
     var isLogging = false
+    // Presented by whichever view is on screen when the failure happens. These have to be
+    // distinct: SwiftUI can't raise an alert from a view that is currently presenting a
+    // sheet, so an error stored here while the detail sheet is up would never be seen.
+    //   errorMessage — the search list / barcode scanner (no sheet up)
+    //   detailError  — the detail sheet failed to load; replaces its content
+    //   logError     — the detail sheet failed to log; alerts over its content
     var errorMessage: String? = nil
+    var detailError: String? = nil
+    var logError: String? = nil
     var quickAdds: [FavoriteQuickAdd] = []
     var wantsToFavorite = false
+
+    // Guards against a slow response for food A landing after the user has moved on to
+    // food B. Both flows share this ViewModel's `detail`/`selectedServing`, so without
+    // it the sheet could show B's title over A's macros — and log the food the user
+    // never picked.
+    private var detailRequestID = UUID()
 
     private let client = FatSecretClient()
     private let favRepo = FavoriteRepository()
@@ -49,19 +63,42 @@ final class FoodSearchViewModel {
     }
 
     func loadDetail(for result: FoodSearchResult) async {
+        let requestID = UUID()
+        detailRequestID = requestID
+
         selectedResult = result
         detail = nil
         selectedServing = nil
         wantsToFavorite = false
+        detailError = nil
         isLoadingDetail = true
-        defer { isLoadingDetail = false }
+        // Only the newest request may clear the spinner — a stale one finishing later
+        // would otherwise dismiss the loading state of the request still in flight.
+        defer { if detailRequestID == requestID { isLoadingDetail = false } }
+
         do {
             let loaded = try await client.getFood(id: result.id)
+            guard detailRequestID == requestID else { return }   // superseded; drop it
             detail = loaded
             selectedServing = loaded.servings.first
         } catch {
-            errorMessage = error.localizedDescription
+            guard detailRequestID == requestID else { return }
+            // Shown inside the sheet. Stored in errorMessage, it went to the alert on the
+            // view *presenting* the sheet, which SwiftUI can never show — so a failed load
+            // rendered a permanently blank sheet.
+            detailError = error.localizedDescription
         }
+    }
+
+    // Cancelling invalidates the in-flight request so its response can't land on top of
+    // whatever the user does next.
+    func cancelDetail() {
+        detailRequestID = UUID()
+        selectedResult = nil
+        detail = nil
+        selectedServing = nil
+        detailError = nil
+        isLoadingDetail = false
     }
 
     var macroPreview: (calories: Double, proteinG: Double, carbsG: Double, fatG: Double, fiberG: Double)? {
@@ -75,28 +112,43 @@ final class FoodSearchViewModel {
         )
     }
 
+    // Shares `detail`/`selectedServing` with loadDetail (the Scan and Search tabs use one
+    // ViewModel), so it takes a token too: a slow search-tab detail load must not land on
+    // top of a barcode result, or vice versa.
     func lookupBarcode(_ barcode: String) async {
+        let requestID = UUID()
+        detailRequestID = requestID
+
         detail = nil
         selectedServing = nil
+        detailError = nil
         isLoadingDetail = true
+
         do {
             let loaded = try await client.getFood(barcode: barcode)
+            guard detailRequestID == requestID else { return }
             detail = loaded
             selectedServing = loaded.servings.first
             isLoadingDetail = false
             selectedResult = FoodSearchResult(id: loaded.id, name: loaded.name, brand: loaded.brand, description: "")
         } catch {
+            guard detailRequestID == requestID else { return }
             isLoadingDetail = false
+            // No sheet is up on this path (it only presents on success), so the scanner's
+            // own alert can present this.
             errorMessage = "No food found for that barcode."
         }
     }
 
     func resetScanState() {
+        detailRequestID = UUID()   // abandon any in-flight lookup
         selectedResult = nil
         detail = nil
         selectedServing = nil
         isLoadingDetail = false
         errorMessage = nil
+        detailError = nil
+        logError = nil
     }
 
     func logFood(on date: Date) async throws {

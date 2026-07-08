@@ -31,7 +31,7 @@ struct FoodSearchView: View {
             Group {
                 if vm.searchQuery.isEmpty {
                     if !vm.quickAdds.isEmpty {
-                        FavoritesQuickAddList(quickAdds: vm.quickAdds, date: date, onLogged: onLogged)
+                        FavoritesQuickAddList(vm: vm, quickAdds: vm.quickAdds, date: date, onLogged: onLogged)
                     } else {
                         placeholder(
                             icon: "magnifyingglass",
@@ -130,6 +130,11 @@ struct FoodDetailSheet: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let detail = vm.detail {
                     detailForm(detail: detail)
+                } else {
+                    // Reached whenever the load failed. Without this branch the sheet
+                    // rendered empty — no macros, no Log button, no error, no way out
+                    // but Cancel.
+                    loadFailedView
                 }
             }
             .navigationTitle(result.name)
@@ -137,7 +142,7 @@ struct FoodDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
-                        vm.selectedResult = nil
+                        vm.cancelDetail()
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -149,6 +154,29 @@ struct FoodDetailSheet: View {
                     }
                 }
             }
+            // Must live inside the sheet. Bound to the presenting view, this alert never
+            // appeared: a failed "Log Food" just stopped the spinner and did nothing.
+            .alert("Couldn't log food", isPresented: Binding(
+                get: { vm.logError != nil },
+                set: { if !$0 { vm.logError = nil } }
+            )) {
+                Button("OK") { vm.logError = nil }
+            } message: {
+                Text(vm.logError ?? "")
+            }
+        }
+    }
+
+    private var loadFailedView: some View {
+        ContentUnavailableView {
+            Label("Couldn't load this food", systemImage: "wifi.exclamationmark")
+        } description: {
+            Text(vm.detailError ?? "Something went wrong.")
+        } actions: {
+            Button("Try Again") {
+                Task { await vm.loadDetail(for: result) }
+            }
+            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -207,7 +235,7 @@ struct FoodDetailSheet: View {
                     vm.selectedResult = nil
                     onLogged(source)
                 } catch {
-                    vm.errorMessage = error.localizedDescription
+                    vm.logError = error.localizedDescription
                 }
             }
         } label: {
@@ -228,6 +256,7 @@ struct FoodDetailSheet: View {
 // ─── Favorites quick-add section ─────────────────────────────────────────────
 
 private struct FavoritesQuickAddList: View {
+    let vm: FoodSearchViewModel
     let quickAdds: [FavoriteQuickAdd]
     let date: Date
     let onLogged: (LogSource) -> Void
@@ -236,7 +265,7 @@ private struct FavoritesQuickAddList: View {
         List {
             Section {
                 ForEach(quickAdds) { fav in
-                    FavoriteQuickAddRow(fav: fav, date: date, onLogged: onLogged)
+                    FavoriteQuickAddRow(vm: vm, fav: fav, date: date, onLogged: onLogged)
                 }
             } header: {
                 Label("Favorites", systemImage: "star.fill")
@@ -248,6 +277,7 @@ private struct FavoritesQuickAddList: View {
 }
 
 private struct FavoriteQuickAddRow: View {
+    let vm: FoodSearchViewModel
     let fav: FavoriteQuickAdd
     let date: Date
     let onLogged: (LogSource) -> Void
@@ -297,13 +327,20 @@ private struct FavoriteQuickAddRow: View {
         return "\(qty) × \(desc)"
     }
 
+    // The meal matches what every other logging path defaults to. Unlike them, quick-add
+    // offers no picker to correct it — worth revisiting for backdated logs, where
+    // "the meal it is right now" is meaningless.
+    @MainActor
     private func logIt() async {
         isLogging = true
         defer { isLogging = false }
         do {
-            try await repo.quickLog(fav, on: date)
+            try await repo.quickLog(fav, on: date, meal: .current)
             onLogged(.favorite)
-        } catch {}
+        } catch {
+            // Previously `catch {}`: the spinner stopped, nothing logged, no error.
+            vm.errorMessage = "Couldn't log \(fav.name). Try again."
+        }
     }
 }
 

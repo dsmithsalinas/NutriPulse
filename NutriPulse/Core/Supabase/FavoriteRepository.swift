@@ -47,14 +47,24 @@ struct FavoriteRepository {
             .value
     }
 
-    func quickLog(_ fav: FavoriteQuickAdd, on date: Date) async throws {
+    // Writes local-first, exactly like every other logging path (search, scan, manual,
+    // talk). Inserting straight into Supabase meant the Today screen — which reads only
+    // from LocalStore — didn't show the food until the next foreground pull, so users
+    // assumed the tap failed and logged it again. It also meant the whole flow was the
+    // one logging path that didn't work offline.
+    //
+    // The food_item already exists (it's what was favorited), so there's nothing to
+    // upsert here — just the log row.
+    @MainActor
+    func quickLog(_ fav: FavoriteQuickAdd, on date: Date, meal: Meal) async throws {
         let userId = try await supabase.auth.session.user.id
-        let newLog = NewFoodLog(
+        try LocalStore.shared.insertFoodLog(
+            id: UUID(),
             userId: userId,
-            loggedAt: Date(),
             logDate: date.isoDateString,
-            meal: Meal.current,
+            meal: meal.rawValue,
             foodItemId: fav.foodItemId,
+            foodItemName: fav.name,
             quantity: fav.quantity,
             caloriesSnapshot: fav.caloriesSnapshot,
             proteinGSnapshot: fav.proteinGSnapshot,
@@ -62,6 +72,7 @@ struct FavoriteRepository {
             fatGSnapshot: fav.fatGSnapshot,
             fiberGSnapshot: fav.fiberGSnapshot
         )
-        try await supabase.from("food_logs").insert(newLog).execute()
+        SyncEngine.shared.refreshPendingCount()
+        Task { await SyncEngine.shared.pushPendingChanges() }
     }
 }
