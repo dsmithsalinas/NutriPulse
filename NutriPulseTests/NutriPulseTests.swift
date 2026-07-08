@@ -78,6 +78,61 @@ final class GLP1DoseFormattingTests: XCTestCase {
     }
 }
 
+// MARK: - Decimal text input
+
+final class DecimalInputTests: XCTestCase {
+
+    private let us = Locale(identifier: "en_US")
+    private let de = Locale(identifier: "de_DE")
+
+    // The core of the manual-entry bug: what the user types must reach the model
+    // immediately, on every keystroke, with no focus change.
+    func testParsesPlainInput() {
+        XCTAssertEqual(DecimalInput.value(from: "250", locale: us), 250)
+        XCTAssertEqual(DecimalInput.value(from: "12.5", locale: us), 12.5)
+        XCTAssertEqual(DecimalInput.value(from: "", locale: us), 0)
+    }
+
+    // Mid-typing state: "1." must already parse, or the field fights the user.
+    func testParsesTrailingSeparator() {
+        XCTAssertEqual(DecimalInput.value(from: "1.", locale: us), 1)
+        XCTAssertEqual(DecimalInput.value(from: "1,", locale: de), 1)
+    }
+
+    // German/French/Spanish keypads emit a comma. Double("75,5") is nil.
+    func testCommaDecimalLocale() {
+        XCTAssertEqual(DecimalInput.sanitize("75,5", locale: de), "75,5")
+        XCTAssertEqual(DecimalInput.value(from: "75,5", locale: de), 75.5)
+    }
+
+    // A period typed on a comma keypad (and vice versa) normalizes to the locale's.
+    func testSeparatorNormalization() {
+        XCTAssertEqual(DecimalInput.sanitize("75.5", locale: de), "75,5")
+        XCTAssertEqual(DecimalInput.sanitize("75,5", locale: us), "75.5")
+    }
+
+    // .decimalPad has no minus key, but paste bypasses the keyboard. A negative macro
+    // corrupts every daily total that sums it.
+    func testStripsNegativeSign() {
+        XCTAssertEqual(DecimalInput.sanitize("-50", locale: us), "50")
+        XCTAssertEqual(DecimalInput.value(from: DecimalInput.sanitize("-50", locale: us), locale: us), 50)
+    }
+
+    func testStripsJunkAndExtraSeparators() {
+        XCTAssertEqual(DecimalInput.sanitize("1.2.3", locale: us), "1.23")
+        XCTAssertEqual(DecimalInput.sanitize("12abc3", locale: us), "123")
+        XCTAssertEqual(DecimalInput.sanitize("½", locale: us), "", "vulgar fractions are isNumber but not a value")
+    }
+
+    // Round trip: rendering must not emit grouping separators, or the next keystroke
+    // re-reads "1,000" as a decimal.
+    func testTextRoundTripsWithoutGrouping() {
+        XCTAssertEqual(DecimalInput.text(from: 1000, locale: us), "1000")
+        XCTAssertEqual(DecimalInput.text(from: 0, locale: us), "", "zero shows the placeholder instead")
+        XCTAssertEqual(DecimalInput.value(from: DecimalInput.text(from: 12.5, locale: de), locale: de), 12.5)
+    }
+}
+
 // MARK: - LocalStore sync-state transitions
 //
 // These pin the compare-and-set behaviour that keeps a push from clobbering an
