@@ -453,8 +453,11 @@ private struct EditProfileSheet: View {
         isSaving = true
         defer { isSaving = false }
 
+        // Pass the stored height so an untouched imperial field round-trips exactly
+        // instead of being rewritten to the nearest whole inch.
+        let storedCm = vm.profile?.heightCm ?? heightCm
         let finalHeightCm = units == .imperial
-            ? units.cmFrom(feet: heightFeet, inches: heightInches)
+            ? units.cmFrom(feet: heightFeet, inches: heightInches, unchangedFrom: storedCm)
             : heightCm
         let finalWeightKg = units.kgFrom(weightInput)
 

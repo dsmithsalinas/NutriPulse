@@ -45,10 +45,10 @@ struct HeightWeightStepView: View {
                             )
                         }
                         .onChange(of: heightFt) { _, ft in
-                            vm.heightCm = (Double(ft) * 12 + Double(heightIn)) * 2.54
+                            updateHeight(feet: ft, inches: heightIn)
                         }
                         .onChange(of: heightIn) { _, inches in
-                            vm.heightCm = (Double(heightFt) * 12 + Double(inches)) * 2.54
+                            updateHeight(feet: heightFt, inches: inches)
                         }
                     } else {
                         MetricStepperField(
@@ -75,7 +75,7 @@ struct HeightWeightStepView: View {
                             step: 1
                         )
                         .onChange(of: weightLbs) { _, lbs in
-                            vm.weightKg = lbs / 2.20462
+                            updateWeight(pounds: lbs)
                         }
                     } else {
                         MetricStepperField(
@@ -94,11 +94,31 @@ struct HeightWeightStepView: View {
         .onChange(of: vm.useImperialUnits) { _, _ in syncImperialFromVM() }
     }
 
+    // Round the TOTAL inches, then split. Flooring the feet and separately rounding the
+    // remainder produced "5 ft 12 in" for 182 cm (71.65 in → 5 ft + 11.65 → rounds to 12).
+    // The 0...11 range only constrains stepper taps, not programmatic writes, so the
+    // impossible value stuck — and one tap on the ft stepper then wrote
+    // (6 × 12 + 12) × 2.54 = 213.4 cm.
     private func syncImperialFromVM() {
-        let totalInches = vm.heightCm / 2.54
-        heightFt = Int(floor(totalInches / 12))
-        heightIn = Int(totalInches.truncatingRemainder(dividingBy: 12).rounded())
+        let totalInches = UnitSystem.totalInches(fromCm: vm.heightCm)
+        heightFt  = totalInches / 12
+        heightIn  = totalInches % 12
         weightLbs = (vm.weightKg * 2.20462).rounded()
+    }
+
+    // These run on every write to heightFt/heightIn — including the programmatic ones from
+    // syncImperialFromVM(), which is what made merely switching Metric → Imperial rewrite a
+    // height the user entered in centimetres. Convert only when the entered value actually
+    // describes a different height than the one we're holding.
+    private func updateHeight(feet: Int, inches: Int) {
+        let entered = feet * 12 + inches
+        guard entered != UnitSystem.totalInches(fromCm: vm.heightCm) else { return }
+        vm.heightCm = Double(entered) * 2.54
+    }
+
+    private func updateWeight(pounds: Double) {
+        guard pounds != (vm.weightKg * 2.20462).rounded() else { return }
+        vm.weightKg = pounds / 2.20462
     }
 }
 
