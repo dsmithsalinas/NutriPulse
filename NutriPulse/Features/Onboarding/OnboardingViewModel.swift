@@ -259,6 +259,12 @@ final class OnboardingViewModel {
                     nextDueAt: nextDue
                 ), onConflict: "id")
                 .execute()
+
+            // The GLP-1 onboarding step promises "Pulse tracks your injection schedule",
+            // but only ProfileViewModel.logInjection ever scheduled reminders — so a user
+            // who set GLP-1 up here got none until they happened to log an injection
+            // manually. Failing to schedule must not fail the save, hence no `try`.
+            await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
         }
 
         // 4. Commit the profile last — this is what marks onboarding complete.
