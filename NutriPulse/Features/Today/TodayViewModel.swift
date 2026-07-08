@@ -118,10 +118,10 @@ final class TodayViewModel {
         var data = BodyCompositionData()
 
         async let savedTask = try? bodyCompRepo.fetchLatest()
-        var hkWeight: (value: Double, date: Date)? = nil
-        var hkBodyFat: (value: Double, date: Date)? = nil
-        var hkBMI: (value: Double, date: Date)? = nil
-        var hkLBM: (value: Double, date: Date)? = nil
+        var hkWeight: HealthKitManager.HKMeasurement? = nil
+        var hkBodyFat: HealthKitManager.HKMeasurement? = nil
+        var hkBMI: HealthKitManager.HKMeasurement? = nil
+        var hkLBM: HealthKitManager.HKMeasurement? = nil
 
         if hk.isAvailable {
             async let w  = hk.fetchMostRecentWeight()
@@ -133,21 +133,29 @@ final class TodayViewModel {
 
         let saved = await savedTask
 
-        // Weight: prefer HK; auto-sync today's reading once per calendar day
+        // Weight: prefer HK; auto-import today's reading once per calendar day.
         if let w = hkWeight {
             data.weightKg     = w.value
             data.weightFromHK = true
             data.latestDate   = w.date
-            if Calendar.current.isDateInToday(w.date) {
-                let today = Date().isoDateString
-                if UserDefaults.standard.string(forKey: "lastHKWeightSyncDate") != today {
-                    try? await bodyCompRepo.upsert(date: today, weightKg: w.value, bodyFatPct: nil, bmi: nil, leanBodyMassKg: nil, source: "healthkit")
-                    if let userId = try? await supabase.auth.session.user.id {
-                        try? await supabase.from("weight_logs")
-                            .insert(NewWeightLog(userId: userId, weightKg: w.value, source: "healthkit"))
-                            .execute()
-                    }
-                    UserDefaults.standard.set(today, forKey: "lastHKWeightSyncDate")
+
+            // `!w.isFromThisApp` breaks an echo loop: log a weight in Profile, the app
+            // writes it to HealthKit, then this reads it straight back and inserts a
+            // *second* weight_logs row for the same value and day, tagged "healthkit".
+            // Same for anything saveBodyComposition wrote with writeToHK on.
+            //
+            // The UserDefaults key is set BEFORE the awaits, not after. Two concurrent
+            // loadData() calls (sheet dismiss + a sync-triggered reload) could otherwise
+            // both pass the check before either wrote the key, and both insert.
+            let today = Date().isoDateString
+            let alreadySyncedToday = UserDefaults.standard.string(forKey: "lastHKWeightSyncDate") == today
+            if Calendar.current.isDateInToday(w.date), !w.isFromThisApp, !alreadySyncedToday {
+                UserDefaults.standard.set(today, forKey: "lastHKWeightSyncDate")
+                try? await bodyCompRepo.upsert(date: today, weightKg: w.value, bodyFatPct: nil, bmi: nil, leanBodyMassKg: nil, source: "healthkit")
+                if let userId = try? await supabase.auth.session.user.id {
+                    try? await supabase.from("weight_logs")
+                        .insert(NewWeightLog(userId: userId, weightKg: w.value, source: "healthkit"))
+                        .execute()
                 }
             }
         } else if let w = saved?.weightKg {
