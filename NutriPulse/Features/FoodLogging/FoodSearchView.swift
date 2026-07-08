@@ -31,7 +31,7 @@ struct FoodSearchView: View {
             Group {
                 if vm.searchQuery.isEmpty {
                     if !vm.quickAdds.isEmpty {
-                        FavoritesQuickAddList(quickAdds: vm.quickAdds, date: date, onLogged: onLogged)
+                        FavoritesQuickAddList(vm: vm, quickAdds: vm.quickAdds, date: date, onLogged: onLogged)
                     } else {
                         placeholder(
                             icon: "magnifyingglass",
@@ -228,6 +228,7 @@ struct FoodDetailSheet: View {
 // ─── Favorites quick-add section ─────────────────────────────────────────────
 
 private struct FavoritesQuickAddList: View {
+    let vm: FoodSearchViewModel
     let quickAdds: [FavoriteQuickAdd]
     let date: Date
     let onLogged: (LogSource) -> Void
@@ -236,7 +237,7 @@ private struct FavoritesQuickAddList: View {
         List {
             Section {
                 ForEach(quickAdds) { fav in
-                    FavoriteQuickAddRow(fav: fav, date: date, onLogged: onLogged)
+                    FavoriteQuickAddRow(vm: vm, fav: fav, date: date, onLogged: onLogged)
                 }
             } header: {
                 Label("Favorites", systemImage: "star.fill")
@@ -248,6 +249,7 @@ private struct FavoritesQuickAddList: View {
 }
 
 private struct FavoriteQuickAddRow: View {
+    let vm: FoodSearchViewModel
     let fav: FavoriteQuickAdd
     let date: Date
     let onLogged: (LogSource) -> Void
@@ -297,13 +299,20 @@ private struct FavoriteQuickAddRow: View {
         return "\(qty) × \(desc)"
     }
 
+    // The meal matches what every other logging path defaults to. Unlike them, quick-add
+    // offers no picker to correct it — worth revisiting for backdated logs, where
+    // "the meal it is right now" is meaningless.
+    @MainActor
     private func logIt() async {
         isLogging = true
         defer { isLogging = false }
         do {
-            try await repo.quickLog(fav, on: date)
+            try await repo.quickLog(fav, on: date, meal: .current)
             onLogged(.favorite)
-        } catch {}
+        } catch {
+            // Previously `catch {}`: the spinner stopped, nothing logged, no error.
+            vm.errorMessage = "Couldn't log \(fav.name). Try again."
+        }
     }
 }
 
