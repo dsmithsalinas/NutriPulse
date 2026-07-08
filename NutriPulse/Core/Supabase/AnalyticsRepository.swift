@@ -67,10 +67,17 @@ struct AnalyticsRepository {
         let today = cal.startOfDay(for: .now)
         let startDate = cal.date(byAdding: .day, value: -(days - 1), to: today)!
 
+        // logged_at is a timestamptz, not a date. Sending "2026-06-29" made Postgres cast it
+        // to 2026-06-29 00:00:00+00 — UTC midnight — so a user in California (UTC-7) pulled in
+        // weigh-ins from 5pm the previous evening, and users east of UTC lost the first hours
+        // of the window. food_logs and body_composition_logs escape this because they filter
+        // on real `date` columns; weight_logs has only the timestamp.
+        //
+        // Send a full ISO-8601 instant for local midnight instead.
         return try await supabase
             .from("weight_logs")
             .select()
-            .gte("logged_at", value: startDate.isoDateString)
+            .gte("logged_at", value: startDate.ISO8601Format())
             .order("logged_at", ascending: true)
             .execute()
             .value

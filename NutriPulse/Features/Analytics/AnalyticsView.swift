@@ -6,51 +6,51 @@ struct AnalyticsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if vm.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        VStack(spacing: Theme.Spacing.md) {
-                            Picker("Range", selection: $vm.selectedRange) {
-                                ForEach(AnalyticsViewModel.TimeRange.allCases) { range in
-                                    Text(range.label).tag(range)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-
-                            CaloriesChartCard(
-                                summaries:    vm.summaries,
-                                goalCalories: vm.goalCalories,
-                                average:      vm.averageCalories
-                            )
-
-                            MacrosChartCard(summaries: vm.summaries)
-
-                            if !vm.weightLogs.isEmpty {
-                                WeightChartCard(
-                                    logs:   vm.weightLogs,
-                                    change: vm.weightChange
-                                )
-                            }
-
-                            if !vm.bodyFatLogs.isEmpty {
-                                BodyFatChartCard(logs: vm.bodyFatLogs)
-                            }
-
-                            if !vm.glp1History.isEmpty {
-                                GLP1DoseChartCard(logs: vm.glp1History)
-                            }
-
-                            if vm.loggedDays.isEmpty {
-                                emptyState
-                            }
+            // The spinner used to REPLACE the ScrollView — and the range Picker lives inside
+            // it — so every tap on a range flashed the whole screen, picker included, to a
+            // bare ProgressView. Keep the content mounted and overlay the spinner instead.
+            ScrollView {
+                VStack(spacing: Theme.Spacing.md) {
+                    Picker("Range", selection: $vm.selectedRange) {
+                        ForEach(AnalyticsViewModel.TimeRange.allCases) { range in
+                            Text(range.label).tag(range)
                         }
-                        .padding(Theme.Spacing.md)
-                        .padding(.bottom, Theme.Spacing.xl)
+                    }
+                    .pickerStyle(.segmented)
+
+                    CaloriesChartCard(
+                        summaries:    vm.summaries,
+                        goalCalories: vm.goalCalories,
+                        average:      vm.averageCalories
+                    )
+
+                    MacrosChartCard(summaries: vm.summaries)
+
+                    if !vm.weightLogs.isEmpty {
+                        WeightChartCard(
+                            logs:   vm.weightLogs,
+                            change: vm.weightChange
+                        )
+                    }
+
+                    if !vm.bodyFatLogs.isEmpty {
+                        BodyFatChartCard(logs: vm.bodyFatLogs)
+                    }
+
+                    if !vm.glp1History.isEmpty {
+                        GLP1DoseChartCard(logs: vm.glp1History)
+                    }
+
+                    if vm.loggedDays.isEmpty && !vm.isLoading {
+                        emptyState
                     }
                 }
+                .padding(Theme.Spacing.md)
+                .padding(.bottom, Theme.Spacing.xl)
+                .opacity(vm.isLoading ? 0.35 : 1)
+            }
+            .overlay {
+                if vm.isLoading { ProgressView() }
             }
             .navigationTitle("Analytics")
             .navigationBarTitleDisplayMode(.large)
@@ -263,9 +263,15 @@ private struct GLP1DoseChartCard: View {
                 .font(.headline)
 
             Chart(logs) { log in
+                // `series:` splits the line per medication. Without it, all logs joined into
+                // one connected line, so switching Ozempic 2.0 mg → Zepbound 2.5 mg drew a
+                // continuous step implying a dose continuity that doesn't exist — they're
+                // different molecules and the milligrams aren't comparable. The legend below
+                // already implied separate series.
                 LineMark(
                     x: .value("Date", log.injectedAt, unit: .day),
-                    y: .value("mg", log.doseMg)
+                    y: .value("mg", log.doseMg),
+                    series: .value("Medication", log.medication)
                 )
                 .foregroundStyle(color(for: log.medication))
                 .interpolationMethod(.stepEnd)
