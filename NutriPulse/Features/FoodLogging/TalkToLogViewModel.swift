@@ -10,6 +10,10 @@ final class TalkToLogViewModel {
     struct ConfirmRow: Identifiable {
         let id = UUID()
         var isIncluded = true
+        // Set once this row has landed in the local store. A partial failure used to leave
+        // every row included, so tapping "Log 3 items" again re-saved the ones that had
+        // already succeeded — with fresh UUIDs, so nothing deduped them.
+        var isSaved = false
         var name: String
         var brand: String?
         var servingDesc: String
@@ -46,6 +50,11 @@ final class TalkToLogViewModel {
 
     var hasParsed: Bool { !rows.isEmpty }
     var includedCount: Int { rows.filter(\.isIncluded).count }
+
+    // What a tap on "Log" would actually write — excludes rows already saved by a
+    // previous, partially-failed attempt.
+    var pendingRows: [ConfirmRow] { rows.filter { $0.isIncluded && !$0.isSaved } }
+    var pendingCount: Int { pendingRows.count }
 
     // Called from a "Parse" button — one Edge Function call runs Claude's full
     // decompose → search → resolve loop server-side and returns the finished rows.
@@ -86,26 +95,57 @@ final class TalkToLogViewModel {
     // Rows save concurrently (each is an independent food_items round-trip
     // followed by a local write) instead of one at a time — a 5-component
     // bowl no longer pays for 5 sequential network round-trips end to end.
+    //
+    // Each row reports its own outcome rather than the group throwing on the first
+    // failure. With a throwing group, one failed insert aborted logAll, the view showed
+    // "Couldn't save that log. Try again.", and the confirm card kept every row included —
+    // so the retry re-saved the rows that had already succeeded, under new UUIDs. Parse
+    // "chicken, rice, and beans", let one insert fail, tap Log twice, and two of the three
+    // foods are in the day twice.
     func logAll(on date: Date) async throws {
-        let included = rows.filter(\.isIncluded)
-        guard !included.isEmpty else { return }
+        let pending = pendingRows
+        guard !pending.isEmpty else { return }
         isLogging = true
         defer { isLogging = false }
 
         let userId = try await supabase.auth.session.user.id
         let meal = selectedMeal
 
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            for row in included {
+        var savedRowIds: Set<UUID> = []
+        var firstError: Error? = nil
+
+        await withTaskGroup(of: (UUID, Error?).self) { group in
+            for row in pending {
                 group.addTask {
-                    try await self.saveRow(row, userId: userId, meal: meal, date: date)
+                    do {
+                        try await self.saveRow(row, userId: userId, meal: meal, date: date)
+                        return (row.id, nil)
+                    } catch {
+                        return (row.id, error)
+                    }
                 }
             }
-            try await group.waitForAll()
+            for await (rowId, error) in group {
+                if let error {
+                    firstError = firstError ?? error
+                } else {
+                    savedRowIds.insert(rowId)
+                }
+            }
         }
 
-        SyncEngine.shared.refreshPendingCount()
-        Task { await SyncEngine.shared.pushPendingChanges() }
+        for index in rows.indices where savedRowIds.contains(rows[index].id) {
+            rows[index].isSaved = true
+        }
+
+        if !savedRowIds.isEmpty {
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+        }
+
+        // Surface the failure only after the successful rows are marked, so a retry picks
+        // up exactly the ones that didn't land.
+        if let firstError { throw firstError }
     }
 
     private func saveRow(_ row: ConfirmRow, userId: UUID, meal: Meal, date: Date) async throws {

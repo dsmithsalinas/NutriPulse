@@ -105,11 +105,13 @@ struct TalkToLogView: View {
                 if vm.isLogging {
                     ProgressView().tint(.white)
                 } else {
-                    Text(vm.includedCount == 1 ? "Log it" : "Log \(vm.includedCount) items")
+                    // pendingCount, not includedCount: after a partial failure the button
+                    // should offer to log only what didn't land.
+                    Text(vm.pendingCount == 1 ? "Log it" : "Log \(vm.pendingCount) items")
                 }
             }
             .buttonStyle(.brandPrimary)
-            .disabled(vm.isLogging || vm.includedCount == 0)
+            .disabled(vm.isLogging || vm.pendingCount == 0)
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.bottom, Theme.Spacing.sm)
             .background(.bar)
@@ -126,11 +128,16 @@ private struct ConfirmRowView: View {
             Button {
                 row.isIncluded.toggle()
             } label: {
-                Image(systemName: row.isIncluded ? "checkmark.circle.fill" : "circle")
+                // A saved row is locked: it's already in the day, and un-including it here
+                // wouldn't remove it.
+                Image(systemName: row.isSaved ? "checkmark.circle.fill"
+                                 : row.isIncluded ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(row.isIncluded ? Theme.Colors.primary : Color(.tertiaryLabel))
+                    .foregroundStyle(row.isSaved ? Color.green
+                                     : row.isIncluded ? Theme.Colors.primary : Color(.tertiaryLabel))
             }
             .buttonStyle(.plain)
+            .disabled(row.isSaved)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: Theme.Spacing.xs) {
@@ -147,24 +154,28 @@ private struct ConfirmRowView: View {
                             .clipShape(Capsule())
                     }
                 }
-                Text("\(Int(row.totalCalories)) kcal · \(row.servingDesc)")
+                Text(row.isSaved
+                     ? "Logged · \(Int(row.totalCalories.rounded())) kcal"
+                     : "\(Int(row.totalCalories.rounded())) kcal · \(row.servingDesc)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            HStack(spacing: 4) {
-                Text(row.quantity.formatted())
-                    .monospacedDigit()
-                    .font(.subheadline)
-                    .frame(width: 32, alignment: .trailing)
-                Stepper("", value: $row.quantity, in: 0.25...10, step: 0.25)
-                    .labelsHidden()
+            if !row.isSaved {
+                HStack(spacing: 4) {
+                    Text(row.quantity.formatted())
+                        .monospacedDigit()
+                        .font(.subheadline)
+                        .frame(width: 32, alignment: .trailing)
+                    Stepper("", value: $row.quantity, in: 0.25...10, step: 0.25)
+                        .labelsHidden()
+                }
             }
         }
         .padding(Theme.Spacing.sm)
         .card()
-        .opacity(row.isIncluded ? 1 : 0.4)
+        .opacity(row.isIncluded && !row.isSaved ? 1 : 0.4)
     }
 }
