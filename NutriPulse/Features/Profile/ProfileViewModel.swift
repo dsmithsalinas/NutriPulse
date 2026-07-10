@@ -1,6 +1,7 @@
 import Observation
 import Foundation
 import Supabase
+import UserNotifications
 
 @Observable
 @MainActor
@@ -12,6 +13,10 @@ final class ProfileViewModel {
     var isLoading                = false
     var errorMessage: String?    = nil
     var isDeletingAccount        = false
+
+    // Shot-day reminders
+    var remindersOn              = false
+    var showReminderDeniedAlert  = false
 
     // Sheet presentation flags
     var showEditProfile    = false
@@ -77,6 +82,39 @@ final class ProfileViewModel {
             glp1Logs     = logs
         } catch {
             errorMessage = error.localizedDescription
+        }
+        await refreshRemindersState()
+    }
+
+    // MARK: - Shot-day reminders
+
+    // "On" = permission granted AND glp1-* reminders actually pending, not just permission.
+    func refreshRemindersState() async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+            remindersOn = false
+            return
+        }
+        let pending = await center.pendingNotificationRequests()
+        remindersOn = pending.contains { $0.identifier.hasPrefix("glp1-") }
+    }
+
+    // Toggle target. Reverts and flags the denied case so the view can offer Settings.
+    func setReminders(_ on: Bool) async {
+        if on {
+            guard await NotificationManager.shared.requestPermissionIfNeeded() else {
+                remindersOn = false
+                showReminderDeniedAlert = true
+                return
+            }
+            if let due = nextInjectionDue {
+                await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: due)
+            }
+            remindersOn = true
+        } else {
+            NotificationManager.shared.cancelGLP1Reminders()
+            remindersOn = false
         }
     }
 

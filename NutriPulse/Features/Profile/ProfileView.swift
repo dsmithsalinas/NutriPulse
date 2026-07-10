@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ProfileView: View {
     @State private var vm = ProfileViewModel()
@@ -48,6 +49,16 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showGLP1Tracker) {
                 GLP1TrackerView()
+            }
+            .alert("Notifications are off", isPresented: $vm.showReminderDeniedAlert) {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("Not now", role: .cancel) { }
+            } message: {
+                Text("Turn on notifications for NutriPulse in Settings to get shot-day reminders.")
             }
             .sheet(isPresented: $vm.showSendFeedback) {
                 SendFeedbackSheet(vm: vm)
@@ -234,6 +245,13 @@ struct ProfileView: View {
                                 .foregroundStyle(.tertiary)
                         }
                     }
+                }
+
+                Toggle(isOn: Binding(
+                    get: { vm.remindersOn },
+                    set: { newValue in Task { await vm.setReminders(newValue) } }
+                )) {
+                    Label("Shot-day reminders", systemImage: "bell.badge")
                 }
 
                 Button {
