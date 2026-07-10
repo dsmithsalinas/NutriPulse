@@ -35,6 +35,7 @@ struct FoodLoggingView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.Colors.ground.ignoresSafeArea())
+            .tint(Theme.Colors.primary)
             .navigationTitle("Log Food")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Theme.Colors.ground, for: .navigationBar)

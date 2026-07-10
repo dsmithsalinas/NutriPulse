@@ -40,12 +40,14 @@ struct ManualEntryView: View {
 
             Section {
                 MacroField(label: "Calories",  value: $vm.calories,  unit: "kcal")
-                MacroField(label: "Protein",   value: $vm.proteinG,  unit: "g")
+                MacroField(label: "Protein",   value: $vm.proteinG,  unit: "g", accent: true)
                 MacroField(label: "Carbs",     value: $vm.carbsG,    unit: "g")
                 MacroField(label: "Fat",       value: $vm.fatG,      unit: "g")
                 MacroField(label: "Fiber",     value: $vm.fiberG,    unit: "g")
             } header: { Text("Nutrition per serving") }
         }
+        .scrollContentBackground(.hidden)
+        .listRowBackground(Theme.Colors.surfaceCard)
         .safeAreaInset(edge: .bottom) {
             logButton
         }
@@ -82,12 +84,15 @@ private struct MacroField: View {
     let label: String
     @Binding var value: Double
     let unit: String
+    var accent: Bool = false
 
     @State private var text: String = ""
 
     var body: some View {
         HStack {
             Text(label)
+                .fontWeight(accent ? .semibold : .regular)
+                .foregroundStyle(accent ? Theme.Colors.primary : .primary)
             Spacer()
             // Bound to a String, not a Double. TextField(value:format:) commits to its
             // binding only on submit or focus loss, and .decimalPad has no return key —

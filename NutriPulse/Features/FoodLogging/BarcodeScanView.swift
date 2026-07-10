@@ -101,7 +101,7 @@ struct BarcodeScanView: View {
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
+        .background(Theme.Colors.ground)
     }
 }
 

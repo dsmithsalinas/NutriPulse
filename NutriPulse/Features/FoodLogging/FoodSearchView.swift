@@ -22,8 +22,12 @@ struct FoodSearchView: View {
                 }
             }
             .padding(Theme.Spacing.sm)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .background(Theme.Colors.surfaceInset)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+            }
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.vertical, Theme.Spacing.sm)
 
@@ -84,6 +88,7 @@ struct FoodSearchView: View {
                         }
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             }
         }
@@ -240,6 +245,8 @@ struct FoodDetailSheet: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .listRowBackground(Theme.Colors.surfaceCard)
         .safeAreaInset(edge: .bottom) { logButton }
     }
 
@@ -289,6 +296,8 @@ private struct FavoritesQuickAddList: View {
             }
         }
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .listRowBackground(Theme.Colors.surfaceCard)
     }
 }
 
