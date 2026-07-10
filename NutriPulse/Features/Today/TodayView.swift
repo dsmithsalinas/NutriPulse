@@ -7,6 +7,7 @@ struct TodayView: View {
     let vm: TodayViewModel
     @State private var showBodyCompSheet = false
     @State private var showDatePicker = false
+    @State private var showGLP1 = false
     @State private var ringCelebrationTrigger = 0
     @State private var editingLog: FoodLog? = nil
     @Environment(\.scenePhase) private var scenePhase
@@ -38,7 +39,8 @@ struct TodayView: View {
                         onPrevious: vm.goToPreviousDay,
                         onNext: vm.goToNextDay,
                         onToday: vm.goToToday,
-                        onPickDate: { showDatePicker = true }
+                        onPickDate: { showDatePicker = true },
+                        onDoseTap: { showGLP1 = true }
                     )
                     .padding(.top, Theme.Spacing.sm)
 
@@ -138,6 +140,9 @@ struct TodayView: View {
                     vm.goTo(date: picked)
                 }
                 .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showGLP1) {
+                GLP1TrackerView()
             }
             .sheet(isPresented: $showBodyCompSheet) {
                 BodyCompositionSheet(

@@ -7,6 +7,7 @@ struct ProfileView: View {
     @AppStorage("chatHistoryVersion") private var chatHistoryVersion = 0
     @State private var showClearHistoryConfirm = false
     @State private var showDeleteAccountConfirm = false
+    @State private var showGLP1Tracker = false
 
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
@@ -44,6 +45,9 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $vm.showLogInjection) {
                 LogInjectionSheet(vm: vm)
+            }
+            .sheet(isPresented: $showGLP1Tracker) {
+                GLP1TrackerView()
             }
             .sheet(isPresented: $vm.showSendFeedback) {
                 SendFeedbackSheet(vm: vm)
@@ -204,6 +208,13 @@ struct ProfileView: View {
                         .foregroundStyle(Theme.Colors.primary)
                 }
             } else {
+                Button {
+                    showGLP1Tracker = true
+                } label: {
+                    Label("Protein floor & today", systemImage: "shield.lefthalf.filled")
+                        .foregroundStyle(Theme.Colors.primary)
+                }
+
                 if let last = vm.mostRecentInjection {
                     row(label: "Medication",
                         value: "\(last.medication) \(last.doseMg.formatted())mg")

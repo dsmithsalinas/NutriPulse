@@ -13,6 +13,7 @@ struct TodayHeaderView: View {
     let onNext: () -> Void
     let onToday: () -> Void
     let onPickDate: () -> Void
+    var onDoseTap: () -> Void = {}
 
     private var greeting: String {
         switch Calendar.current.component(.hour, from: .now) {
@@ -57,7 +58,8 @@ struct TodayHeaderView: View {
                 Spacer(minLength: 8)
 
                 if let dose = doseStatus {
-                    doseChip(dose)
+                    Button(action: onDoseTap) { doseChip(dose) }
+                        .buttonStyle(.pressable)
                 }
             }
 
