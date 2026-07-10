@@ -1,3 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NutriPulse — Coached, not scolded.</title>
+  <meta name="description" content="The nutrition coach that notices when you're winning. Effortless voice logging, protein-first tracking built for GLP-1, and a coach who tells you exactly what to do next. Coming to iPhone.">
+  <meta name="theme-color" content="#6366F1">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="NutriPulse — Coached, not scolded.">
+  <meta property="og:description" content="The anti-scorecard nutrition coach. Protein-first, built for GLP-1, and never here to make you feel small.">
+</head>
+<body>
 <style>
   :root {
     --ink:      #14163A;
@@ -140,6 +153,28 @@
   @media (prefers-reduced-motion: reduce) { body.intro-done .ring .prog { animation: none; } }
   .ring .num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
   .ring .lbl { font-size: 10px; color: var(--muted); font-weight: 600; }
+  /* protein-forward hero (matches the redesigned app: one big protein ring, calorie meter, macro chips) */
+  .hero-ring { position: relative; width: 150px; aspect-ratio: 1; margin: 2px auto; }
+  .hero-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .hero-ring .track { fill: none; stroke: color-mix(in srgb, var(--ink) 8%, transparent); stroke-width: 10; }
+  .hero-ring .prog { fill: none; stroke: url(#pgrad); stroke-width: 10; stroke-linecap: round; stroke-dasharray: 264; stroke-dashoffset: var(--off, 264); }
+  body.intro-done .hero-ring .prog { animation: draw 1.4s cubic-bezier(.2,.7,.2,1) both; animation-delay: .2s; }
+  @media (prefers-reduced-motion: reduce) { body.intro-done .hero-ring .prog { animation: none; } }
+  .hero-ring .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+  .hero-ring .kick { font-size: 8.5px; font-weight: 800; letter-spacing: .14em; color: var(--indigo); }
+  .hero-ring .big { font-family: var(--mono); font-size: 25px; font-weight: 700; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .hero-ring .big span { font-size: 12px; color: var(--muted); }
+  .hero-ring .sub { font-size: 9px; color: var(--muted); margin-top: 1px; }
+  .cal-meter .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 10.5px; margin-bottom: 5px; }
+  .cal-meter .row .l { color: var(--muted); font-weight: 600; }
+  .cal-meter .row .l b { color: var(--ink); }
+  .cal-meter .row .r { color: var(--warm); font-weight: 800; font-size: 10px; }
+  .cal-track { height: 7px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 8%, transparent); overflow: hidden; }
+  .cal-track > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #FBB072, var(--warm)); }
+  .macro-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .macro-chips .chip { background: color-mix(in srgb, var(--ink) 3%, #fff); border: 1px solid var(--line); border-radius: 12px; padding: 7px 4px 6px; text-align: center; }
+  .macro-chips .chip b { display: block; font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: -.02em; }
+  .macro-chips .chip span { font-size: 9px; color: var(--muted); }
   .card-mini { background: #fff; border: 1px solid var(--line); border-radius: 15px; padding: 12px 13px; box-shadow: 0 2px 8px -4px rgba(20,22,58,.08); }
   .food { display: flex; align-items: center; gap: 11px; }
   .food .thumb { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(150deg, color-mix(in srgb, var(--warm) 28%, #fff), color-mix(in srgb, var(--warm) 55%, #fff)); flex: none; display: grid; place-items: center; }
@@ -307,29 +342,39 @@
 
     <div class="phone-stage">
       <div class="glow" aria-hidden="true"></div>
-      <div class="phone" role="img" aria-label="NutriPulse Today screen: all four macro rings closed, a Chipotle bowl logged by voice, and a message from the coach celebrating a 142-gram protein day.">
+      <div class="phone" role="img" aria-label="NutriPulse Today screen: a protein ring at 142 of 185 grams, calories on track with 530 left, a meal logged by voice, and a message from the coach celebrating a strong protein day.">
         <div class="screen">
           <div class="notch" aria-hidden="true"></div>
           <div class="scr-pad">
             <div class="scr-head">
               <div><div class="day">THURSDAY · JUL 4</div><div class="ttl">Today</div></div>
-              <div class="voice-tag">● all rings closed</div>
+              <div class="voice-tag">● protein on track</div>
             </div>
-            <div class="rings">
-              <div class="ring"><div class="dial"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="prog" cx="50" cy="50" r="42" stroke="#FF8A5B" style="--off: 18; --d:.05s"/></svg><div class="num">1,940</div></div><div class="lbl">Cal</div></div>
-              <div class="ring"><div class="dial"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="prog" cx="50" cy="50" r="42" stroke="#6366F1" style="--off: 6; --d:.18s"/></svg><div class="num">142<span style="font-size:8px">g</span></div></div><div class="lbl">Protein</div></div>
-              <div class="ring"><div class="dial"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="prog" cx="50" cy="50" r="42" stroke="#8B5CF6" style="--off: 30; --d:.31s"/></svg><div class="num">168<span style="font-size:8px">g</span></div></div><div class="lbl">Carbs</div></div>
-              <div class="ring"><div class="dial"><svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="prog" cx="50" cy="50" r="42" stroke="#34D399" style="--off: 10; --d:.44s"/></svg><div class="num">31<span style="font-size:8px">g</span></div></div><div class="lbl">Fiber</div></div>
+            <div class="hero-ring">
+              <svg viewBox="0 0 100 100">
+                <defs><linearGradient id="pgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366F1"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs>
+                <circle class="track" cx="50" cy="50" r="42"/>
+                <circle class="prog" cx="50" cy="50" r="42" style="--off: 61"/>
+              </svg>
+              <div class="center">
+                <div class="kick">PROTEIN</div>
+                <div class="big">142<span>/185g</span></div>
+                <div class="sub">43g to go · 77%</div>
+              </div>
             </div>
-            <div class="card-mini food">
-              <div class="thumb"><i></i></div>
-              <div class="meta"><div class="name">Chipotle bowl</div><div class="sub">chicken · rice · pico · cheese</div></div>
-              <div class="cal">640</div>
+            <div class="cal-meter">
+              <div class="row"><span class="l">Calories <b>1,940</b> / 2,470</span><span class="r">530 left</span></div>
+              <div class="cal-track"><i style="width:78%"></i></div>
             </div>
-            <div class="voice-tag" style="margin-top:-6px">↑ logged by voice</div>
+            <div class="macro-chips">
+              <div class="chip"><b style="color:#8B5CF6">168g</b><span>Carbs</span></div>
+              <div class="chip"><b style="color:#F59E0B">52g</b><span>Fat</span></div>
+              <div class="chip"><b style="color:#34D399">31g</b><span>Fiber</span></div>
+            </div>
+            <div class="voice-tag">↑ logged by voice</div>
             <div class="pulse-msg">
               <div class="pulse-av" aria-hidden="true"></div>
-              <div class="bubble">You closed <b>every ring</b> — and hit 142g of protein on a shot day. That's genuinely hard. Keep this up. 🔥</div>
+              <div class="bubble">142g of protein with dinner still to go — on a shot day. That's genuinely hard when your appetite's gone. Keep this up. 🔥</div>
             </div>
           </div>
         </div>
@@ -396,16 +441,17 @@
       <div class="copy">
         <span class="n">03 — Earned celebration</span>
         <h3>It celebrates when you win.</h3>
-        <p>Nail your protein three days running? Close every ring? Pulse notices — because <span class="em">the moment you feel good about showing up</span> is the moment you come back tomorrow. That's the part every other app forgot.</p>
+        <p>Nail your protein three days running? Hit every goal before dinner? Pulse notices — because <span class="em">the moment you feel good about showing up</span> is the moment you come back tomorrow. That's the part every other app forgot.</p>
       </div>
       <div class="demo">
         <div class="celebrate">
           <div class="big-ring">
             <svg width="148" height="148" viewBox="0 0 100 100">
+              <defs><linearGradient id="cgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366F1"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs>
               <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(20,22,58,.09)" stroke-width="9"/>
-              <circle cx="50" cy="50" r="42" fill="none" stroke="#34D399" stroke-width="9" stroke-linecap="round"/>
+              <circle cx="50" cy="50" r="42" fill="none" stroke="url(#cgrad)" stroke-width="9" stroke-linecap="round"/>
             </svg>
-            <div class="center"><b>4/4</b><small>rings closed</small></div>
+            <div class="center"><small style="color:var(--indigo);margin-bottom:2px">Protein</small><b>185g</b><small>goal hit ✓</small></div>
           </div>
           <span class="streak">🔥 3-day protein streak — a first</span>
         </div>
@@ -533,3 +579,6 @@
     });
   })();
 </script>
+
+</body>
+</html>
