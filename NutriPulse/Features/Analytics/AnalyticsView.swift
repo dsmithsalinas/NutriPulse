@@ -20,6 +20,15 @@ struct AnalyticsView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    if !vm.loggedDays.isEmpty {
+                        AnalyticsSummaryCard(
+                            avgProtein:   vm.averageProteinG,
+                            goalProtein:  vm.goalProteinG,
+                            avgCalories:  vm.averageCalories,
+                            goalCalories: vm.goalCalories
+                        )
+                    }
+
                     CaloriesChartCard(
                         summaries:    vm.summaries,
                         goalCalories: vm.goalCalories,
@@ -52,15 +61,19 @@ struct AnalyticsView: View {
                 .padding(.bottom, Theme.Spacing.xl)
                 .opacity(vm.isLoading ? 0.35 : 1)
             }
+            .background(Theme.Colors.ground.ignoresSafeArea())
+            .scrollContentBackground(.hidden)
             .overlay {
                 if vm.isLoading { ProgressView() }
             }
             .navigationTitle("Analytics")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .task(id: vm.selectedRange) {
                 await vm.loadData()
             }
         }
+        .tint(Theme.Colors.primary)
     }
 
     private var emptyState: some View {
@@ -78,6 +91,73 @@ struct AnalyticsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(Theme.Spacing.xl)
+    }
+}
+
+// MARK: - Summary hero
+
+// Opens Analytics with the thesis, not a chart: average protein (the priority metric for a
+// GLP-1 user) as the hero, with average calories alongside.
+private struct AnalyticsSummaryCard: View {
+    let avgProtein: Double
+    let goalProtein: Double?
+    let avgCalories: Double
+    let goalCalories: Double?
+
+    private var proteinPct: Int? {
+        guard let g = goalProtein, g > 0, avgProtein > 0 else { return nil }
+        return Int((avgProtein / g * 100).rounded())
+    }
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            tile(
+                title: "AVG PROTEIN",
+                value: "\(Int(avgProtein.rounded()))g",
+                sub: proteinPct.map { "\($0)% of goal" } ?? "set a goal",
+                accent: Theme.Colors.primary,
+                hero: true
+            )
+            tile(
+                title: "AVG CALORIES",
+                value: "\(Int(avgCalories.rounded()))",
+                sub: goalCalories.map { "goal \(Int($0))" } ?? "—",
+                accent: Theme.NutrientColor.calories,
+                hero: false
+            )
+        }
+    }
+
+    private func tile(title: String, value: String, sub: String, accent: Color, hero: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(Theme.Colors.textFaint)
+            Text(value)
+                .font(.system(size: 30, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(hero ? AnyShapeStyle(Theme.Colors.primaryGradient) : AnyShapeStyle(Color.primary))
+            Text(sub)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.md)
+        .background {
+            ZStack {
+                Theme.Colors.surfaceCard
+                if hero {
+                    RadialGradient(colors: [accent.opacity(0.16), .clear],
+                                   center: .topLeading, startRadius: 4, endRadius: 170)
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+        }
     }
 }
 

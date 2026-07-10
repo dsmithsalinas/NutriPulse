@@ -26,6 +26,7 @@ final class AnalyticsViewModel {
     var bodyCompHistory: [BodyCompositionLog] = []
     var glp1History: [GLP1Log]               = []
     var goalCalories: Double?                 = nil
+    var goalProteinG: Double?                 = nil
 
     // `log_date` is written with the LOCAL calendar (Date.isoDateString) and must be read back
     // the same way. Parsing it as UTC midnight — `logDate + "T00:00:00Z"` — put a US Pacific
@@ -54,6 +55,11 @@ final class AnalyticsViewModel {
         return loggedDays.reduce(0) { $0 + $1.calories } / Double(loggedDays.count)
     }
 
+    var averageProteinG: Double {
+        guard !loggedDays.isEmpty else { return 0 }
+        return loggedDays.reduce(0) { $0 + $1.proteinG } / Double(loggedDays.count)
+    }
+
     var weightChange: Double? {
         guard weightLogs.count >= 2 else { return nil }
         return weightLogs.last!.weightKg - weightLogs.first!.weightKg
@@ -75,6 +81,7 @@ final class AnalyticsViewModel {
             bodyCompHistory  = bc
             glp1History      = glp1
             goalCalories     = g?.calories
+            goalProteinG     = g?.proteinG
         } catch {
             errorMessage = error.localizedDescription
         }
