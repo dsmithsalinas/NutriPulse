@@ -15,6 +15,7 @@ struct ProfileView: View {
             List {
                 headerSection
                 bodyStatsSection
+                measurementsSection
                 goalsSection
                 glp1Section
                 healthKitSection
@@ -141,12 +142,6 @@ struct ProfileView: View {
 
     private var bodyStatsSection: some View {
         Section("Body Stats") {
-            // The one global measurement setting — governs weight, height, and water everywhere.
-            Picker("Units", selection: $unitSystemRaw) {
-                Text("Metric (kg, cm, ml)").tag("metric")
-                Text("Imperial (lb, in, oz)").tag("imperial")
-            }
-
             if let w = vm.latestWeight {
                 row(label: "Weight", value: units.formatWeight(w.weightKg))
             }
@@ -162,6 +157,22 @@ struct ProfileView: View {
             }
             Button("Edit Stats") { vm.showEditProfile = true }
                 .foregroundStyle(Theme.Colors.primary)
+        }
+    }
+
+    // MARK: - Measurements
+
+    // One global setting for every unit in the app, with a footer that says what it touches.
+    private var measurementsSection: some View {
+        Section {
+            Picker("Units", selection: $unitSystemRaw) {
+                Text("Metric (kg, cm, ml)").tag("metric")
+                Text("Imperial (lb, in, oz)").tag("imperial")
+            }
+        } header: {
+            Text("Measurements")
+        } footer: {
+            Text("Sets the units used everywhere in NutriPulse — weight, height, body composition, and water.")
         }
     }
 
