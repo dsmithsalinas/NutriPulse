@@ -18,15 +18,18 @@ struct HealthStatsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Activity & Health")
-                .font(.headline)
+            Text("Today's signals")
+                .font(.system(size: 13, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(Theme.Colors.textFaint)
+                .textCase(.uppercase)
 
             // Three states, not two. Previously a user who denied Health access — or who
             // simply owns no Apple Watch — saw "Connect Apple Health" forever, and tapping
             // it visibly did nothing, because the only thing it could do was re-request a
             // permission iOS would never prompt for again.
             if hasAnyData {
-                dataRows
+                signalChips
             } else if hasRequestedAuthorization {
                 noDataRow
             } else {
@@ -37,40 +40,42 @@ struct HealthStatsCard: View {
         .card()
     }
 
-    // MARK: Data view
+    // MARK: Data view — compact chips, only for the signals we actually have.
 
-    @ViewBuilder
-    private var dataRows: some View {
-        if let activeCalories {
-            HStack(spacing: 0) {
-                statItem(
-                    icon: "flame.fill", iconColor: .orange,
-                    label: "Burned", value: "\(Int(activeCalories.rounded())) kcal"
-                )
-                Divider().frame(height: 36).padding(.horizontal, Theme.Spacing.sm)
-                statItem(
-                    icon: "arrow.up.arrow.down", iconColor: .secondary,
-                    label: "Net", value: "\(Int(netCalories.rounded())) kcal"
-                )
+    private var signalChips: some View {
+        let items: [(icon: String, color: Color, value: String, label: String)] = [
+            activeCalories.map { (icon: "flame.fill",         color: Color.orange, value: "\(Int($0.rounded()))", label: "ACTIVE") },
+            sleepHours.map     { (icon: "moon.fill",          color: Color.indigo, value: formatSleep($0),        label: "SLEEP") },
+            hrv.map            { (icon: "waveform.path.ecg",  color: Color.pink,   value: "\(Int($0))ms",         label: "HRV") },
+            restingHR.map      { (icon: "heart.fill",         color: Color.red,    value: "\(Int($0))",           label: "RESTING") },
+        ].compactMap { $0 }
+
+        return HStack(spacing: Theme.Spacing.sm) {
+            ForEach(items.indices, id: \.self) { i in
+                signalChip(items[i])
             }
         }
+    }
 
-        if hasActivityData && hasVitalsData {
-            Divider()
+    private func signalChip(_ item: (icon: String, color: Color, value: String, label: String)) -> some View {
+        VStack(spacing: 3) {
+            Image(systemName: item.icon)
+                .font(.system(size: 14))
+                .foregroundStyle(item.color)
+            Text(item.value)
+                .font(.system(size: 14, weight: .bold))
+                .monospacedDigit()
+            Text(item.label)
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.Colors.textFaint)
         }
-
-        if hasVitalsData {
-            HStack(spacing: Theme.Spacing.sm) {
-                if let hr = restingHR {
-                    vitalsItem(icon: "heart.fill", iconColor: .red, value: "\(Int(hr))", unit: "bpm")
-                }
-                if let hrv {
-                    vitalsItem(icon: "waveform.path.ecg", iconColor: .pink, value: "\(Int(hrv))", unit: "ms HRV")
-                }
-                if let sleep = sleepHours {
-                    vitalsItem(icon: "moon.fill", iconColor: .indigo, value: formatSleep(sleep), unit: "sleep")
-                }
-            }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(Theme.Colors.surfaceInset)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
         }
     }
 
@@ -118,43 +123,6 @@ struct HealthStatsCard: View {
             }
         }
         .buttonStyle(.plain)
-    }
-
-    // MARK: Sub-views
-
-    private func statItem(icon: String, iconColor: Color, label: String, value: String) -> some View {
-        HStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: icon)
-                .foregroundStyle(iconColor)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .monospacedDigit()
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func vitalsItem(icon: String, iconColor: Color, value: String, unit: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(iconColor)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(value)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .monospacedDigit()
-                Text(unit)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func formatSleep(_ hours: Double) -> String {

@@ -8,6 +8,7 @@ struct TodayHeaderView: View {
     let firstName: String
     let date: Date
     let isToday: Bool
+    let doseStatus: TodayViewModel.DoseStatus?
     let onPrevious: () -> Void
     let onNext: () -> Void
     let onToday: () -> Void
@@ -52,6 +53,12 @@ struct TodayHeaderView: View {
                 .buttonStyle(.plain)
 
                 arrow("chevron.right", action: onNext, disabled: isToday)
+
+                Spacer(minLength: 8)
+
+                if let dose = doseStatus {
+                    doseChip(dose)
+                }
             }
 
             if isToday {
@@ -73,6 +80,26 @@ struct TodayHeaderView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeInOut(duration: 0.18), value: isToday)
+    }
+
+    // Contextual GLP-1 chip: violet on dose day, orange when overdue.
+    private func doseChip(_ dose: TodayViewModel.DoseStatus) -> some View {
+        let tint = dose.urgent ? Color.orange : Theme.Colors.accent
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(tint)
+                .frame(width: 7, height: 7)
+                .shadow(color: tint.opacity(0.7), radius: 4)
+            Text(dose.text)
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(tint.opacity(0.14))
+        .clipShape(Capsule())
+        .overlay { Capsule().strokeBorder(tint.opacity(0.30), lineWidth: 1) }
+        .fixedSize()
     }
 
     private func arrow(_ system: String, action: @escaping () -> Void, disabled: Bool) -> some View {

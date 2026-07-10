@@ -34,6 +34,7 @@ struct TodayView: View {
                             .components(separatedBy: " ").first ?? "there",
                         date: vm.selectedDate,
                         isToday: vm.isToday,
+                        doseStatus: vm.doseStatus,
                         onPrevious: vm.goToPreviousDay,
                         onNext: vm.goToNextDay,
                         onToday: vm.goToToday,

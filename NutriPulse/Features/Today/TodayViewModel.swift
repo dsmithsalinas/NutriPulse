@@ -11,6 +11,11 @@ final class TodayViewModel {
     private let goalRepo     = GoalRepository()
     private let bodyCompRepo = BodyCompositionRepository()
     private let foodLogRepo  = FoodLogRepository()
+    private let glp1Repo     = GLP1Repository()
+
+    // Most recent GLP-1 injection, for the dose-day chip in the header. Fetched on load; the
+    // chip only surfaces on today, and only when a dose is due today or overdue.
+    var latestGLP1: GLP1Log? = nil
 
     var selectedDate: Date = .now
     // Whether `selectedDate` is the user's "today" rather than a day they
@@ -56,6 +61,21 @@ final class TodayViewModel {
     var sleepHours: Double?     = nil
 
     var netCalories: Double { totalCalories - (activeCalories ?? 0) }
+
+    // Dose-day chip content. Only on today, and only when the next dose is due today or has
+    // passed — the actionable states. On other days the header stays clean.
+    struct DoseStatus { let text: String; let urgent: Bool }
+
+    var doseStatus: DoseStatus? {
+        guard isToday, let log = latestGLP1, let due = log.nextDueAt else { return nil }
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day],
+                                      from: cal.startOfDay(for: .now),
+                                      to: cal.startOfDay(for: due)).day ?? 0
+        if days < 0 { return DoseStatus(text: "Dose overdue · \(log.medication)", urgent: true) }
+        if days == 0 { return DoseStatus(text: "Dose day · \(log.medication)", urgent: false) }
+        return nil
+    }
 
     // A supportive, forward-looking nudge for the current day when the user is pacing under
     // their targets. GLP-1 suppresses appetite, so under-eating (and losing muscle) is the real
@@ -114,6 +134,7 @@ final class TodayViewModel {
         defer { isLoading = false }
 
         async let bodyCompTask = buildBodyCompData()
+        async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
 
         do {
             let userId = try await supabase.auth.session.user.id
@@ -154,6 +175,7 @@ final class TodayViewModel {
 
         justClosedAllRings = !wasClosed && allRingsClosed
 
+        latestGLP1 = (try? await glp1Task)?.first
         bodyComp = await bodyCompTask
         await loadHealthData()
         await FavoritesStore.shared.loadIfNeeded()

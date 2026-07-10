@@ -123,8 +123,12 @@ extension ButtonStyle where Self == PrimaryButtonStyle {
 struct CardStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .background(Theme.Colors.surface)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            .background(Theme.Colors.surfaceCard)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+            }
     }
 }
 
