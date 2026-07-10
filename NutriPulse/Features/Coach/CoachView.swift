@@ -17,14 +17,15 @@ struct CoachView: View {
                 Divider()
                 inputBar
             }
+            .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Image("PulseMark")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
+                    HStack(spacing: 7) {
+                        PulseMark()
+                            .foregroundStyle(Theme.Colors.primary)
+                            .frame(width: 19, height: 19)
                         Text("Pulse")
                             .fontWeight(.semibold)
                     }
@@ -159,23 +160,27 @@ struct CoachView: View {
                 .textFieldStyle(.plain)
                 .lineLimit(1...4)
                 .focused($isInputFocused)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Theme.Colors.surfaceInset)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                }
 
             Button {
                 Task { await vm.sendMessage() }
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(sendButtonActive ? Theme.Colors.primary : Color.secondary)
+                    .font(.system(size: 30))
+                    .foregroundStyle(sendButtonActive ? AnyShapeStyle(Theme.Colors.primaryGradient) : AnyShapeStyle(Color.secondary))
             }
             .disabled(!sendButtonActive)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.background)
+        .background(Theme.Colors.surfaceCard)
     }
 
     private var sendButtonActive: Bool {
@@ -216,29 +221,37 @@ private struct MessageBubble: View {
 
     private var bubbleText: some View {
         Text(attributedContent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
             .background {
                 if message.isUser {
                     Theme.Colors.primaryGradient
                 } else {
-                    Theme.Colors.surface
+                    Theme.Colors.surfaceCard
                 }
             }
             .foregroundStyle(message.isUser ? .white : .primary)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                if !message.isUser {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                }
+            }
     }
 
-    private var pulseAvatar: some View {
-        ZStack {
-            Circle()
-                .fill(Theme.Colors.primary.opacity(0.12))
-                .frame(width: 28, height: 28)
-            Image("PulseMark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 16, height: 16)
-        }
+    private var pulseAvatar: some View { PulseAvatar() }
+}
+
+// The brand mark on a solid gradient tile — reads as an avatar, not the loading spinner the
+// bare ring used to look like mid-chat.
+private struct PulseAvatar: View {
+    var body: some View {
+        PulseMark()
+            .foregroundStyle(.white)
+            .padding(6)
+            .frame(width: 28, height: 28)
+            .background(Theme.Colors.primaryGradient, in: Circle())
     }
 }
 
@@ -272,15 +285,5 @@ private struct PulseTypingIndicator: View {
         }
     }
 
-    private var pulseAvatar: some View {
-        ZStack {
-            Circle()
-                .fill(Theme.Colors.primary.opacity(0.12))
-                .frame(width: 28, height: 28)
-            Image("PulseMark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 16, height: 16)
-        }
-    }
+    private var pulseAvatar: some View { PulseAvatar() }
 }
