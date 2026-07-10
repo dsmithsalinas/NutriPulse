@@ -84,6 +84,7 @@ final class AppState {
     private static let accountScopedDefaultsKeys = [
         "lastHKWeightSyncDate",
         "chatHistoryVersion",
+        "glp1PlannedDoseMg",
         AuthViewModel.pendingAppleFullNameKey,
     ]
 

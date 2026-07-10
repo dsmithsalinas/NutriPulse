@@ -7,7 +7,7 @@ struct TodayView: View {
     let vm: TodayViewModel
     @State private var showBodyCompSheet = false
     @State private var showDatePicker = false
-    @State private var showGLP1 = false
+    @State private var showRitual = false
     @State private var ringCelebrationTrigger = 0
     @State private var editingLog: FoodLog? = nil
     @Environment(\.scenePhase) private var scenePhase
@@ -35,12 +35,10 @@ struct TodayView: View {
                             .components(separatedBy: " ").first ?? "there",
                         date: vm.selectedDate,
                         isToday: vm.isToday,
-                        doseStatus: vm.doseStatus,
                         onPrevious: vm.goToPreviousDay,
                         onNext: vm.goToNextDay,
                         onToday: vm.goToToday,
-                        onPickDate: { showDatePicker = true },
-                        onDoseTap: { showGLP1 = true }
+                        onPickDate: { showDatePicker = true }
                     )
                     .padding(.top, Theme.Spacing.sm)
 
@@ -48,6 +46,19 @@ struct TodayView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity, minHeight: 200)
                     } else {
+                        // On dose day (or overdue), the shot comes to the front — a living-gradient
+                        // card that opens the injection ritual, instead of a chip buried in the header.
+                        // On dose day (or overdue), the shot comes to the front — a living-gradient
+                        // card that opens the injection ritual, instead of a chip buried in the header.
+                        if let dose = vm.doseStatus, let log = vm.latestGLP1 {
+                            DoseDayCard(
+                                medication: log.medication,
+                                doseText: "\(log.doseMg.glp1DoseString) mg",
+                                overdue: dose.urgent,
+                                onTap: { showRitual = true }
+                            )
+                        }
+
                         HeroNutritionCard(
                             calories: vm.totalCalories,
                             proteinG: vm.totalProteinG,
@@ -141,8 +152,10 @@ struct TodayView: View {
                 }
                 .presentationDetents([.medium])
             }
-            .sheet(isPresented: $showGLP1) {
-                GLP1TrackerView()
+            .fullScreenCover(isPresented: $showRitual) {
+                InjectionRitualView(latest: vm.latestGLP1) {
+                    Task { await vm.loadData() }
+                }
             }
             .sheet(isPresented: $showBodyCompSheet) {
                 BodyCompositionSheet(
