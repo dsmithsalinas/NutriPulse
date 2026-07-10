@@ -173,6 +173,15 @@ final class TodayViewModel {
 
         justClosedAllRings = !wasClosed && allRingsClosed
 
+        // Feed the protein-floor widget with today's numbers (only for the current day).
+        if isToday {
+            SharedStore.save(ProteinFloorSnapshot(
+                proteinToday: totalProteinG,
+                proteinGoal: dailyGoal?.proteinG ?? 0,
+                updatedAt: .now
+            ))
+        }
+
         latestGLP1 = (try? await glp1Task)?.first
         bodyComp = await bodyCompTask
         await loadHealthData()
