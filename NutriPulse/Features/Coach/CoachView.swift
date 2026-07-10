@@ -129,13 +129,14 @@ struct CoachView: View {
                     } label: {
                         Text(action)
                             .font(.caption)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Theme.Colors.primary.opacity(0.08))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Theme.Colors.primary.opacity(0.1))
                             .foregroundStyle(Theme.Colors.primary)
                             .clipShape(Capsule())
-                            .overlay(Capsule().strokeBorder(Theme.Colors.primary.opacity(0.25), lineWidth: 1))
+                            .overlay(Capsule().strokeBorder(Theme.Colors.primary.opacity(0.28), lineWidth: 1))
                     }
+                    .buttonStyle(.pressable)
                 }
             }
             .padding(.horizontal, 12)
