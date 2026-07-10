@@ -56,7 +56,7 @@
   <header>
     <div class="brand"><span class="dot"></span> NutriPulse</div>
     <h1>Privacy Policy</h1>
-    <div class="updated">Last updated: July 4, 2026</div>
+    <div class="updated">Last updated: July 10, 2026</div>
   </header>
 
   <p>This policy explains what information NutriPulse collects, how it's used, and who it's shared with. NutriPulse is a nutrition and wellness tracking app; some of what it handles — food logs, weight, GLP-1 medication schedules, and optional Apple Health data — is health information, so we've tried to be specific rather than generic here.</p>
@@ -66,7 +66,8 @@
     <table>
       <tr><th>Category</th><th>What</th></tr>
       <tr><td>Account</td><td>Email address, and name/sex/date of birth/activity level if you complete onboarding.</td></tr>
-      <tr><td>Nutrition &amp; activity logs</td><td>Food and water entries (manual, searched, scanned, or described in your own words to Pulse), daily macro/calorie goals, and body weight you log.</td></tr>
+      <tr><td>Nutrition &amp; activity logs</td><td>Food and water entries (manual, searched, scanned, or described in your own words to Pulse — typed or spoken), daily macro/calorie goals, and body weight you log.</td></tr>
+      <tr><td>Voice input (optional)</td><td>When you use the microphone to speak a food log, your speech is transcribed to text using Apple's Speech Recognition. We don't record or store the audio — only the resulting text becomes a log. Requires your microphone and speech-recognition permission.</td></tr>
       <tr><td>GLP-1 tracking</td><td>Medication, dose, injection site and timing — only if you choose to use this feature.</td></tr>
       <tr><td>Apple Health (optional)</td><td>Sleep, resting heart rate, heart rate variability, and active energy burned — only if you connect Apple Health, and only to show it to you and give Pulse context.</td></tr>
       <tr><td>Pulse chat</td><td>Messages you send to the in-app AI coach, and the responses it gives.</td></tr>
@@ -89,10 +90,10 @@
     <table>
       <tr><th>Provider</th><th>Purpose</th><th>What they receive</th></tr>
       <tr><td>Supabase</td><td>Database, authentication, file/edge-function hosting</td><td>All account and log data described above — this is where it's stored.</td></tr>
-      <tr><td>Anthropic (Claude)</td><td>Powers the Pulse AI coach and natural-language food logging</td><td>Your message plus the data-context snapshot described above, and the food description text you type when using talk-to-log.</td></tr>
+      <tr><td>Anthropic (Claude)</td><td>Powers the Pulse AI coach and natural-language food logging</td><td>Your message plus the data-context snapshot described above, and the food description you type or speak when using talk-to-log.</td></tr>
       <tr><td>FatSecret</td><td>Nutrition database for food search and barcode lookup</td><td>The food name or barcode you search for. Not your account identity.</td></tr>
       <tr><td>TelemetryDeck</td><td>Anonymous product analytics</td><td>Anonymous usage signals only — no log content, no messages, no personal identifiers.</td></tr>
-      <tr><td>Apple</td><td>Sign in with Apple, HealthKit, push notifications</td><td>Standard to those Apple frameworks; governed by Apple's own privacy terms.</td></tr>
+      <tr><td>Apple</td><td>Sign in with Apple, HealthKit, push notifications, Speech Recognition (voice food logging)</td><td>Standard to those Apple frameworks; governed by Apple's own privacy terms. Spoken food logs are transcribed by Apple's Speech Recognition.</td></tr>
     </table>
   </div>
 
