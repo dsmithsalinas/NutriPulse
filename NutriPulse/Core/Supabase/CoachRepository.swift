@@ -10,7 +10,11 @@ struct CoachRepository {
         // PostgrestTransformBuilder, which has no .lt.
         var query = supabase.from("coach_messages").select()
         if let before {
-            query = query.lt("created_at", value: before.ISO8601Format())
+            // Fractional seconds matter: created_at is timestamptz (microseconds), and
+            // whole-second ISO8601Format() truncates the boundary down, excluding every
+            // message in [floor(second), before). Coach messages save in rapid user/assistant
+            // pairs that share a second, so the paired message would become unreachable.
+            query = query.lt("created_at", value: before.ISO8601Format(.init(includingFractionalSeconds: true)))
         }
 
         let results: [CoachMessage] = try await query

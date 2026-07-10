@@ -167,8 +167,16 @@ final class ProfileViewModel {
             .single()
             .execute()
             .value
-        glp1Logs.insert(saved, at: 0)
-        await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
+        // The sheet allows backdating, so the saved log is NOT necessarily the newest.
+        // Keep glp1Logs sorted newest-first (mostRecentInjection = glp1Logs.first drives the
+        // Profile card), and schedule reminders from the TRUE latest dose — rescheduling from
+        // a backfilled older dose would cancel the valid upcoming reminders and replace them
+        // with past-dated ones that never fire.
+        glp1Logs.append(saved)
+        glp1Logs.sort { $0.injectedAt > $1.injectedAt }
+        if let latestDue = glp1Logs.first?.nextDueAt {
+            await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: latestDue)
+        }
     }
 
     // MARK: - Feedback

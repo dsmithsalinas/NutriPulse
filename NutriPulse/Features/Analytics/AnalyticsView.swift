@@ -3,6 +3,8 @@ import Charts
 
 struct AnalyticsView: View {
     @State private var vm = AnalyticsViewModel()
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
     var body: some View {
         NavigationStack {
@@ -29,7 +31,8 @@ struct AnalyticsView: View {
                     if !vm.weightLogs.isEmpty {
                         WeightChartCard(
                             logs:   vm.weightLogs,
-                            change: vm.weightChange
+                            change: vm.weightChange,
+                            units:  units
                         )
                     }
 
@@ -375,6 +378,11 @@ private struct GLP1DoseChartCard: View {
 private struct WeightChartCard: View {
     let logs: [WeightLog]
     let change: Double?
+    let units: UnitSystem
+
+    // weightInput is linear (kg or kg·2.20462), so it converts a delta as correctly as an
+    // absolute value. Sign is preserved, so the green/orange test still keys off raw `change`.
+    private var unit: String { units.weightUnit }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -383,7 +391,7 @@ private struct WeightChartCard: View {
                     .font(.headline)
                 Spacer()
                 if let change {
-                    Text(String(format: "%+.1f kg", change))
+                    Text(String(format: "%+.1f \(unit)", units.weightInput(from: change)))
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(change <= 0 ? .green : .orange)
@@ -393,14 +401,14 @@ private struct WeightChartCard: View {
             Chart(logs) { log in
                 LineMark(
                     x: .value("Date", log.loggedAt, unit: .day),
-                    y: .value("kg", log.weightKg)
+                    y: .value(unit, units.weightInput(from: log.weightKg))
                 )
                 .foregroundStyle(Theme.NutrientColor.protein)
                 .interpolationMethod(.catmullRom)
 
                 PointMark(
                     x: .value("Date", log.loggedAt, unit: .day),
-                    y: .value("kg", log.weightKg)
+                    y: .value(unit, units.weightInput(from: log.weightKg))
                 )
                 .foregroundStyle(Theme.NutrientColor.protein)
                 .symbolSize(40)

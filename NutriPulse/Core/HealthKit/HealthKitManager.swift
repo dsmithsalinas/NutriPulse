@@ -170,7 +170,7 @@ final class HealthKitManager {
                     continuation.resume(returning: nil)
                     return
                 }
-                let totalSeconds = samples
+                let asleepIntervals = samples
                     .filter { sample in
                         guard let value = HKCategoryValueSleepAnalysis(rawValue: sample.value) else { return false }
                         switch value {
@@ -178,11 +178,37 @@ final class HealthKitManager {
                         default: return false
                         }
                     }
-                    .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
+                    .map { (start: $0.startDate, end: $0.endDate) }
+                // Merge overlaps rather than summing every sample: Apple Watch and a sleep
+                // app (AutoSleep, Oura, Whoop) each write their own asleep samples for the
+                // same night, so a plain sum double-counts and can report ~14h for a 7h night.
+                let totalSeconds = Self.mergedDuration(of: asleepIntervals)
                 continuation.resume(returning: totalSeconds > 0 ? totalSeconds / 3600 : nil)
             }
             self.store.execute(query)
         }
+    }
+
+    // Total time covered by a set of (possibly overlapping) [start, end) intervals, counting
+    // any overlapping stretch once. Sort by start, then sweep, extending the current run
+    // while the next interval starts before the run ends.
+    nonisolated static func mergedDuration(of intervals: [(start: Date, end: Date)]) -> TimeInterval {
+        let sorted = intervals.filter { $0.end > $0.start }.sorted { $0.start < $1.start }
+        guard let first = sorted.first else { return 0 }
+        var total: TimeInterval = 0
+        var runStart = first.start
+        var runEnd   = first.end
+        for interval in sorted.dropFirst() {
+            if interval.start > runEnd {
+                total += runEnd.timeIntervalSince(runStart)
+                runStart = interval.start
+                runEnd   = interval.end
+            } else if interval.end > runEnd {
+                runEnd = interval.end
+            }
+        }
+        total += runEnd.timeIntervalSince(runStart)
+        return total
     }
 
     // MARK: - Body Composition (most recent sample regardless of date)

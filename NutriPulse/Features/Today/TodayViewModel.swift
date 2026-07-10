@@ -10,6 +10,7 @@ import Foundation
 final class TodayViewModel {
     private let goalRepo     = GoalRepository()
     private let bodyCompRepo = BodyCompositionRepository()
+    private let foodLogRepo  = FoodLogRepository()
 
     var selectedDate: Date = .now
     // Whether `selectedDate` is the user's "today" rather than a day they
@@ -100,6 +101,22 @@ final class TodayViewModel {
                     dailyGoal   = goal
                     waterGoalMl = goal.waterMlTarget
                     try? LocalStore.shared.upsertGoal(goal)
+                }
+            }
+
+            // The sync engine only pulls the last 7 days into LocalStore, but the date
+            // navigator scrolls back indefinitely. For an older day, an empty local result
+            // means "never cached", not "nothing logged" — and Analytics (which queries
+            // Supabase directly) would show real food for that same day. Fetch on demand and
+            // cache it so the day isn't wrongly rendered as an empty "No food logged yet".
+            if foodLogs.isEmpty {
+                let cal = Calendar.current
+                let windowStart = cal.date(byAdding: .day, value: -7, to: cal.startOfDay(for: .now))!
+                if selectedDate < windowStart,
+                   let remote = try? await foodLogRepo.fetchLogs(for: selectedDate),
+                   !remote.isEmpty {
+                    foodLogs = remote
+                    for log in remote { try? LocalStore.shared.upsertFoodLog(from: log) }
                 }
             }
         } catch {

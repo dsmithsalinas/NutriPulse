@@ -278,6 +278,11 @@ final class OnboardingViewModel {
         // The name now lives on the profile row; the one-shot Apple stash has done its job.
         UserDefaults.standard.removeObject(forKey: AuthViewModel.pendingAppleFullNameKey)
 
+        // Persist the unit choice to the app-wide @AppStorage("unitSystem") key that
+        // Today/Profile/BodyComposition read. Without this, a user who onboarded in imperial
+        // (the US default) landed on a metric UI until they found the Profile units picker.
+        UserDefaults.standard.set(useImperialUnits ? "imperial" : "metric", forKey: "unitSystem")
+
         return savedProfile
     }
 }
