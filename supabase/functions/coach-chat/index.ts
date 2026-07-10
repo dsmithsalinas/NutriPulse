@@ -1,6 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
+// Per-request input caps (cost bounding — see the check in the handler).
+const MAX_MESSAGE_CHARS = 4000
+const MAX_CONTEXT_CHARS = 20000
+const MAX_HISTORY_ITEMS = 40
+const MAX_HISTORY_ITEM_CHARS = 8000
+
 const PULSE_SYSTEM_PROMPT = `You are Pulse, the AI nutrition and wellness coach inside NutriPulse.
 
 IDENTITY
@@ -68,9 +74,26 @@ Deno.serve(async (req) => {
 
     const { message, messageType = 'chat', history = [], context } = await req.json()
 
-    if (!message) {
+    if (typeof message !== 'string' || message.trim() === '') {
       return new Response(JSON.stringify({ error: 'message required' }), {
         status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Bound the per-request cost. A JWT is required (above), but sign-up is open, so without
+    // caps one throwaway account can loop this with a giant message/history/context and run up
+    // the Anthropic bill. These clamp a single call; per-user RATE limiting (calls/minute) is a
+    // separate follow-up that needs a usage table + deploy.
+    if (message.length > MAX_MESSAGE_CHARS) {
+      return new Response(JSON.stringify({ error: 'message too long' }), {
+        status: 413,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    if (context !== undefined && JSON.stringify(context).length > MAX_CONTEXT_CHARS) {
+      return new Response(JSON.stringify({ error: 'context too large' }), {
+        status: 413,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -92,13 +115,17 @@ Deno.serve(async (req) => {
     // is already persisted, repeats on every retry until the check-in falls out of
     // the window. Drop leading assistant turns, and defensively reject rows that
     // aren't well-formed user/assistant messages.
-    const cleanHistory = (history as { role: string; content: string }[])
+    const cleanHistory = (Array.isArray(history) ? history as { role: string; content: string }[] : [])
       .filter(
         (m) =>
           (m.role === 'user' || m.role === 'assistant') &&
           typeof m.content === 'string' &&
           m.content.trim() !== ''
       )
+      // Keep only the most recent turns, and cap each turn's length, so a padded history
+      // can't blow past the per-request budget.
+      .slice(-MAX_HISTORY_ITEMS)
+      .map((m) => ({ role: m.role, content: m.content.slice(0, MAX_HISTORY_ITEM_CHARS) }))
     const firstUserIdx = cleanHistory.findIndex((m) => m.role === 'user')
     const trimmedHistory = firstUserIdx === -1 ? [] : cleanHistory.slice(firstUserIdx)
 

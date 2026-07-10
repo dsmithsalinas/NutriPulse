@@ -56,7 +56,7 @@ struct AuthView: View {
             // AuthenticationServices. The .onCompletion closure receives Result<ASAuthorization,Error>
             // — Swift's Result type is like Promise resolve/reject in a single enum.
             SignInWithAppleButton(vm.isSignUp ? .signUp : .signIn) { request in
-                request.requestedScopes = [.fullName, .email]
+                vm.prepareAppleRequest(request)
             } onCompletion: { result in
                 Task { await vm.handleAppleSignIn(result: result) }
             }

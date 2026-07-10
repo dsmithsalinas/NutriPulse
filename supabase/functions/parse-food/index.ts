@@ -205,6 +205,8 @@ async function resolveItem(item: {
 }
 
 const MAX_TURNS = 8
+// A meal description is a sentence or two; anything past this is abuse, not a log.
+const MAX_INPUT_CHARS = 2000
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -226,9 +228,18 @@ Deno.serve(async (req) => {
     }
 
     const { text } = await req.json()
-    if (!text?.trim()) {
+    if (typeof text !== 'string' || !text.trim()) {
       return new Response(JSON.stringify({ error: 'text required' }), {
         status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    // Cap the input: each parse can run up to MAX_TURNS Claude calls plus FatSecret lookups,
+    // so an oversized description is the most expensive thing an authenticated caller can
+    // submit. A meal description well under this is plenty.
+    if (text.length > MAX_INPUT_CHARS) {
+      return new Response(JSON.stringify({ error: 'text too long' }), {
+        status: 413,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }

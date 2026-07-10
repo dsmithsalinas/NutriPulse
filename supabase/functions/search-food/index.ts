@@ -55,8 +55,10 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (err) {
+    // Log the detail server-side; return a generic message so upstream (FatSecret) error
+    // bodies and internal failure detail don't leak to clients — matching coach-chat/parse-food.
     console.error(err)
-    return new Response(JSON.stringify({ error: String(err) }), {
+    return new Response(JSON.stringify({ error: 'Internal error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
