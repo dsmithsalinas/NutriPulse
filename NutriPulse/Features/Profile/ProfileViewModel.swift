@@ -139,6 +139,11 @@ final class ProfileViewModel {
             .execute()
             .value
         goal = saved
+        // Today reads the goal from LocalStore first and only hits the network on a cache
+        // miss — so without writing the cache here, the rings/remaining/water target keep
+        // showing the OLD targets until the next foreground sync heals the cache. Mirror
+        // the write TodayViewModel does on its own cache-miss fetch.
+        try? LocalStore.shared.upsertGoal(saved)
     }
 
     // MARK: - GLP-1 logging

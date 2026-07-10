@@ -351,12 +351,18 @@ private struct EditProfileSheet: View {
     @State private var name          = ""
     @State private var dob           = Date()
     @State private var sex           = BiologicalSex.male
-    @State private var heightCm      = 170.0
-    @State private var heightFeet    = 5.0
-    @State private var heightInches  = 7.0
-    @State private var activity      = ActivityLevel.moderate
-    @State private var logWeight     = false
-    @State private var weightInput   = 70.0   // in user's preferred unit
+    // String-backed, not `TextField(value:format:)`. A value-bound numeric field commits to
+    // its binding only on submit or focus loss, and a number pad has no return key — so
+    // tapping Save with the keyboard still up wrote the OLD height/weight into the profile,
+    // HealthKit, and the BMR recalc. Binding plain strings and parsing on save (the
+    // DecimalInput pattern used in BodyCompositionSheet / ManualEntryView) avoids the trap.
+    @State private var heightCmText     = ""
+    @State private var heightFeetText   = ""
+    @State private var heightInchesText = ""
+    @State private var activity         = ActivityLevel.moderate
+    @State private var logWeight        = false
+    @State private var weightText       = ""   // in user's preferred unit
+    @FocusState private var fieldFocused: Bool
     @State private var isSaving      = false
 
     // Matches DobStepView: at least 13 (App Store minimum), at most 120.
@@ -404,14 +410,16 @@ private struct EditProfileSheet: View {
                         HStack {
                             Text("Height")
                             Spacer()
-                            TextField("ft", value: $heightFeet, format: .number)
+                            TextField("ft", text: $heightFeetText)
                                 .multilineTextAlignment(.trailing)
                                 .keyboardType(.numberPad)
+                                .focused($fieldFocused)
                                 .frame(width: 36)
                             Text("ft").foregroundStyle(.secondary)
-                            TextField("in", value: $heightInches, format: .number)
+                            TextField("in", text: $heightInchesText)
                                 .multilineTextAlignment(.trailing)
                                 .keyboardType(.numberPad)
+                                .focused($fieldFocused)
                                 .frame(width: 36)
                             Text("in").foregroundStyle(.secondary)
                         }
@@ -419,9 +427,10 @@ private struct EditProfileSheet: View {
                         HStack {
                             Text("Height")
                             Spacer()
-                            TextField("cm", value: $heightCm, format: .number)
+                            TextField("cm", text: $heightCmText)
                                 .multilineTextAlignment(.trailing)
                                 .keyboardType(.decimalPad)
+                                .focused($fieldFocused)
                                 .frame(width: 60)
                             Text("cm").foregroundStyle(.secondary)
                         }
@@ -440,8 +449,9 @@ private struct EditProfileSheet: View {
                     Toggle("Log today's weight", isOn: $logWeight)
                     if logWeight {
                         HStack {
-                            TextField(units.weightUnit, value: $weightInput, format: .number)
+                            TextField(units.weightUnit, text: $weightText)
                                 .keyboardType(.decimalPad)
+                                .focused($fieldFocused)
                             Text(units.weightUnit).foregroundStyle(.secondary)
                         }
                     }
@@ -456,6 +466,10 @@ private struct EditProfileSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { Task { await save() } }
                         .disabled(isSaving || name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { fieldFocused = false }
                 }
             }
             .onAppear { prefill() }
@@ -494,13 +508,17 @@ private struct EditProfileSheet: View {
         if let s = vm.profile?.sex { sex = BiologicalSex(rawValue: s) ?? .male }
         if let a = vm.profile?.activityLevel { activity = ActivityLevel(rawValue: a) ?? .moderate }
 
-        let storedCm = vm.profile?.heightCm ?? 170
-        heightCm     = storedCm
-        heightFeet   = units.feetFrom(storedCm)
-        heightInches = units.inchesFrom(storedCm)
+        let storedCm     = vm.profile?.heightCm ?? 170
+        heightCmText     = DecimalInput.text(from: storedCm)
+        heightFeetText   = DecimalInput.text(from: units.feetFrom(storedCm))
+        heightInchesText = DecimalInput.text(from: units.inchesFrom(storedCm))
 
-        let storedKg  = vm.latestWeight?.weightKg ?? 70
-        weightInput   = units.weightInput(from: storedKg)
+        let storedKg = vm.latestWeight?.weightKg ?? 70
+        weightText   = DecimalInput.text(from: units.weightInput(from: storedKg))
+    }
+
+    private func parse(_ text: String) -> Double {
+        DecimalInput.value(from: DecimalInput.sanitize(text.trimmingCharacters(in: .whitespaces)))
     }
 
     private func save() async {
@@ -508,12 +526,26 @@ private struct EditProfileSheet: View {
         defer { isSaving = false }
 
         // Pass the stored height so an untouched imperial field round-trips exactly
-        // instead of being rewritten to the nearest whole inch.
-        let storedCm = vm.profile?.heightCm ?? heightCm
-        let finalHeightCm = units == .imperial
-            ? units.cmFrom(feet: heightFeet, inches: heightInches, unchangedFrom: storedCm)
-            : heightCm
-        let finalWeightKg = units.kgFrom(weightInput)
+        // instead of being rewritten to the nearest whole inch. An empty field parses to 0;
+        // fall back to the stored height rather than writing a nonsense 0 cm.
+        let storedCm = vm.profile?.heightCm ?? 170
+        let finalHeightCm: Double
+        if units == .imperial {
+            let feet = parse(heightFeetText)
+            let inches = parse(heightInchesText)
+            finalHeightCm = (feet <= 0 && inches <= 0)
+                ? storedCm
+                : units.cmFrom(feet: feet, inches: inches, unchangedFrom: storedCm)
+        } else {
+            let entered = parse(heightCmText)
+            finalHeightCm = entered > 0 ? entered : storedCm
+        }
+
+        // Only actually log a weight when the toggle is on AND a real value was entered;
+        // an empty field must not write 0 kg to weight_logs / HealthKit / the recalc.
+        let enteredWeight = parse(weightText)
+        let willLogWeight = logWeight && enteredWeight > 0
+        let finalWeightKg = units.kgFrom(enteredWeight)
 
         // Snapshot the old stats before the update overwrites them.
         let oldProfile = vm.profile
@@ -528,13 +560,13 @@ private struct EditProfileSheet: View {
         )
         do {
             try await vm.updateProfile(update)
-            if logWeight { try await vm.logWeight(finalWeightKg) }
+            if willLogWeight { try await vm.logWeight(finalWeightKg) }
 
             if let suggestion = recalcSuggestion(
                 oldProfile: oldProfile,
                 oldWeightKg: oldWeightKg,
                 newHeightCm: finalHeightCm,
-                newWeightKg: logWeight ? finalWeightKg : oldWeightKg
+                newWeightKg: willLogWeight ? finalWeightKg : oldWeightKg
             ) {
                 pendingRecalc = suggestion   // the alert dismisses us
             } else {

@@ -119,7 +119,14 @@ private struct CaloriesChartCard: View {
                     RuleMark(y: .value("Goal", goal))
                         .foregroundStyle(.secondary.opacity(0.6))
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
-                        .annotation(position: .topLeading) {
+                        // overflowResolution keeps the label inside the plot area — at
+                        // .topLeading it used to spill past the left edge and render clipped
+                        // ("oal" instead of "Goal").
+                        .annotation(
+                            position: .top,
+                            alignment: .leading,
+                            overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        ) {
                             Text("Goal")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
@@ -257,40 +264,32 @@ private struct GLP1DoseChartCard: View {
         return Self.palette[idx % Self.palette.count]
     }
 
+    // A titration "curve" needs at least two doses. With one, Swift Charts' automatic
+    // domain degenerates: the y-axis inverts (higher dose plots lower) and a single-day
+    // x-domain renders hours-of-the-day ticks — which is exactly what a just-started GLP-1
+    // user, the person this card is FOR, sees. Show an encouraging summary until there's a
+    // real trend to plot.
+    private var hasTrend: Bool { logs.count >= 2 }
+
+    // An explicit ascending domain, padded around the logged doses, so the axis can never
+    // invert and a flat (same-dose) stretch still reads sensibly.
+    private var doseDomain: ClosedRange<Double> {
+        let doses = logs.map(\.doseMg)
+        let lo = max(0, (doses.min() ?? 0) - 0.5)
+        let hi = (doses.max() ?? 1) + 0.5
+        return lo...(hi > lo ? hi : lo + 1)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("GLP-1 Dose Titration")
+            Text(hasTrend ? "GLP-1 Dose Titration" : "GLP-1 Dose")
                 .font(.headline)
 
-            Chart(logs) { log in
-                // `series:` splits the line per medication. Without it, all logs joined into
-                // one connected line, so switching Ozempic 2.0 mg → Zepbound 2.5 mg drew a
-                // continuous step implying a dose continuity that doesn't exist — they're
-                // different molecules and the milligrams aren't comparable. The legend below
-                // already implied separate series.
-                LineMark(
-                    x: .value("Date", log.injectedAt, unit: .day),
-                    y: .value("mg", log.doseMg),
-                    series: .value("Medication", log.medication)
-                )
-                .foregroundStyle(color(for: log.medication))
-                .interpolationMethod(.stepEnd)
-
-                PointMark(
-                    x: .value("Date", log.injectedAt, unit: .day),
-                    y: .value("mg", log.doseMg)
-                )
-                .foregroundStyle(color(for: log.medication))
-                .symbolSize(40)
+            if hasTrend {
+                chart
+            } else {
+                singleDoseSummary
             }
-            .chartYAxis {
-                AxisMarks { value in
-                    AxisValueLabel("\(value.as(Double.self)?.glp1DoseString ?? "")mg")
-                    AxisGridLine()
-                }
-            }
-            .chartYScale(domain: .automatic(includesZero: false))
-            .frame(height: 160)
 
             if sortedMedications.count > 1 {
                 HStack(spacing: Theme.Spacing.sm) {
@@ -309,6 +308,65 @@ private struct GLP1DoseChartCard: View {
         }
         .padding(Theme.Spacing.md)
         .card()
+    }
+
+    private var chart: some View {
+        Chart(logs) { log in
+            // `series:` splits the line per medication. Without it, all logs joined into
+            // one connected line, so switching Ozempic 2.0 mg → Zepbound 2.5 mg drew a
+            // continuous step implying a dose continuity that doesn't exist — they're
+            // different molecules and the milligrams aren't comparable. The legend below
+            // already implied separate series.
+            LineMark(
+                x: .value("Date", log.injectedAt, unit: .day),
+                y: .value("mg", log.doseMg),
+                series: .value("Medication", log.medication)
+            )
+            .foregroundStyle(color(for: log.medication))
+            .interpolationMethod(.stepEnd)
+
+            PointMark(
+                x: .value("Date", log.injectedAt, unit: .day),
+                y: .value("mg", log.doseMg)
+            )
+            .foregroundStyle(color(for: log.medication))
+            .symbolSize(40)
+        }
+        .chartYAxis {
+            AxisMarks { value in
+                AxisValueLabel("\(value.as(Double.self)?.glp1DoseString ?? "")mg")
+                AxisGridLine()
+            }
+        }
+        .chartYScale(domain: doseDomain)
+        .frame(height: 160)
+    }
+
+    // Shown until a second dose exists. Leads with the current dose and frames the empty
+    // chart as something that fills in — not a failure, not "no data".
+    private var singleDoseSummary: some View {
+        let latest = logs.max(by: { $0.injectedAt < $1.injectedAt })
+        return VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            if let latest {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(latest.doseMg.glp1DoseString) mg")
+                        .font(Theme.Typography.title)
+                        .foregroundStyle(color(for: latest.medication))
+                    Text(latest.medication)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Text("Current dose · started \(latest.injectedAt.formatted(.dateTime.month().day()))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text("Your titration curve builds here as you log each dose.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, Theme.Spacing.xs)
     }
 }
 
