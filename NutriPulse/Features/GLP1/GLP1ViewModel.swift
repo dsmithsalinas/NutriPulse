@@ -9,12 +9,15 @@ import UserNotifications
 @Observable
 @MainActor
 final class GLP1ViewModel {
+    enum ReminderState { case on, off, denied }
+
     var latest: GLP1Log?      = nil
     var proteinToday: Double  = 0
     var proteinGoal: Double   = 0
     var waterMl: Double       = 0
     var waterGoalMl: Double   = 2000
-    var remindersEnabled      = false
+    var reminderState: ReminderState = .off
+    var isBusyReminders       = false
     var isLoading             = false
 
     private let glp1Repo = GLP1Repository()
@@ -24,9 +27,7 @@ final class GLP1ViewModel {
         isLoading = true
         defer { isLoading = false }
 
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        remindersEnabled = settings.authorizationStatus == .authorized
-                        || settings.authorizationStatus == .provisional
+        await refreshReminderState()
 
         guard let userId = try? await supabase.auth.session.user.id else { return }
 
@@ -46,6 +47,46 @@ final class GLP1ViewModel {
         }
 
         latest = (try? await glp1Task)?.first
+    }
+
+    // MARK: Reminders
+
+    // "On" means both permission is granted AND shot-day reminders are actually scheduled —
+    // permission alone isn't enough, since the reminders are only laid down when we enable them
+    // here or when an injection is logged.
+    func refreshReminderState() async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .denied:
+            reminderState = .denied
+        case .authorized, .provisional:
+            let pending = await center.pendingNotificationRequests()
+            reminderState = pending.contains { $0.identifier.hasPrefix("glp1-") } ? .on : .off
+        default:
+            reminderState = .off
+        }
+    }
+
+    // Returns false when permission was refused, so the view can route the user to Settings.
+    @discardableResult
+    func enableReminders() async -> Bool {
+        isBusyReminders = true
+        defer { isBusyReminders = false }
+        guard await NotificationManager.shared.requestPermissionIfNeeded() else {
+            reminderState = .denied
+            return false
+        }
+        if let due = nextDue {
+            await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: due)
+        }
+        reminderState = .on
+        return true
+    }
+
+    func disableReminders() {
+        NotificationManager.shared.cancelGLP1Reminders()
+        reminderState = .off
     }
 
     // MARK: Derived

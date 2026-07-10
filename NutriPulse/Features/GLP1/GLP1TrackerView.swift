@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // The GLP-1 screen the marketing promises, made real: dose status, a protein "floor" that
 // protects muscle (not a ceiling to stay under), hydration, and schedule-aware coach guidance.
@@ -79,19 +80,51 @@ struct GLP1TrackerView: View {
     }
 
     private var reminderPill: some View {
-        let on = vm.remindersEnabled
-        return HStack(spacing: 5) {
-            Image(systemName: on ? "bell.fill" : "bell.slash.fill")
-                .font(.system(size: 10, weight: .bold))
-            Text(on ? "Reminders on" : "Reminders off")
-                .font(.system(size: 11, weight: .semibold))
+        Button {
+            switch vm.reminderState {
+            case .on:  vm.disableReminders()
+            case .off: Task { await vm.enableReminders() }
+            case .denied:
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                if vm.isBusyReminders {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: reminderIcon)
+                        .font(.system(size: 10, weight: .bold))
+                }
+                Text(reminderLabel)
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(reminderActive ? Theme.Colors.primary : Theme.Colors.textFaint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background((reminderActive ? Theme.Colors.primary : Theme.Colors.textFaint).opacity(0.12))
+            .clipShape(Capsule())
+            .fixedSize()
         }
-        .foregroundStyle(on ? Theme.Colors.primary : Theme.Colors.textFaint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background((on ? Theme.Colors.primary : Theme.Colors.textFaint).opacity(0.12))
-        .clipShape(Capsule())
-        .fixedSize()
+        .buttonStyle(.plain)
+        .disabled(vm.isBusyReminders)
+    }
+
+    private var reminderActive: Bool { vm.reminderState == .on }
+    private var reminderIcon: String {
+        switch vm.reminderState {
+        case .on:     return "bell.fill"
+        case .off:    return "bell.badge.plus"
+        case .denied: return "bell.slash.fill"
+        }
+    }
+    private var reminderLabel: String {
+        switch vm.reminderState {
+        case .on:     return "Reminders on"
+        case .off:    return "Remind me"
+        case .denied: return "Enable in Settings"
+        }
     }
 
     // MARK: Protein floor — the hero of this screen
