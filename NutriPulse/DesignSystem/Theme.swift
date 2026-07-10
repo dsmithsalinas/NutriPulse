@@ -28,6 +28,18 @@ enum Theme {
 
         static let textPrimary = Color(.label)
         static let textSecondary = Color(.secondaryLabel)
+
+        // MARK: Redesign palette (2026 Today refresh)
+        // Indigo-biased neutrals — a chosen family, not the default system greys — that give the
+        // app a branded ground and premium depth. Adaptive so light and dark both look considered.
+        // Sourced from the approved Today concept.
+        static let ground       = Color(light: 0xF2F0FB, dark: 0x0E0D1A)
+        static let groundGlow   = Color(light: 0xE7E3FB, dark: 0x171532)
+        static let surfaceCard  = Color(light: 0xFFFFFF, dark: 0x1A1826)
+        static let surfaceInset = Color(light: 0xF6F4FE, dark: 0x232032)
+        static let hairline     = Color(light: 0xE7E3F3, dark: 0x2E2B40)
+        static let ringTrack    = Color(light: 0xECE8F7, dark: 0x262336)
+        static let textFaint    = Color(light: 0x9A95AD, dark: 0x6F6B86)
     }
 
     /// Ring/chart colors, tuned as one family instead of raw system colors.
@@ -163,5 +175,19 @@ extension Color {
             blue: Double(hex & 0xFF) / 255,
             opacity: opacity
         )
+    }
+
+    /// A light/dark adaptive color from two hex literals — resolves per trait collection so a
+    /// single token renders correctly in both appearances. e.g. `Color(light: 0xFFFFFF, dark: 0x1A1826)`
+    init(light: UInt, dark: UInt) {
+        self = Color(uiColor: UIColor { traits in
+            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: 1
+            )
+        })
     }
 }

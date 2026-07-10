@@ -35,6 +35,7 @@ final class TodayViewModel {
     var totalCalories: Double { foodLogs.reduce(0) { $0 + $1.totalCalories } }
     var totalProteinG: Double { foodLogs.reduce(0) { $0 + $1.totalProteinG } }
     var totalCarbsG:   Double { foodLogs.reduce(0) { $0 + $1.totalCarbsG   } }
+    var totalFatG:     Double { foodLogs.reduce(0) { $0 + $1.totalFatG     } }
     var totalFiberG:   Double { foodLogs.reduce(0) { $0 + $1.totalFiberG   } }
 
     var isToday: Bool { selectedDate.isToday }

@@ -43,10 +43,11 @@ struct TodayView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity, minHeight: 200)
                     } else {
-                        MacroRingsSection(
+                        HeroNutritionCard(
                             calories: vm.totalCalories,
                             proteinG: vm.totalProteinG,
                             carbsG:   vm.totalCarbsG,
+                            fatG:     vm.totalFatG,
                             fiberG:   vm.totalFiberG,
                             goal:     vm.dailyGoal
                         )
@@ -106,8 +107,11 @@ struct TodayView: View {
                 .padding(.horizontal, Theme.Spacing.md)
                 .padding(.bottom, Theme.Spacing.xl)
             }
+            .background(Theme.Colors.ground.ignoresSafeArea())
+            .scrollContentBackground(.hidden)
             .navigationTitle("Today")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { showFoodLogger = true } label: {
