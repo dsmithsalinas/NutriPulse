@@ -22,6 +22,15 @@ final class AppState {
 
     var isAuthenticated: Bool { session != nil }
 
+    // A prompt handed off from another surface (the Today under-eating nudge) for the Pulse
+    // coach to pick up. MainTabView switches to the Pulse tab when it's set; CoachView sends
+    // it and clears it. Keeps the deep-link one-directional and stateless.
+    var pendingCoachPrompt: String? = nil
+
+    func askPulse(_ prompt: String) {
+        pendingCoachPrompt = prompt
+    }
+
     // Onboarding is needed when we know the profile row exists (or genuinely doesn't
     // yet) and fullName hasn't been saved. The database trigger creates the row
     // (with just id+email) the moment the user signs up.

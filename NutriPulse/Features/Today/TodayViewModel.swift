@@ -57,6 +57,34 @@ final class TodayViewModel {
 
     var netCalories: Double { totalCalories - (activeCalories ?? 0) }
 
+    // A supportive, forward-looking nudge for the current day when the user is pacing under
+    // their targets. GLP-1 suppresses appetite, so under-eating (and losing muscle) is the real
+    // risk here — the framing protects results, it never scolds. Only surfaces on today, only in
+    // the afternoon/evening (mornings are legitimately low), and only when genuinely behind.
+    var nudge: DayNudge? {
+        guard isToday, let goal = dailyGoal, goal.proteinG > 0 else { return nil }
+        guard Calendar.current.component(.hour, from: .now) >= 14 else { return nil }
+
+        let proteinLeft = goal.proteinG - totalProteinG
+        let calorieLeft = goal.calories - totalCalories
+        let proteinPct = totalProteinG / goal.proteinG
+        let caloriePct = goal.calories > 0 ? totalCalories / goal.calories : 1
+
+        // Behind on the day's priority (protein) or well under on energy…
+        guard proteinPct < 0.7 || caloriePct < 0.6 else { return nil }
+        // …but not when they're basically there — no nagging over the last few grams.
+        guard proteinLeft > 15 || calorieLeft > 400 else { return nil }
+
+        let pLeft = max(Int(proteinLeft.rounded()), 0)
+        let cLeft = max(Int(calorieLeft.rounded()), 0)
+        return DayNudge(
+            headline: "You've got room to finish strong",
+            body: "You're pacing a little under today. A protein-forward dinner keeps your muscle protected while the medication does its part — you're about \(pLeft)g of protein and \(cLeft) calories from your goals.",
+            cta: "Ask Pulse for dinner ideas",
+            prompt: "I have about \(pLeft)g of protein and \(cLeft) calories left today — what should I eat to finish strong?"
+        )
+    }
+
     // Drives the free ring-closing celebration beat — no server round trip,
     // just today's totals against today's goal. See CelebrationEngine for the
     // richer, Coach-facing win detection (streaks, firsts).

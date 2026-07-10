@@ -55,6 +55,13 @@ struct TodayView: View {
                         )
                         .celebrationBeat(trigger: ringCelebrationTrigger)
 
+                        if let nudge = vm.nudge {
+                            UnderEatingNudgeCard(nudge: nudge) {
+                                appState.askPulse(nudge.prompt)
+                            }
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+
                         if HealthKitManager.shared.isAvailable {
                             HealthStatsCard(
                                 activeCalories: vm.activeCalories,

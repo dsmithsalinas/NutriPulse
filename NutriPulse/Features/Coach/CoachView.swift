@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CoachView: View {
     let isActive: Bool
+    @Environment(AppState.self) private var appState
     @State private var vm = CoachViewModel()
     @AppStorage("chatHistoryVersion") private var chatHistoryVersion = 0
     @FocusState private var isInputFocused: Bool
@@ -36,7 +37,14 @@ struct CoachView: View {
         }
         .onChange(of: isActive) { _, active in
             guard active else { return }
-            Task { await vm.loadIfNeeded() }
+            Task {
+                await vm.loadIfNeeded()
+                await consumePendingPrompt()
+            }
+        }
+        .onChange(of: appState.pendingCoachPrompt) { _, prompt in
+            guard isActive, prompt != nil else { return }
+            Task { await consumePendingPrompt() }
         }
         .onChange(of: chatHistoryVersion) {
             Task { await vm.reload() }
@@ -49,6 +57,14 @@ struct CoachView: View {
         } message: {
             Text(vm.error ?? "")
         }
+    }
+
+    // A prompt handed over from another surface (e.g. the Today nudge): send it once, then
+    // clear it so it can't re-fire on the next tab switch.
+    private func consumePendingPrompt() async {
+        guard let prompt = appState.pendingCoachPrompt else { return }
+        appState.pendingCoachPrompt = nil
+        await vm.sendMessage(prompt)
     }
 
     // MARK: - Message list

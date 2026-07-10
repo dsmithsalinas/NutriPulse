@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @Environment(AppState.self) private var appState
     @State private var selectedTab: MainTab = .today
     // Owned here so the tab bar's Log action can log to the exact day Today is showing.
     @State private var todayVM = TodayViewModel()
@@ -35,6 +36,11 @@ struct MainTabView: View {
             Task { await todayVM.loadData() }
         }) {
             FoodLoggingView(selectedDate: logDate)
+        }
+        // A nudge (or any surface) handing a prompt to the coach jumps to the Pulse tab;
+        // CoachView sends it and clears it.
+        .onChange(of: appState.pendingCoachPrompt) { _, prompt in
+            if prompt != nil { selectedTab = .pulse }
         }
     }
 }
