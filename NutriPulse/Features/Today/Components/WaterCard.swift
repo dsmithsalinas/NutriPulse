@@ -40,8 +40,12 @@ struct WaterCard: View {
     let goalMl: Double
     let onAdd: (Double) -> Void
 
-    @AppStorage("waterUnit") private var waterUnitRaw = WaterUnit.ml.rawValue
-    private var unit: WaterUnit { WaterUnit(rawValue: waterUnitRaw) ?? .ml }
+    // Water follows the one global measurement system (set in Profile → Units): metric shows
+    // ml, imperial shows oz. No separate water toggle — one preference governs everything.
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var unit: WaterUnit {
+        (UnitSystem(rawValue: unitSystemRaw) ?? .metric) == .imperial ? .oz : .ml
+    }
 
     private var progress: Double {
         goalMl > 0 ? min(intakeMl / goalMl, 1.0) : 0
@@ -60,13 +64,6 @@ struct WaterCard: View {
                 Text(unit.displayTotal(intakeMl, goalMl: goalMl))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-
-                Picker("Unit", selection: $waterUnitRaw) {
-                    Text("ml").tag(WaterUnit.ml.rawValue)
-                    Text("oz").tag(WaterUnit.oz.rawValue)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 80)
             }
 
             GeometryReader { geo in

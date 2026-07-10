@@ -141,9 +141,10 @@ struct ProfileView: View {
 
     private var bodyStatsSection: some View {
         Section("Body Stats") {
+            // The one global measurement setting — governs weight, height, and water everywhere.
             Picker("Units", selection: $unitSystemRaw) {
-                Text("Metric (kg, cm)").tag("metric")
-                Text("Imperial (lbs, ft)").tag("imperial")
+                Text("Metric (kg, cm, ml)").tag("metric")
+                Text("Imperial (lb, in, oz)").tag("imperial")
             }
 
             if let w = vm.latestWeight {

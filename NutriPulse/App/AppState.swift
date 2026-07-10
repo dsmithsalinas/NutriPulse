@@ -79,8 +79,8 @@ final class AppState {
         }
     }
 
-    // Display preferences (unitSystem, waterUnit) are deliberately excluded — those
-    // are device preferences, not account data.
+    // Display preferences (unitSystem) are deliberately excluded — a device preference,
+    // not account data.
     private static let accountScopedDefaultsKeys = [
         "lastHKWeightSyncDate",
         "chatHistoryVersion",
