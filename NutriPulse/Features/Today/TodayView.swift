@@ -2,12 +2,9 @@ import SwiftUI
 import UIKit
 
 struct TodayView: View {
-    // SWIFT CONCEPT — @State on a class type works with @Observable in iOS 17.
-    // The view OWNS this ViewModel — it's created once and stays alive as long as
-    // TodayView is in the view hierarchy. Same role as useState(new ViewModel()) in React
-    // if React let you store class instances that outlive renders.
-    @State private var vm = TodayViewModel()
-    @State private var showFoodLogger = false
+    // The ViewModel is owned by MainTabView and passed in, so the tab bar's Log action and
+    // this screen share one selected date — logging always lands on the day you're viewing.
+    let vm: TodayViewModel
     @State private var showBodyCompSheet = false
     @State private var ringCelebrationTrigger = 0
     @State private var editingLog: FoodLog? = nil
@@ -112,14 +109,6 @@ struct TodayView: View {
             .navigationTitle("Today")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showFoodLogger = true } label: {
-                        Image(systemName: "plus")
-                            .fontWeight(.semibold)
-                    }
-                }
-            }
             .sheet(isPresented: $showBodyCompSheet) {
                 BodyCompositionSheet(
                     current: vm.bodyComp,
@@ -133,14 +122,6 @@ struct TodayView: View {
                         writeToHK: writeToHK
                     )
                 }
-            }
-            // onDismiss fires when the sheet is closed — reloads data so new logs appear.
-            // SWIFT CONCEPT — .sheet(isPresented:onDismiss:content:) is SwiftUI's modal.
-            // The onDismiss closure is like a Promise.then() that fires after the animation.
-            .sheet(isPresented: $showFoodLogger, onDismiss: {
-                Task { await vm.loadData() }
-            }) {
-                FoodLoggingView(selectedDate: vm.selectedDate)
             }
             .sheet(item: $editingLog) { log in
                 EditFoodLogSheet(
@@ -202,6 +183,6 @@ private struct EmptyDayView: View {
 // Xcode renders this in the canvas without running the full app.
 // We inject a mock environment so the preview doesn't need real Supabase credentials.
 #Preview {
-    TodayView()
+    TodayView(vm: TodayViewModel())
         .environment(AppState())
 }
