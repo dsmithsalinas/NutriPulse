@@ -1,5 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
+import { checkRateLimit } from '../_shared/ratelimit.ts'
+
+// Per-user cap. Covers manual chats plus the automatic check-in / weekly-summary calls, so it's
+// generous — real use is a handful an hour; this only bites a script looping the endpoint.
+const RATE_LIMIT_MAX = 60
+const RATE_LIMIT_WINDOW_SECONDS = 3600
 
 // Per-request input caps (cost bounding — see the check in the handler).
 const MAX_MESSAGE_CHARS = 4000
@@ -70,6 +76,14 @@ Deno.serve(async (req) => {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    // Rate-limit before parsing/spending. Counts every authenticated call, malformed included.
+    if (!await checkRateLimit(supabase, 'coach-chat', RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS)) {
+      return new Response(
+        JSON.stringify({ error: "You're moving fast — give me a minute to catch up and try again." }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     const { message, messageType = 'chat', history = [], context } = await req.json()

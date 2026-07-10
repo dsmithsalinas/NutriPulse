@@ -188,7 +188,9 @@ final class CoachViewModel {
                 self.error = "Pulse replied, but the message couldn't be saved to your history."
             }
         } catch {
-            self.error = "Couldn't reach Pulse right now. Try again."
+            // Surfaces the server's reason when there is one — notably the friendly 429
+            // rate-limit copy — and the generic message for a genuine transport failure.
+            self.error = EdgeFunctionError.message(from: error, fallback: "Couldn't reach Pulse right now. Try again.")
             // `inputText = ""` happened before any network call. If the user's message never
             // reached the server there is nothing to retry and nothing on screen — the text
             // they typed was simply gone. Put it back in the composer.

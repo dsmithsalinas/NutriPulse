@@ -1,6 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 import { fatSecretGet, asArray } from '../_shared/fatsecret.ts'
+import { checkRateLimit } from '../_shared/ratelimit.ts'
+
+// Per-user cap. Each parse can fan out to several Claude turns + FatSecret lookups, so this is
+// tighter than coach-chat. A heavy logger records ~10 meals/day — well under 40/hour.
+const RATE_LIMIT_MAX = 40
+const RATE_LIMIT_WINDOW_SECONDS = 3600
 
 // Talk-to-log, two-hop and Claude-tool-use-driven:
 //   1. Claude decomposes the sentence into named, quantified components
@@ -225,6 +231,14 @@ Deno.serve(async (req) => {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    // Rate-limit before parsing/spending. Counts every authenticated call, malformed included.
+    if (!await checkRateLimit(supabase, 'parse-food', RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS)) {
+      return new Response(
+        JSON.stringify({ error: "You're logging fast — give it a minute and try again." }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     const { text } = await req.json()

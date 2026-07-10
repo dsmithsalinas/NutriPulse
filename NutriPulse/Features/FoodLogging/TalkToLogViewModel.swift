@@ -81,7 +81,12 @@ final class TalkToLogViewModel {
                 errorMessage = "Couldn't find anything to log in that — try rephrasing."
             }
         } catch {
-            errorMessage = "Couldn't parse that meal. Try again, or add it manually."
+            // Show the server's reason when present (e.g. the 429 rate-limit copy); otherwise
+            // the generic parse-failure message.
+            errorMessage = EdgeFunctionError.message(
+                from: error,
+                fallback: "Couldn't parse that meal. Try again, or add it manually."
+            )
         }
     }
 
