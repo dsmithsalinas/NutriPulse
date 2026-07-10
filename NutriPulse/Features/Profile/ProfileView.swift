@@ -24,8 +24,12 @@ struct ProfileView: View {
                 deleteAccountSection
             }
             .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(Theme.Colors.ground.ignoresSafeArea())
+            .listRowBackground(Theme.Colors.surfaceCard)
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .task {
                 await vm.loadData(profile: appState.profile)
             }
@@ -79,6 +83,7 @@ struct ProfileView: View {
                 Text("This permanently deletes your account and all your data — logs, goals, weight history, and chat history. This cannot be undone.")
             }
         }
+        .tint(Theme.Colors.primary)
     }
 
     // MARK: - Header
@@ -89,21 +94,38 @@ struct ProfileView: View {
                 ZStack {
                     Circle()
                         .fill(Theme.Colors.primaryGradient)
-                        .frame(width: 60, height: 60)
+                        .frame(width: 68, height: 68)
+                        .shadow(color: Theme.Colors.primary.opacity(0.4), radius: 10, y: 4)
                     Text(initials)
-                        .font(.title2.bold())
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                 }
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(vm.profile?.fullName ?? "Your Name")
-                        .font(.title3.bold())
+                        .font(.system(size: 22, weight: .bold))
                     Text(vm.profile?.email ?? "")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    if let identity = identityLine {
+                        Text(identity)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.primary)
+                            .padding(.top, 2)
+                    }
                 }
             }
             .padding(.vertical, Theme.Spacing.xs)
         }
+    }
+
+    // One-line identity — the medication and activity that define this user's plan.
+    private var identityLine: String? {
+        var parts: [String] = []
+        if let med = vm.mostRecentInjection?.medication { parts.append("On \(med)") }
+        if let raw = vm.profile?.activityLevel, let level = ActivityLevel(rawValue: raw) {
+            parts.append(level.displayName)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var initials: String {
