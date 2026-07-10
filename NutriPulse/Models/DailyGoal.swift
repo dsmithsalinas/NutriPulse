@@ -44,8 +44,7 @@ struct DailyGoal: Codable, Identifiable {
     // reply).
     //
     // Both used to test `>=` on every macro, which treats the calorie and carb goals as
-    // floors. They are ceilings — MacroRingView says so in its own comment, and renders the
-    // overage as a negative number to avoid. So a user 1,400 kcal over budget earned a
+    // floors. They are ceilings — going over is the thing to avoid. So a user 1,400 kcal over budget earned a
     // success haptic and a compliment from their coach. Two components, one threshold,
     // opposite meanings.
     //

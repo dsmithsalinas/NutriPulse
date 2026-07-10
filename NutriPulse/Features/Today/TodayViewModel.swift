@@ -60,8 +60,6 @@ final class TodayViewModel {
     var hrv: Double?            = nil
     var sleepHours: Double?     = nil
 
-    var netCalories: Double { totalCalories - (activeCalories ?? 0) }
-
     // Dose-day chip content. Only on today, and only when the next dose is due today or has
     // passed — the actionable states. On other days the header stays clean.
     struct DoseStatus { let text: String; let urgent: Bool }

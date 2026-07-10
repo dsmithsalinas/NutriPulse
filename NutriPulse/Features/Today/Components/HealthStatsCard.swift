@@ -2,7 +2,6 @@ import SwiftUI
 
 struct HealthStatsCard: View {
     let activeCalories: Double?
-    let netCalories: Double
     let restingHR: Double?
     let hrv: Double?
     let sleepHours: Double?

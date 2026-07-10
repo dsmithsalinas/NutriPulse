@@ -5,6 +5,11 @@ struct TalkToLogView: View {
     let date: Date
     let onLogged: (LogSource) -> Void
 
+    @State private var dictation = DictationRecognizer()
+    // What was already in the field when dictation started, so speech appends rather than
+    // clobbers anything the user had typed.
+    @State private var dictationBase = ""
+
     var body: some View {
         Group {
             if vm.hasParsed {
@@ -13,6 +18,15 @@ struct TalkToLogView: View {
                 composer
             }
         }
+        .onChange(of: dictation.transcript) { _, text in
+            if dictation.isListening { vm.inputText = dictationBase + text }
+        }
+        .onChange(of: dictation.status) { _, status in
+            if status == .denied {
+                vm.errorMessage = "Microphone or speech access is off. Turn it on in Settings to speak your log."
+            }
+        }
+        .onDisappear { dictation.stop() }
         .alert("Error", isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
@@ -30,7 +44,7 @@ struct TalkToLogView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text("Tell Pulse what you ate")
                     .font(Theme.Typography.headline)
-                Text("One sentence is plenty — \"a Chipotle bowl with chicken, rice, pico, and cheese.\" Tap the mic on the keyboard to speak it instead of typing.")
+                Text("One sentence is plenty — \"a Chipotle bowl with chicken, rice, pico, and cheese.\" Tap the mic to speak it instead of typing.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -38,7 +52,7 @@ struct TalkToLogView: View {
 
             ZStack(alignment: .topLeading) {
                 if vm.inputText.isEmpty {
-                    Text("I had…")
+                    Text(dictation.isListening ? "Listening…" : "I had…")
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .padding(.top, 8)
                         .padding(.leading, 5)
@@ -49,6 +63,7 @@ struct TalkToLogView: View {
             }
             .padding(Theme.Spacing.sm)
             .card()
+            .overlay(alignment: .bottomTrailing) { micButton }
 
             Spacer()
 
@@ -65,6 +80,28 @@ struct TalkToLogView: View {
             .disabled(vm.inputText.trimmingCharacters(in: .whitespaces).isEmpty || vm.isParsing)
         }
         .padding(Theme.Spacing.md)
+    }
+
+    // Visible dictation control — the "speak your log" affordance the keyboard mic hid.
+    private var micButton: some View {
+        Button {
+            if !dictation.isListening {
+                dictationBase = vm.inputText.isEmpty ? "" : vm.inputText + " "
+            }
+            Task { await dictation.toggle() }
+        } label: {
+            Image(systemName: dictation.isListening ? "waveform" : "mic.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(dictation.isListening ? Color.red : Theme.Colors.primary, in: Circle())
+                .shadow(color: (dictation.isListening ? Color.red : Theme.Colors.primary).opacity(0.4),
+                        radius: 8, y: 3)
+                .symbolEffect(.variableColor.iterative, isActive: dictation.isListening)
+        }
+        .buttonStyle(.plain)
+        .padding(10)
+        .accessibilityLabel(dictation.isListening ? "Stop dictation" : "Speak your log")
     }
 
     // MARK: - Confirm card (rows out, after parsing)

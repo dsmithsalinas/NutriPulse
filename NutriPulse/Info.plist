@@ -26,6 +26,10 @@
 	<string>NutriPulse reads weight, body fat, BMI, lean body mass, water, active energy, HRV, resting HR, and sleep from Apple Health.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>NutriPulse writes weight, body fat, BMI, lean body mass, and water logs to Apple Health.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NutriPulse uses the microphone so you can speak your food log instead of typing it.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>NutriPulse transcribes your spoken food log into text so Pulse can parse it.</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>SUPABASE_URL</key>

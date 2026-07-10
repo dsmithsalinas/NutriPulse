@@ -66,7 +66,6 @@ struct TodayView: View {
                         if HealthKitManager.shared.isAvailable {
                             HealthStatsCard(
                                 activeCalories: vm.activeCalories,
-                                netCalories:    vm.netCalories,
                                 restingHR:      vm.restingHeartRate,
                                 hrv:            vm.hrv,
                                 sleepHours:     vm.sleepHours,

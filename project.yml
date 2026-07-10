@@ -45,6 +45,8 @@ targets:
         NSHealthShareUsageDescription: "NutriPulse reads weight, body fat, BMI, lean body mass, water, active energy, HRV, resting HR, and sleep from Apple Health."
         NSHealthUpdateUsageDescription: "NutriPulse writes weight, body fat, BMI, lean body mass, and water logs to Apple Health."
         NSCameraUsageDescription: "NutriPulse uses the camera to scan food barcodes."
+        NSMicrophoneUsageDescription: "NutriPulse uses the microphone so you can speak your food log instead of typing it."
+        NSSpeechRecognitionUsageDescription: "NutriPulse transcribes your spoken food log into text so Pulse can parse it."
         # These land in Info.plist so Config.swift can read them at runtime.
         # Values are set in Configurations/Secrets.xcconfig (gitignored).
         SUPABASE_URL: "$(SUPABASE_URL)"

@@ -33,8 +33,11 @@ struct FoodLoggingView: View {
                     BarcodeScanView(vm: searchVM, date: selectedDate, onLogged: handleLogged)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationTitle("Log Food")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -54,6 +57,7 @@ struct FoodLoggingView: View {
                 Telemetry.logIntentStarted(source: vm.selectedTab.telemetrySource)
             }
         }
+        .tint(Theme.Colors.primary)
     }
 
     // Only the talk flow carries a meaningful confirm-card edit rate — every
