@@ -48,8 +48,13 @@ struct EditFoodLogSheet: View {
                     }
                 } header: { Text("Log details") }
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.Colors.ground.ignoresSafeArea())
+            .listRowBackground(Theme.Colors.surfaceCard)
+            .tint(Theme.Colors.primary)
             .navigationTitle("Edit Log")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

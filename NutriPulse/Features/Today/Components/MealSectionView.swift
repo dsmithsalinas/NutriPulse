@@ -10,10 +10,16 @@ struct MealSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Section header
-            HStack {
-                Label(meal.displayName, systemImage: meal.icon)
-                    .font(.subheadline.weight(.semibold))
+            // Section header — brand-tinted meal glyph, no more grey fill bar.
+            HStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: meal.icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.Colors.primary)
+                    .frame(width: 26, height: 26)
+                    .background(Theme.Colors.primary.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Text(meal.displayName)
+                    .font(.system(size: 15, weight: .bold))
                 Spacer()
                 // .rounded() everywhere. Int(Double) truncates toward zero, and the header
                 // truncated the SUM while rows truncated each item: two 99.6 kcal rows showed
@@ -21,12 +27,13 @@ struct MealSectionView: View {
                 // fractional totals are routine — and the rings, which already used .rounded(),
                 // then disagreed with both.
                 Text("\(Int(mealCalories.rounded())) kcal")
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
             .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.sm)
-            .background(Color(.tertiarySystemBackground))
+            .padding(.top, Theme.Spacing.md)
+            .padding(.bottom, Theme.Spacing.xs)
 
             // Food log rows
             // SWIFT CONCEPT — ForEach over an Identifiable collection. SwiftUI uses the `id`
@@ -59,20 +66,22 @@ private struct FoodLogRowView: View {
                 HStack(alignment: .center, spacing: Theme.Spacing.sm) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(log.displayName)
-                            .font(.subheadline)
+                            .font(.subheadline.weight(.medium))
                             .lineLimit(1)
-                        Text(servingText)
+                        Text("\(servingText) · \(Int(log.totalCalories.rounded())) cal")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(Int(log.totalCalories.rounded())) kcal")
-                            .font(.subheadline.weight(.medium))
-                        Text("P \(Int(log.totalProteinG.rounded()))g · C \(Int(log.totalCarbsG.rounded()))g")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    // Protein is the number that matters for this app's user — surface it as a
+                    // prominent pill instead of burying it in a macro subtitle.
+                    Text("\(Int(log.totalProteinG.rounded()))g")
+                        .font(.system(size: 13, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.Colors.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Theme.Colors.primary.opacity(0.12), in: Capsule())
                 }
                 .contentShape(Rectangle())
             }
@@ -116,7 +125,7 @@ private struct SwipeToDeleteRow<Content: View>: View {
             .background(Color.red)
 
             content()
-                .background(Theme.Colors.surface)
+                .background(Theme.Colors.surfaceCard)
                 // Swiped open, a tap just closes it instead of triggering the
                 // row's own action (matches Mail/Reminders) — .disabled()
                 // only mutes the inner Button, the tap-to-close below still runs.

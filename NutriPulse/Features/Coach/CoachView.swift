@@ -16,6 +16,10 @@ struct CoachView: View {
                 }
                 Divider()
                 inputBar
+                    // Clear the tab bar's raised Log button, which floats ~18pt above the bar
+                    // surface into content. The scrolling tabs slide under it; this pinned bar
+                    // can't, so it needs its own clearance.
+                    .padding(.bottom, 22)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
