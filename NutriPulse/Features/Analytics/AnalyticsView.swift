@@ -117,6 +117,9 @@ private struct AnalyticsSummaryCard: View {
                 hero: false
             )
         }
+        // Roll the averages when the range changes (7 → 14 → 30 days).
+        .animation(.snappy, value: avgProtein)
+        .animation(.snappy, value: avgCalories)
     }
 
     private func tile(title: String, value: String, sub: String, accent: Color, hero: Bool) -> some View {
@@ -128,6 +131,7 @@ private struct AnalyticsSummaryCard: View {
             Text(value)
                 .font(.system(size: 30, weight: .heavy, design: .rounded))
                 .monospacedDigit()
+                .contentTransition(.numericText())
                 .foregroundStyle(hero ? AnyShapeStyle(Theme.Colors.primaryGradient) : AnyShapeStyle(Color.primary))
             Text(sub)
                 .font(.system(size: 12))

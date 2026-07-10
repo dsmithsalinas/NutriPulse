@@ -117,6 +117,21 @@ extension ButtonStyle where Self == PrimaryButtonStyle {
     static var brandPrimary: PrimaryButtonStyle { PrimaryButtonStyle() }
 }
 
+/// A springy press effect for icon buttons and chips — scales down on touch and bounces back.
+/// Keeps taps feeling physical without the flat "nothing happened" of `.plain`.
+struct PressableStyle: ButtonStyle {
+    var scale: CGFloat = 0.9
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == PressableStyle {
+    static var pressable: PressableStyle { PressableStyle() }
+}
+
 /// The rounded-rect + surface-fill wrapper already used ad hoc across
 /// Today/Analytics cards, promoted to a single reusable modifier.
 /// Usage: `content.card()`

@@ -11,6 +11,8 @@ struct HeroNutritionCard: View {
     let fiberG:   Double
     let goal:     DailyGoal?
 
+    @State private var animatedPct = 0.0
+
     private var proteinGoal: Double { goal?.proteinG ?? 150 }
     private var calorieGoal: Double { goal?.calories ?? 2000 }
 
@@ -43,6 +45,9 @@ struct HeroNutritionCard: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
         }
+        // Ambient animation so the numeric-text rolls when totals change (e.g. after logging).
+        .animation(.snappy, value: proteinG)
+        .animation(.snappy, value: calories)
     }
 
     // MARK: Protein hero ring
@@ -52,13 +57,14 @@ struct HeroNutritionCard: View {
             Circle()
                 .stroke(Theme.Colors.ringTrack, lineWidth: 16)
 
+            // `animatedPct` starts at 0 and springs to the real value on appear (and on any
+            // change), so the ring fills in rather than snapping — the screen feels alive.
             Circle()
-                .trim(from: 0, to: proteinPct)
+                .trim(from: 0, to: animatedPct)
                 .stroke(Theme.Colors.primaryGradient,
                         style: StrokeStyle(lineWidth: 16, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .shadow(color: Theme.Colors.primary.opacity(0.45), radius: 7)
-                .animation(.spring(response: 0.7, dampingFraction: 0.85), value: proteinPct)
 
             VStack(spacing: 2) {
                 Text("PROTEIN")
@@ -69,6 +75,7 @@ struct HeroNutritionCard: View {
                     Text("\(Int(proteinG))")
                         .font(.system(size: 52, weight: .heavy, design: .rounded))
                         .monospacedDigit()
+                        .contentTransition(.numericText(value: proteinG))
                     Text("/\(Int(proteinGoal))g")
                         .font(.system(size: 22, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
@@ -82,6 +89,13 @@ struct HeroNutritionCard: View {
         }
         .frame(width: 210, height: 210)
         .padding(.top, Theme.Spacing.xs)
+        .onAppear {
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.82)) { animatedPct = proteinPct }
+        }
+        .onChange(of: proteinPct) { _, newValue in
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.85)) { animatedPct = newValue }
+        }
+        .animation(.snappy, value: proteinG)
     }
 
     // MARK: Calorie meter
@@ -94,6 +108,7 @@ struct HeroNutritionCard: View {
                         .foregroundStyle(.secondary)
                     Text("\(Int(calories))")
                         .fontWeight(.bold)
+                        .contentTransition(.numericText(value: calories))
                     Text("/ \(Int(calorieGoal))")
                         .foregroundStyle(.secondary)
                 }
@@ -104,6 +119,7 @@ struct HeroNutritionCard: View {
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Theme.NutrientColor.calories)
                     .monospacedDigit()
+                    .contentTransition(.numericText(value: Double(caloriesLeft)))
             }
 
             GeometryReader { geo in
@@ -137,6 +153,7 @@ struct HeroNutritionCard: View {
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(color)
                 .monospacedDigit()
+                .contentTransition(.numericText(value: value))
             Text(label)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
