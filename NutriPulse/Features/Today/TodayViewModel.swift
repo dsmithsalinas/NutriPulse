@@ -322,6 +322,15 @@ final class TodayViewModel {
         isTrackingToday = true
     }
 
+    // Jump to any day from the date picker — clamped so we never land in the future.
+    func goTo(date: Date) {
+        let cal = Calendar.current
+        let picked = cal.startOfDay(for: date)
+        let today = cal.startOfDay(for: .now)
+        selectedDate = picked >= today ? .now : picked
+        isTrackingToday = selectedDate.isToday
+    }
+
     // Called on foreground and on the system's significant-time-change notification
     // (which fires at midnight). If the user was sitting on "today" and the calendar
     // day rolled over underneath them, move them to the real today — otherwise the

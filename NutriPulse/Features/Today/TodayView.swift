@@ -6,6 +6,7 @@ struct TodayView: View {
     // this screen share one selected date — logging always lands on the day you're viewing.
     let vm: TodayViewModel
     @State private var showBodyCompSheet = false
+    @State private var showDatePicker = false
     @State private var ringCelebrationTrigger = 0
     @State private var editingLog: FoodLog? = nil
     @Environment(\.scenePhase) private var scenePhase
@@ -28,13 +29,17 @@ struct TodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.Spacing.md) {
-                    DateNavigatorView(
+                    TodayHeaderView(
+                        firstName: appState.profile?.fullName?
+                            .components(separatedBy: " ").first ?? "there",
                         date: vm.selectedDate,
                         isToday: vm.isToday,
                         onPrevious: vm.goToPreviousDay,
                         onNext: vm.goToNextDay,
-                        onToday: vm.goToToday
+                        onToday: vm.goToToday,
+                        onPickDate: { showDatePicker = true }
                     )
+                    .padding(.top, Theme.Spacing.sm)
 
                     if vm.isLoading {
                         ProgressView()
@@ -106,9 +111,27 @@ struct TodayView: View {
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
             .scrollContentBackground(.hidden)
-            .navigationTitle("Today")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
+            .toolbar(.hidden, for: .navigationBar)
+            // Swipe the canvas to change days — right = previous, left = next (blocked at
+            // today). Runs alongside vertical scroll; only a clearly horizontal swipe counts.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 24)
+                    .onEnded { value in
+                        guard abs(value.translation.width) > abs(value.translation.height),
+                              abs(value.translation.width) > 60 else { return }
+                        if value.translation.width > 0 {
+                            vm.goToPreviousDay()
+                        } else {
+                            vm.goToNextDay()
+                        }
+                    }
+            )
+            .sheet(isPresented: $showDatePicker) {
+                DatePickerSheet(selected: vm.selectedDate) { picked in
+                    vm.goTo(date: picked)
+                }
+                .presentationDetents([.medium])
+            }
             .sheet(isPresented: $showBodyCompSheet) {
                 BodyCompositionSheet(
                     current: vm.bodyComp,
