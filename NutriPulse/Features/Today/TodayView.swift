@@ -89,7 +89,7 @@ struct TodayView: View {
                         }
 
                         if vm.foodLogs.isEmpty {
-                            EmptyDayView()
+                            EmptyDayView(isToday: vm.isToday)
                         } else {
                             // Meal sections in fixed display order (breakfast → snack)
                             ForEach(Meal.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { meal in
@@ -192,20 +192,16 @@ struct TodayView: View {
 }
 
 private struct EmptyDayView: View {
+    let isToday: Bool
+
     var body: some View {
-        VStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: "fork.knife")
-                .font(.largeTitle)
-                .foregroundStyle(.quaternary)
-            Text("No food logged yet")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text("Tap + to log your first meal")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(Theme.Spacing.xl)
+        BrandedEmptyState(
+            icon: "fork.knife",
+            title: isToday ? "Nothing logged yet" : "Nothing logged this day",
+            message: isToday
+                ? "Tap Log below to add your first meal — talk it, search, or scan."
+                : "Add what you ate with the Log button below."
+        )
     }
 }
 

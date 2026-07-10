@@ -77,20 +77,11 @@ struct AnalyticsView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: 44))
-                .foregroundStyle(.quaternary)
-            Text("No data yet")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            Text("Log food on the Today tab to see your trends here.")
-                .font(.subheadline)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(Theme.Spacing.xl)
+        BrandedEmptyState(
+            icon: "chart.line.uptrend.xyaxis",
+            title: "No trends yet",
+            message: "Log a few days of meals and your protein, calorie, and weight trends will grow here."
+        )
     }
 }
 
