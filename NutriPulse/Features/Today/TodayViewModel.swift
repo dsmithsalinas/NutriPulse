@@ -238,7 +238,7 @@ final class TodayViewModel {
             // both pass the check before either wrote the key, and both insert.
             let today = Date().isoDateString
             let alreadySyncedToday = UserDefaults.standard.string(forKey: "lastHKWeightSyncDate") == today
-            if Calendar.current.isDateInToday(w.date), !w.isFromThisApp, !alreadySyncedToday {
+            if Self.shouldImportHKWeight(sampleDate: w.date, isFromThisApp: w.isFromThisApp, alreadySyncedToday: alreadySyncedToday) {
                 UserDefaults.standard.set(today, forKey: "lastHKWeightSyncDate")
                 try? await bodyCompRepo.upsert(date: today, weightKg: w.value, bodyFatPct: nil, bmi: nil, leanBodyMassKg: nil, source: "healthkit")
                 if let userId = try? await supabase.auth.session.user.id {
@@ -410,5 +410,22 @@ final class TodayViewModel {
     func snapToTodayIfDayChanged() {
         guard isTrackingToday, !selectedDate.isToday else { return }
         selectedDate = .now
+    }
+
+    // The pure decision behind the HealthKit weight auto-import. Extracted so its truth
+    // table can be tested without HealthKit, Supabase, or UserDefaults. Import a HK weight
+    // sample as a new weight_logs row ONLY when all three hold:
+    //   - the sample is from today (older readings aren't back-imported),
+    //   - it wasn't written by this app (breaks the write→read→re-import echo loop), and
+    //   - we haven't already imported one today (the once-per-day guard).
+    // `now`/`calendar` are injectable purely for deterministic tests.
+    nonisolated static func shouldImportHKWeight(
+        sampleDate: Date,
+        isFromThisApp: Bool,
+        alreadySyncedToday: Bool,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Bool {
+        calendar.isDate(sampleDate, inSameDayAs: now) && !isFromThisApp && !alreadySyncedToday
     }
 }

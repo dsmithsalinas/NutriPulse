@@ -827,3 +827,53 @@ final class AgeFromDOBTests: XCTestCase {
         )
     }
 }
+
+// MARK: - HealthKit weight auto-import decision
+
+// TodayViewModel.shouldImportHKWeight gates whether a HealthKit weight sample becomes a new
+// weight_logs row. Getting it wrong produced real duplicates: back-imported old readings, a
+// write→read→re-import echo of the app's own writes, and a second row when two loads raced.
+// The three guards form a simple truth table, tested here in isolation.
+final class HKWeightImportTests: XCTestCase {
+
+    private let now = Date(timeIntervalSince1970: 1_700_000_000)
+    private var yesterday: Date { now.addingTimeInterval(-24 * 3600) }
+
+    private func decide(sampleDate: Date, isFromThisApp: Bool, alreadySyncedToday: Bool) -> Bool {
+        TodayViewModel.shouldImportHKWeight(
+            sampleDate: sampleDate,
+            isFromThisApp: isFromThisApp,
+            alreadySyncedToday: alreadySyncedToday,
+            now: now
+        )
+    }
+
+    // Today's reading, from another source, first import of the day → import it.
+    func testTodaysExternalSampleImports() {
+        XCTAssertTrue(decide(sampleDate: now, isFromThisApp: false, alreadySyncedToday: false))
+    }
+
+    // An older reading is never back-imported, even if everything else allows it.
+    func testYesterdaysSampleIsNotImported() {
+        XCTAssertFalse(decide(sampleDate: yesterday, isFromThisApp: false, alreadySyncedToday: false))
+    }
+
+    // The app's own write, read straight back, must not become a second row (echo loop).
+    func testOwnWriteIsNotReimported() {
+        XCTAssertFalse(decide(sampleDate: now, isFromThisApp: true, alreadySyncedToday: false))
+    }
+
+    // Once-per-day guard: a second load the same day doesn't import again.
+    func testAlreadySyncedTodayBlocksSecondImport() {
+        XCTAssertFalse(decide(sampleDate: now, isFromThisApp: false, alreadySyncedToday: true))
+    }
+
+    // A same-day sample counts even a minute before midnight — the guard is calendar-day, not 24h.
+    func testLateNightSampleStillCountsAsToday() {
+        let cal = Calendar.current
+        let almostMidnight = cal.date(bySettingHour: 23, minute: 59, second: 0, of: now)!
+        XCTAssertTrue(TodayViewModel.shouldImportHKWeight(
+            sampleDate: almostMidnight, isFromThisApp: false, alreadySyncedToday: false, now: now
+        ))
+    }
+}
