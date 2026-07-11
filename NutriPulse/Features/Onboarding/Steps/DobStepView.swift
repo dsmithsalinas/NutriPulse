@@ -13,14 +13,12 @@ struct DobStepView: View {
     }
 
     var body: some View {
-        OnboardingStepLayout(
+        NarratedStepLayout(
             step: 3,
-            title: "Date of birth",
+            question: "When were you born?",
             subtitle: "Age factors into your daily calorie target.",
-            onContinue: onContinue
+            onAdvance: onContinue
         ) {
-            // SWIFT CONCEPT — DatePicker(.graphical) renders a full calendar.
-            // Binding(get:set:) creates a two-way connection to vm.dob.
             DatePicker(
                 "Date of birth",
                 selection: $vm.dob,
@@ -30,6 +28,8 @@ struct DobStepView: View {
             .datePickerStyle(.wheel)
             .labelsHidden()
             .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
     }
 }

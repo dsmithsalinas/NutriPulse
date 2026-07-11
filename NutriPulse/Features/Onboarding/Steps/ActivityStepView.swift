@@ -5,57 +5,34 @@ struct ActivityStepView: View {
     let onContinue: () -> Void
 
     var body: some View {
-        OnboardingStepLayout(
+        NarratedStepLayout(
             step: 5,
-            title: "Activity level",
-            subtitle: "How active are you on a typical week?",
-            onContinue: onContinue
+            question: "How active are you, day to day?",
+            subtitle: "Roughly — I'll refine it from your Health data later.",
+            onAdvance: onContinue
         ) {
-            VStack(spacing: Theme.Spacing.sm) {
+            VStack(spacing: 10) {
                 ForEach(ActivityLevel.allCases) { level in
-                    ActivityCard(level: level, isSelected: vm.activityLevel == level) {
+                    OnboardingOptionCard(
+                        title: level.displayName,
+                        detail: detail(for: level),
+                        isSelected: vm.activityLevel == level
+                    ) {
                         vm.activityLevel = level
                     }
                 }
             }
         }
     }
-}
 
-private struct ActivityCard: View {
-    let level: ActivityLevel
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(alignment: .center, spacing: Theme.Spacing.md) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(level.displayName)
-                        .font(.body.weight(isSelected ? .semibold : .regular))
-                        .foregroundStyle(isSelected ? Theme.Colors.primary : .primary)
-                    Text(level.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(isSelected ? Theme.Colors.primary : Color.secondary)
-                    .font(.title3)
-            }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.secondarySystemBackground))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(
-                                isSelected ? Theme.Colors.primary : .clear,
-                                lineWidth: 2
-                            )
-                    )
-            )
+    // Concrete, example-led descriptions so a user can place themselves without guessing.
+    private func detail(for level: ActivityLevel) -> String {
+        switch level {
+        case .sedentary:  return "Desk job, mostly sitting. Errands and the occasional short walk."
+        case .light:      return "On your feet a fair bit, or 1–3 light workouts a week (walks, easy gym, yoga)."
+        case .moderate:   return "3–5 solid workouts a week, or an on-your-feet job (nurse, server, trades)."
+        case .active:     return "Hard training 6–7 days a week, or a consistently physical job."
+        case .veryActive: return "Daily training, competitive sport, or heavy labor (construction, moving)."
         }
-        .buttonStyle(.plain)
     }
 }
