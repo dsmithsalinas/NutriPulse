@@ -35,4 +35,10 @@ enum Config {
     // pushed and Pages is enabled (Settings → Pages → Deploy from branch:
     // main, folder: / root). Not live until then.
     static let privacyPolicyURL = URL(string: "https://dsmithsalinas.github.io/NutriPulse/marketing/privacy.html")!
+
+    // Apple's Standard License Agreement (LAEULA) — the EULA Apple applies to any app that
+    // doesn't ship its own. It's a complete, accepted Terms of Use for a free app, which is
+    // why App Review is satisfied by it. Swap for a self-hosted terms page (mirroring
+    // privacyPolicyURL) if we ever add subscriptions or custom terms.
+    static let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 }

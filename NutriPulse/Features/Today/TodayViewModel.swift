@@ -242,7 +242,7 @@ final class TodayViewModel {
                 UserDefaults.standard.set(today, forKey: "lastHKWeightSyncDate")
                 try? await bodyCompRepo.upsert(date: today, weightKg: w.value, bodyFatPct: nil, bmi: nil, leanBodyMassKg: nil, source: "healthkit")
                 if let userId = try? await supabase.auth.session.user.id {
-                    try? await supabase.from("weight_logs")
+                    _ = try? await supabase.from("weight_logs")
                         .insert(NewWeightLog(userId: userId, weightKg: w.value, source: "healthkit"))
                         .execute()
                 }
