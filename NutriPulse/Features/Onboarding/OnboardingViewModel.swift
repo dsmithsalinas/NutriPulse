@@ -19,13 +19,8 @@ enum BiologicalSex: String, CaseIterable, Identifiable {
         }
     }
 
-    var icon: String {
-        switch self {
-        case .male:   return "person.fill"
-        case .female: return "person.fill"
-        case .other:  return "person.fill"
-        }
-    }
+    // Same glyph for every option — the label carries the meaning, the icon is decorative.
+    var icon: String { "person.fill" }
 }
 
 enum ActivityLevel: String, CaseIterable, Identifiable {

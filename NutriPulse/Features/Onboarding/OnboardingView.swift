@@ -76,7 +76,7 @@ struct OnboardingView: View {
 // SWIFT CONCEPT — a generic view with @ViewBuilder lets callers pass any SwiftUI
 // content as a trailing closure, the same way HStack/VStack accept their children.
 struct OnboardingStepLayout<Content: View>: View {
-    let step: Int                        // 1-based, out of 7
+    let step: Int                        // 1-based, out of `totalSteps` (9)
     let title: String
     let subtitle: String
     var continueLabel: String = "Continue"
