@@ -75,6 +75,65 @@ final class HealthKitManager {
         hasRequestedAuthorization = true
     }
 
+    #if DEBUG
+    // Dev-only: seed ~2 weeks of demo Apple Health data (active energy, resting HR, HRV, sleep,
+    // steps) on this simulator/device so the "Today's signals" card and the coach's health context
+    // have something to show in demos. HealthKit data is device-local, so this affects only the
+    // device it's run on and is never compiled into release builds.
+    func seedDemoHealthData() async {
+        guard isAvailable else { return }
+        let active  = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
+        let resting = HKQuantityType.quantityType(forIdentifier: .restingHeartRate)!
+        let hrv     = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!
+        let steps   = HKQuantityType.quantityType(forIdentifier: .stepCount)!
+        let sleep   = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!
+        // One prompt that grants everything a demo needs: WRITE for the types we seed here
+        // (so store.save succeeds) PLUS the app's normal read+write set (so Today's signals
+        // and the coach can actually read the samples back). Without the read grant the
+        // seeded samples are invisible — HealthKit returns nothing for un-authorized reads.
+        let seedShareTypes = writeTypes.union([active, resting, hrv, steps, sleep])
+        try? await store.requestAuthorization(toShare: seedShareTypes, read: readTypes)
+        // Flip the app to "connected" so Profile/onboarding stop offering a dead Connect
+        // button and Today starts querying — same state a real Connect tap would leave.
+        UserDefaults.standard.set(true, forKey: Self.didRequestKey)
+        hasRequestedAuthorization = true
+
+        let cal = Calendar.current
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        var samples: [HKSample] = []
+
+        for d in 0..<14 {
+            guard let day = cal.date(byAdding: .day, value: -d, to: .now),
+                  let morning = cal.date(bySettingHour: 7, minute: 0, second: 0, of: day),
+                  let noon = cal.date(bySettingHour: 12, minute: 0, second: 0, of: day),
+                  let night = cal.date(bySettingHour: 21, minute: 0, second: 0, of: day)
+            else { continue }
+
+            let activeKcal = 420.0 + Double((d * 37) % 260)            // 420…680 kcal
+            samples.append(HKQuantitySample(type: active, quantity: HKQuantity(unit: .kilocalorie(), doubleValue: activeKcal), start: morning, end: noon))
+
+            let stepCount = 7200.0 + Double((d * 611) % 5200)          // 7.2k…12.4k
+            samples.append(HKQuantitySample(type: steps, quantity: HKQuantity(unit: .count(), doubleValue: stepCount), start: morning, end: night))
+
+            let rhr = 56.0 + Double((d * 3) % 9)                       // 56…64 bpm
+            samples.append(HKQuantitySample(type: resting, quantity: HKQuantity(unit: bpm, doubleValue: rhr), start: morning, end: morning))
+
+            for h in [3, 6] {
+                guard let t = cal.date(bySettingHour: h, minute: 0, second: 0, of: day) else { continue }
+                let ms = 34.0 + Double((d * 5 + h) % 26)               // 34…60 ms
+                samples.append(HKQuantitySample(type: hrv, quantity: HKQuantity(unit: .secondUnit(with: .milli), doubleValue: ms), start: t, end: t))
+            }
+
+            if let prev = cal.date(byAdding: .day, value: -1, to: day),
+               let sleepStart = cal.date(bySettingHour: 23, minute: 0, second: 0, of: prev) {
+                let sleepEnd = sleepStart.addingTimeInterval((6.5 * 60 + Double((d * 17) % 90)) * 60)  // 6.5…8h
+                samples.append(HKCategorySample(type: sleep, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue, start: sleepStart, end: sleepEnd))
+            }
+        }
+        try? await store.save(samples)
+    }
+    #endif
+
     // MARK: - Active Calories
 
     // Returns nil when HealthKit has nothing to report — which includes the case where the

@@ -9,6 +9,7 @@ struct ProfileView: View {
     @State private var showClearHistoryConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var showGLP1Tracker = false
+    @State private var isSeedingHealth = false
 
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
@@ -23,6 +24,9 @@ struct ProfileView: View {
                 healthKitSection
                 coachSection
                 feedbackSection
+                #if DEBUG
+                debugSection
+                #endif
                 signOutSection
                 deleteAccountSection
             }
@@ -143,6 +147,30 @@ struct ProfileView: View {
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
+
+    #if DEBUG
+    // Dev-only: seed ~2 weeks of demo Apple Health data on this device/sim so the health signals
+    // show in demos. Never compiled into release builds.
+    private var debugSection: some View {
+        Section("Developer") {
+            Button {
+                Task {
+                    isSeedingHealth = true
+                    await HealthKitManager.shared.seedDemoHealthData()
+                    isSeedingHealth = false
+                }
+            } label: {
+                HStack {
+                    Label("Seed demo Health data", systemImage: "heart.text.square")
+                        .foregroundStyle(Theme.Colors.primary)
+                    Spacer()
+                    if isSeedingHealth { ProgressView() }
+                }
+            }
+            .disabled(isSeedingHealth)
+        }
+    }
+    #endif
 
     private var initials: String {
         (vm.profile?.fullName ?? "?")

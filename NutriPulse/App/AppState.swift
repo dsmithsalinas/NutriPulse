@@ -85,6 +85,7 @@ final class AppState {
         "lastHKWeightSyncDate",
         "chatHistoryVersion",
         "glp1PlannedDoseMg",
+        "doseCardDismissedDay",
         AuthViewModel.pendingAppleFullNameKey,
     ]
 

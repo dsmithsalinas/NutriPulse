@@ -1,0 +1,10 @@
+{
+  "name": "nutripulse-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One-off tooling scripts (demo data seeding, etc.)",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0"
+  }
+}
