@@ -13,6 +13,9 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppState.self) private var appState
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    // Which day the user dismissed the dose-day card (ISO date). Hides it for that day only;
+    // it returns on the next dose day (or as an overdue prompt the following day).
+    @AppStorage("doseCardDismissedDay") private var doseCardDismissedDay = ""
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
     // Health permissions live in the Health app (Sharing → Apps), not in this app's
@@ -50,20 +53,24 @@ struct TodayView: View {
                         // card that opens the injection ritual, instead of a chip buried in the header.
                         // On dose day the shot comes to the front — a living-gradient card that opens
                         // the ritual. Once logged, it flips to a celebratory "done" state for the rest
-                        // of the day, then falls away.
-                        if vm.injectionLoggedToday, let log = vm.latestGLP1 {
-                            DoseDayCard(
-                                medication: log.medication,
-                                doseText: "\(log.doseMg.glp1DoseString) mg",
-                                completed: true
-                            )
-                        } else if let dose = vm.doseStatus, let log = vm.latestGLP1 {
-                            DoseDayCard(
-                                medication: log.medication,
-                                doseText: "\(log.doseMg.glp1DoseString) mg",
-                                overdue: dose.urgent,
-                                onTap: { showRitual = true }
-                            )
+                        // of the day, then falls away. The user can also dismiss it for the day.
+                        if doseCardDismissedDay != Date.now.isoDateString, let log = vm.latestGLP1 {
+                            if vm.injectionLoggedToday {
+                                DoseDayCard(
+                                    medication: log.medication,
+                                    doseText: "\(log.doseMg.glp1DoseString) mg",
+                                    completed: true,
+                                    onDismiss: { doseCardDismissedDay = Date.now.isoDateString }
+                                )
+                            } else if let dose = vm.doseStatus {
+                                DoseDayCard(
+                                    medication: log.medication,
+                                    doseText: "\(log.doseMg.glp1DoseString) mg",
+                                    overdue: dose.urgent,
+                                    onTap: { showRitual = true },
+                                    onDismiss: { doseCardDismissedDay = Date.now.isoDateString }
+                                )
+                            }
                         }
 
                         HeroNutritionCard(

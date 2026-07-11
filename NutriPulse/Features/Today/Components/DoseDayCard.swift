@@ -9,13 +9,31 @@ struct DoseDayCard: View {
     var overdue: Bool = false
     var completed: Bool = false
     var onTap: () -> Void = {}
+    var onDismiss: (() -> Void)? = nil
 
     var body: some View {
-        if completed {
-            card    // a celebration display — not a button
-        } else {
-            Button(action: onTap) { card }
-                .buttonStyle(.pressable)
+        ZStack(alignment: .topTrailing) {
+            if completed {
+                card    // a celebration display — not a button
+            } else {
+                Button(action: onTap) { card }
+                    .buttonStyle(.pressable)
+            }
+
+            // A sibling of the main button (not nested), so dismissing never triggers the tap.
+            if let onDismiss {
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(7)
+                        .background(.black.opacity(0.18), in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.25)))
+                }
+                .buttonStyle(.plain)
+                .padding(12)
+                .accessibilityLabel("Dismiss")
+            }
         }
     }
 
