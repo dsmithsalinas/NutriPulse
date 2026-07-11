@@ -20,6 +20,17 @@ struct GLP1Repository {
             .value
     }
 
+    // Removes one logged dose. RLS restricts deletes to the caller's own rows. Callers must
+    // recompute next-due and reschedule reminders afterward, since the most recent remaining
+    // log — not this one — is what drives the schedule.
+    func deleteLog(id: UUID) async throws {
+        try await supabase
+            .from("glp1_logs")
+            .delete()
+            .eq("id", value: id)
+            .execute()
+    }
+
     func fetchRecentLogs(limit: Int = 5) async throws -> [GLP1Log] {
         try await supabase
             .from("glp1_logs")
