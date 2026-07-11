@@ -22,8 +22,13 @@ struct TalkToLogView: View {
             if dictation.isListening { vm.inputText = dictationBase + text }
         }
         .onChange(of: dictation.status) { _, status in
-            if status == .denied {
+            switch status {
+            case .denied:
                 vm.errorMessage = "Microphone or speech access is off. Turn it on in Settings to speak your log."
+            case .unavailable:
+                vm.errorMessage = "Speech recognition isn't available right now. Type your log instead, or try again in a moment."
+            default:
+                break
             }
         }
         .onDisappear { dictation.stop() }

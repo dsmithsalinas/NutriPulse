@@ -378,6 +378,10 @@ struct ProfileView: View {
                 Label("Privacy Policy", systemImage: "hand.raised")
                     .foregroundStyle(Theme.Colors.primary)
             }
+            Link(destination: Config.termsOfUseURL) {
+                Label("Terms of Use", systemImage: "doc.text")
+                    .foregroundStyle(Theme.Colors.primary)
+            }
         }
     }
 
