@@ -716,3 +716,114 @@ final class LocalStoreSyncStateTests: XCTestCase {
         return f.date(from: iso)!
     }
 }
+
+// MARK: - Sleep interval merging
+
+// HealthKitManager.mergedDuration is the fix for a real double-count: an Apple Watch and a
+// sleep app (AutoSleep, Oura, Whoop) each write their own "asleep" samples for the same
+// night, so summing every sample reported ~14h for a 7h night. It must count any covered
+// stretch once, regardless of overlap or input order. Pure and nonisolated, so it tests
+// without touching HealthKit.
+final class SleepMergeTests: XCTestCase {
+
+    // A fixed reference instant; offsets are in hours for readability.
+    private let base = Date(timeIntervalSince1970: 1_700_000_000)
+    private func h(_ hours: Double) -> Date { base.addingTimeInterval(hours * 3600) }
+    private func interval(_ start: Double, _ end: Double) -> (start: Date, end: Date) {
+        (start: h(start), end: h(end))
+    }
+
+    func testEmptyIsZero() {
+        XCTAssertEqual(HealthKitManager.mergedDuration(of: []), 0)
+    }
+
+    func testSingleInterval() {
+        XCTAssertEqual(HealthKitManager.mergedDuration(of: [interval(0, 7)]), 7 * 3600, accuracy: 0.001)
+    }
+
+    // Two non-overlapping stretches (woke up, fell back asleep) sum.
+    func testDisjointIntervalsSum() {
+        let d = HealthKitManager.mergedDuration(of: [interval(0, 3), interval(4, 7)])
+        XCTAssertEqual(d, 6 * 3600, accuracy: 0.001)
+    }
+
+    // The bug this guards: two sources logging the SAME 7h night must not become 14h.
+    func testIdenticalOverlapCountsOnce() {
+        let watch = interval(0, 7)
+        let sleepApp = interval(0, 7)
+        XCTAssertEqual(HealthKitManager.mergedDuration(of: [watch, sleepApp]), 7 * 3600, accuracy: 0.001)
+    }
+
+    // 0–5 and 4–9 overlap on 4–5; the union is 0–9.
+    func testPartialOverlapMerges() {
+        let d = HealthKitManager.mergedDuration(of: [interval(0, 5), interval(4, 9)])
+        XCTAssertEqual(d, 9 * 3600, accuracy: 0.001)
+    }
+
+    // An interval fully inside another contributes nothing extra.
+    func testNestedIntervalAbsorbed() {
+        let d = HealthKitManager.mergedDuration(of: [interval(0, 8), interval(2, 5)])
+        XCTAssertEqual(d, 8 * 3600, accuracy: 0.001)
+    }
+
+    // Touching (end == next start) is one continuous stretch, not a gap.
+    func testAdjacentIntervalsJoin() {
+        let d = HealthKitManager.mergedDuration(of: [interval(0, 3), interval(3, 7)])
+        XCTAssertEqual(d, 7 * 3600, accuracy: 0.001)
+    }
+
+    // HealthKit returns samples in no guaranteed order; the merge must sort first.
+    func testUnsortedInputIsMerged() {
+        let d = HealthKitManager.mergedDuration(of: [interval(4, 9), interval(0, 5)])
+        XCTAssertEqual(d, 9 * 3600, accuracy: 0.001)
+    }
+
+    // Zero- and negative-length intervals are dropped, never counted or crashed on.
+    func testDegenerateIntervalsIgnored() {
+        let d = HealthKitManager.mergedDuration(of: [interval(2, 2), interval(5, 4), interval(0, 6)])
+        XCTAssertEqual(d, 6 * 3600, accuracy: 0.001)
+    }
+}
+
+// MARK: - Age from date of birth
+
+// GoalCalculator.ageYears feeds Mifflin-St Jeor. dateComponents(.year) floors to completed
+// years, which is the intent. Passing `now` keeps these deterministic.
+final class AgeFromDOBTests: XCTestCase {
+
+    private let cal = Calendar.current
+    private func date(_ y: Int, _ m: Int, _ d: Int) -> Date {
+        cal.date(from: DateComponents(year: y, month: m, day: d))!
+    }
+
+    func testExactBirthdayCountsTheFullYear() {
+        XCTAssertEqual(
+            GoalCalculator.ageYears(fromDOB: date(1990, 6, 15), now: date(2020, 6, 15)),
+            30
+        )
+    }
+
+    // The day before the birthday they are still 29 — completed years only.
+    func testDayBeforeBirthdayIsStillYounger() {
+        XCTAssertEqual(
+            GoalCalculator.ageYears(fromDOB: date(1990, 6, 15), now: date(2020, 6, 14)),
+            29
+        )
+    }
+
+    // A DOB under a year old is age 0 — NOT the 30 fallback (age-0 DOB was a real onboarding bug).
+    func testUnderOneYearIsZeroNotFallback() {
+        XCTAssertEqual(
+            GoalCalculator.ageYears(fromDOB: date(2020, 1, 1), now: date(2020, 8, 1)),
+            0
+        )
+    }
+
+    // A leap-day birthday resolves without throwing and floors correctly.
+    func testLeapDayBirthday() {
+        XCTAssertEqual(
+            GoalCalculator.ageYears(fromDOB: date(2000, 2, 29), now: date(2020, 3, 1)),
+            20
+        )
+    }
+}
