@@ -6,7 +6,7 @@ import SwiftUI
 // Push a value onto `path` to navigate forward; pop it to go back.
 // .navigationDestination(for:) maps each route to the view that renders it.
 enum OnboardingRoute: Hashable {
-    case sex, dob, heightWeight, activity, goal, healthKit, glp1, summary
+    case name, sex, dob, heightWeight, activity, goal, healthKit, glp1, summary
 }
 
 // ─── Top-level shell ─────────────────────────────────────────────────────────
@@ -17,10 +17,12 @@ struct OnboardingView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            // Root = step 1 (name) — no back button since it's the NavigationStack root
-            NameStepView(vm: vm) { path.append(.sex) }
+            // Root = the splash where Pulse introduces itself, then push into the questions.
+            OnboardingSplashView { path.append(.name) }
                 .navigationDestination(for: OnboardingRoute.self) { route in
                     switch route {
+                    case .name:
+                        NameStepView(vm: vm) { path.append(.sex) }
                     case .sex:
                         BiologicalSexStepView(vm: vm) { path.append(.dob) }
                     case .dob:
@@ -68,65 +70,5 @@ struct OnboardingView: View {
                 vm.errorMessage = error.localizedDescription
             }
         }
-    }
-}
-
-// ─── Shared step container ───────────────────────────────────────────────────
-// Used by every step view — provides progress dots, title, and the Continue button.
-// SWIFT CONCEPT — a generic view with @ViewBuilder lets callers pass any SwiftUI
-// content as a trailing closure, the same way HStack/VStack accept their children.
-struct OnboardingStepLayout<Content: View>: View {
-    let step: Int                        // 1-based, out of `totalSteps` (9)
-    let title: String
-    let subtitle: String
-    var continueLabel: String = "Continue"
-    var canContinue: Bool = true
-    let onContinue: () -> Void
-    @ViewBuilder let content: Content    // trailing closure filled in by each step
-
-    private let totalSteps = 9
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
-                progressDots
-                    .padding(.top, Theme.Spacing.sm)
-
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text(title)
-                        .font(.largeTitle.bold())
-                    Text(subtitle)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-
-                content
-            }
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.bottom, 100)   // leave room for the floating button
-        }
-        .safeAreaInset(edge: .bottom) { continueButton }
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var progressDots: some View {
-        HStack(spacing: 6) {
-            ForEach(1...totalSteps, id: \.self) { i in
-                Capsule()
-                    .fill(i <= step ? Theme.Colors.primary : Color(.systemFill))
-                    .frame(width: i == step ? 24 : 8, height: 8)
-                    .animation(.spring(response: 0.3), value: step)
-            }
-        }
-    }
-
-    private var continueButton: some View {
-        Button(continueLabel, action: onContinue)
-            .buttonStyle(.brandPrimary)
-            .disabled(!canContinue)
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.bottom, Theme.Spacing.sm)
-            .background(.bar)
     }
 }
