@@ -39,6 +39,10 @@ targets:
         CFBundleDisplayName: NutriPulse
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # Only standard HTTPS/TLS is used — exempt encryption. Declaring this here answers
+        # the export-compliance question up front so App Store Connect stops prompting on
+        # every upload. Flip to true only if we ever add non-exempt/custom cryptography.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen:
           UIColorName: ""
         UISupportedInterfaceOrientations:
