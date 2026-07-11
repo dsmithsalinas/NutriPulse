@@ -367,7 +367,7 @@ struct ProfileView: View {
     // MARK: - Feedback
 
     private var feedbackSection: some View {
-        Section("Support") {
+        Section {
             Button {
                 vm.showSendFeedback = true
             } label: {
@@ -382,6 +382,10 @@ struct ProfileView: View {
                 Label("Terms of Use", systemImage: "doc.text")
                     .foregroundStyle(Theme.Colors.primary)
             }
+        } header: {
+            Text("Support")
+        } footer: {
+            Text("NutriPulse is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing in the app is medical advice — always consult your doctor about medication and health decisions.")
         }
     }
 

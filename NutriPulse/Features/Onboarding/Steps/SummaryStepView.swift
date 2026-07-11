@@ -73,6 +73,13 @@ struct SummaryStepView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
+
+                Text("NutriPulse is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing in the app is medical advice — always talk to your doctor about medication and health decisions.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, Theme.Spacing.xs)
             }
         }
     }

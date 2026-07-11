@@ -160,28 +160,38 @@ struct CoachView: View {
     // MARK: - Input bar
 
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            TextField("Ask Pulse…", text: $vm.inputText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...4)
-                .focused($isInputFocused)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Theme.Colors.surfaceInset)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-                }
+        VStack(spacing: 7) {
+            HStack(spacing: 8) {
+                TextField("Ask Pulse…", text: $vm.inputText, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...4)
+                    .focused($isInputFocused)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Theme.Colors.surfaceInset)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                    }
 
-            Button {
-                Task { await vm.sendMessage() }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(sendButtonActive ? AnyShapeStyle(Theme.Colors.primaryGradient) : AnyShapeStyle(Color.secondary))
+                Button {
+                    Task { await vm.sendMessage() }
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(sendButtonActive ? AnyShapeStyle(Theme.Colors.primaryGradient) : AnyShapeStyle(Color.secondary))
+                }
+                .disabled(!sendButtonActive)
             }
-            .disabled(!sendButtonActive)
+
+            // Pulse is a coach, not a clinician. A persistent, low-key reminder here keeps that
+            // clear at the exact moment a user might ask it something medical.
+            Text("Pulse is a wellness coach, not a medical professional. Not medical advice.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
