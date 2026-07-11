@@ -47,27 +47,28 @@ final class InjectionRitualViewModel {
         doseMg = doses[min(max(i + direction, 0), doses.count - 1)]
     }
 
-    // Logs today's injection and schedules reminders. `updateGoingForward` persists the chosen
-    // dose as the new default; when off, we pin the *previous* default so a one-off week doesn't
-    // silently become next week's suggestion.
-    func confirm(updateGoingForward: Bool) async -> Bool {
+    // Logs today's injection and schedules reminders; returns the saved row so the caller can
+    // update immediately (no refetch race). `updateGoingForward` persists the chosen dose as the
+    // new default; when off, we pin the *previous* default so a one-off week doesn't silently
+    // become next week's suggestion.
+    func confirm(updateGoingForward: Bool) async -> GLP1Log? {
         isLogging = true
         defer { isLogging = false }
 
         let now = Date.now
         let nextDue = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
         do {
-            _ = try await glp1Repo.logInjection(
+            let saved = try await glp1Repo.logInjection(
                 medication: medication.rawValue, doseMg: doseMg,
                 site: site.rawValue, injectedAt: now, nextDueAt: nextDue
             )
             UserDefaults.standard.set(updateGoingForward ? doseMg : defaultAtLoad,
                                       forKey: Self.plannedDoseKey)
             await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
-            return true
+            return saved
         } catch {
             errorMessage = "Couldn't log your injection. Try again."
-            return false
+            return nil
         }
     }
 }

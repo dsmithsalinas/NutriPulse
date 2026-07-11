@@ -6,7 +6,7 @@ import UIKit
 // schedules the next reminder. Presented full-screen from the dose-day card on Today.
 struct InjectionRitualView: View {
     let latest: GLP1Log?
-    var onLogged: () -> Void = {}
+    var onLogged: (GLP1Log) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -288,9 +288,8 @@ struct InjectionRitualView: View {
             bloom = true
         }
         Task {
-            let ok = await vm.confirm(updateGoingForward: updateGoingForward)
-            if ok {
-                onLogged()
+            if let saved = await vm.confirm(updateGoingForward: updateGoingForward) {
+                onLogged(saved)
                 try? await Task.sleep(for: .seconds(2.8))
                 dismiss()
             } else {

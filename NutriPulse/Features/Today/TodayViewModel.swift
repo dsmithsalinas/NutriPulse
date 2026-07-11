@@ -75,6 +75,20 @@ final class TodayViewModel {
         return nil
     }
 
+    // Did the user log their shot today? Drives the dose-day card's celebratory "done" state,
+    // which shows for the rest of the day and then falls away tomorrow.
+    var injectionLoggedToday: Bool {
+        guard isToday, let injected = latestGLP1?.injectedAt else { return false }
+        return Calendar.current.isDateInToday(injected)
+    }
+
+    // Called the instant an injection is logged from the ritual — update the card immediately
+    // (no refetch race), then reconcile the rest of the day's data.
+    func registerLoggedInjection(_ log: GLP1Log) {
+        latestGLP1 = log
+        Task { await loadData() }
+    }
+
     // A supportive, forward-looking nudge for the current day when the user is pacing under
     // their targets. GLP-1 suppresses appetite, so under-eating (and losing muscle) is the real
     // risk here — the framing protects results, it never scolds. Only surfaces on today, only in

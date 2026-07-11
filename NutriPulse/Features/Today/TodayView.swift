@@ -48,9 +48,16 @@ struct TodayView: View {
                     } else {
                         // On dose day (or overdue), the shot comes to the front — a living-gradient
                         // card that opens the injection ritual, instead of a chip buried in the header.
-                        // On dose day (or overdue), the shot comes to the front — a living-gradient
-                        // card that opens the injection ritual, instead of a chip buried in the header.
-                        if let dose = vm.doseStatus, let log = vm.latestGLP1 {
+                        // On dose day the shot comes to the front — a living-gradient card that opens
+                        // the ritual. Once logged, it flips to a celebratory "done" state for the rest
+                        // of the day, then falls away.
+                        if vm.injectionLoggedToday, let log = vm.latestGLP1 {
+                            DoseDayCard(
+                                medication: log.medication,
+                                doseText: "\(log.doseMg.glp1DoseString) mg",
+                                completed: true
+                            )
+                        } else if let dose = vm.doseStatus, let log = vm.latestGLP1 {
                             DoseDayCard(
                                 medication: log.medication,
                                 doseText: "\(log.doseMg.glp1DoseString) mg",
@@ -153,8 +160,8 @@ struct TodayView: View {
                 .presentationDetents([.medium])
             }
             .fullScreenCover(isPresented: $showRitual) {
-                InjectionRitualView(latest: vm.latestGLP1) {
-                    Task { await vm.loadData() }
+                InjectionRitualView(latest: vm.latestGLP1) { saved in
+                    vm.registerLoggedInjection(saved)
                 }
             }
             .sheet(isPresented: $showBodyCompSheet) {
