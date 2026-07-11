@@ -9,16 +9,36 @@ struct NutriPulseApp: App {
 
     static let modelContainer: ModelContainer = {
         let schema = Schema([SDFoodLog.self, SDWaterLog.self, SDDailyGoal.self])
-        do {
-            return try ModelContainer(for: schema)
-        } catch {
-            // A corrupt/incompatible on-disk store should never hard-crash
-            // launch. Fall back to an in-memory store for this session (data
-            // won't persist across launches) and log it so we know it happened.
-            Task { @MainActor in Telemetry.localStoreFallback() }
-            let config = ModelConfiguration(isStoredInMemoryOnly: true)
-            return try! ModelContainer(for: schema, configurations: config)
+
+        // 1) Normal on-disk store — the common path.
+        if let container = try? ModelContainer(for: schema) {
+            return container
         }
+
+        // 2) The on-disk store is corrupt or schema-incompatible (e.g. a failed
+        //    migration after an update). Delete it and rebuild so persistence keeps
+        //    working from here forward, rather than silently degrading to memory-only
+        //    on every future launch. The local store is only a cache — SyncEngine
+        //    re-pulls from Supabase — so dropping it is recoverable, not data loss.
+        Task { @MainActor in Telemetry.localStoreFallback() }
+        let storeURL = ModelConfiguration().url
+        for sidecar in ["", "-wal", "-shm"] {
+            let name = storeURL.lastPathComponent + sidecar
+            let url = storeURL.deletingLastPathComponent().appendingPathComponent(name)
+            try? FileManager.default.removeItem(at: url)
+        }
+        if let container = try? ModelContainer(for: schema) {
+            return container
+        }
+
+        // 3) Last resort: in-memory for this session only (data won't persist across
+        //    launches). If even this throws, the schema itself is invalid — a
+        //    programming error that would surface in development, not on a user's device.
+        let memoryConfig = ModelConfiguration(isStoredInMemoryOnly: true)
+        guard let container = try? ModelContainer(for: schema, configurations: memoryConfig) else {
+            fatalError("Could not create an in-memory ModelContainer — the SwiftData schema is invalid.")
+        }
+        return container
     }()
 
     init() {
