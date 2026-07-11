@@ -87,6 +87,15 @@ targets:
       - package: TelemetryDeck
         product: TelemetryDeck
       - target: NutriPulseWidgets
+    # Build number = git commit count, stamped at build time. Always increasing and unique,
+    # and immune to `xcodegen generate` (which would otherwise reset a static value and cause
+    # duplicate-build rejections on upload). MARKETING_VERSION stays the human "1.0.0".
+    postBuildScripts:
+      - name: Set build number from git
+        basedOnDependencyAnalysis: false
+        script: |
+          n=$(cd "$SRCROOT" && git rev-list --count HEAD 2>/dev/null || echo 1)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $n" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
 
   # Home Screen + Lock Screen widgets for the protein floor. Shares data with the app through
   # the App Group container (see Shared/ProteinFloorShared.swift).
@@ -117,6 +126,13 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
+    # Keep the widget's build number in lockstep with the app (Apple requires they match).
+    postBuildScripts:
+      - name: Set build number from git
+        basedOnDependencyAnalysis: false
+        script: |
+          n=$(cd "$SRCROOT" && git rev-list --count HEAD 2>/dev/null || echo 1)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $n" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
 
   NutriPulseTests:
     type: bundle.unit-test
