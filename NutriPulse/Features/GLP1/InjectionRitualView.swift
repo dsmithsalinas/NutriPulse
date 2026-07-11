@@ -73,7 +73,7 @@ struct InjectionRitualView: View {
     private var ritualContent: some View {
         VStack(spacing: 0) {
             Spacer().frame(height: 78)
-            Text("INJECTION DAY")
+            Text("SHOT DAY")
                 .font(.system(size: 12, weight: .bold)).tracking(3)
                 .foregroundStyle(.white.opacity(0.72))
             Text("\(vm.medication.rawValue) \u{00B7} \(vm.doseMg.glp1DoseString) mg")

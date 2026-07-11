@@ -67,7 +67,7 @@ final class InjectionRitualViewModel {
             await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
             return saved
         } catch {
-            errorMessage = "Couldn't log your injection. Try again."
+            errorMessage = "Couldn't log your dose. Try again."
             return nil
         }
     }

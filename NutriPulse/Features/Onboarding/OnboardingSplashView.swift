@@ -13,7 +13,9 @@ struct OnboardingSplashView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let title = "Hi, I'm Pulse."
-    private let subtitle = "Let's start with a few quick questions so I can get to know you — and help you crush this from day one."
+    // "crush this" failed the persona's no-hype rule (docs/pulse-persona.md §5) — Pulse is
+    // steady, not a hype machine.
+    private let subtitle = "Let's start with a few quick questions so I can get to know you — and be useful from day one."
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {

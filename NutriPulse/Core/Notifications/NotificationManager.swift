@@ -40,31 +40,35 @@ final class NotificationManager {
 
         let calendar = Calendar.current
 
+        // Copy rules (see docs/pulse-persona.md): Pulse's voice, sentence case, no hype,
+        // never "overdue" aimed at a person's medication. Deliberately discreet — these
+        // sit on the LOCK SCREEN, so they never name the medication or say "injection";
+        // "shot day" is clear to the user and opaque to a bystander's glance.
         await schedule(
             identifier: "glp1-eve",
-            title: "GLP-1 Injection Tomorrow",
-            body: "Your weekly injection is due tomorrow. Get ready!",
+            title: "Tomorrow's the day",
+            body: "Your weekly dose is on the plan for tomorrow.",
             onDayOf: calendar.date(byAdding: .day, value: -1, to: nextDueAt),
             calendar: calendar
         )
 
         await schedule(
             identifier: "glp1-day",
-            title: "GLP-1 Injection Due Today",
-            body: "Today is your weekly injection day. Stay on track!",
+            title: "Shot day",
+            body: "Today's the day. Log it when it's done — I'll take it from there.",
             onDayOf: nextDueAt,
             calendar: calendar
         )
 
         // Miss the day-of reminder and nothing ever nudged you again — for a weekly
         // medication, that defeats the point of an adherence feature. These are cancelled
-        // the moment an injection is logged (ProfileViewModel.logInjection reschedules).
+        // the moment a dose is logged (ProfileViewModel.logInjection reschedules).
+        let plannedDay = nextDueAt.formatted(.dateTime.weekday(.wide))
         for dayOffset in 1...Self.overdueFollowUpDays {
-            let plural = dayOffset == 1 ? "day" : "days"
             await schedule(
                 identifier: "glp1-overdue-\(dayOffset)",
-                title: "GLP-1 Injection Overdue",
-                body: "Your injection is \(dayOffset) \(plural) overdue. Log it once you've taken it.",
+                title: "Whenever you're ready",
+                body: "Your dose was planned for \(plannedDay). Log it once you've taken it and I'll adjust your week.",
                 onDayOf: calendar.date(byAdding: .day, value: dayOffset, to: nextDueAt),
                 calendar: calendar
             )

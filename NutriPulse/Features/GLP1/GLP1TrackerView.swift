@@ -61,7 +61,7 @@ struct GLP1TrackerView: View {
                             .foregroundStyle(vm.isOverdue ? .orange : .secondary)
                     }
                 } else {
-                    Text("No injection logged")
+                    Text("No dose logged yet")
                         .font(.system(size: 16, weight: .bold))
                     Text("Log a dose in Profile → GLP-1 to start tracking")
                         .font(.subheadline)

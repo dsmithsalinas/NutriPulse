@@ -262,7 +262,7 @@ struct ProfileView: View {
                 if let countdown = vm.nextInjectionCountdown,
                    let due = vm.nextInjectionDue {
                     HStack {
-                        Label("Next injection", systemImage: "calendar")
+                        Label("Next dose", systemImage: "calendar")
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(countdown)
@@ -285,7 +285,7 @@ struct ProfileView: View {
                 Button {
                     vm.showLogInjection = true
                 } label: {
-                    Label("Log Injection", systemImage: "syringe")
+                    Label("Log Dose", systemImage: "syringe")
                         .foregroundStyle(Theme.Colors.primary)
                 }
 
@@ -304,7 +304,7 @@ struct ProfileView: View {
                     NavigationLink {
                         GLP1HistoryView()
                     } label: {
-                        Text("See All Injections")
+                        Text("Dose History")
                             .foregroundStyle(Theme.Colors.primary)
                     }
                 }
@@ -837,7 +837,7 @@ private struct LogInjectionSheet: View {
                     }
                 }
 
-                Section("Injection") {
+                Section("Dose") {
                     DatePicker("Date & Time", selection: $injectionDate, in: ...Date.now)
                     Picker("Site", selection: $site) {
                         ForEach(InjectionSite.allCases) { s in
@@ -853,7 +853,7 @@ private struct LogInjectionSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Log Injection")
+            .navigationTitle("Log Dose")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

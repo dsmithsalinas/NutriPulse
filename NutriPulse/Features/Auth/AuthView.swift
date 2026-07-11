@@ -13,6 +13,10 @@ struct AuthView: View {
             Text("NutriPulse")
                 .font(.largeTitle.bold())
 
+            Text("Coached, not scolded.")
+                .font(.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+
             Spacer()
 
             VStack(spacing: Theme.Spacing.sm) {

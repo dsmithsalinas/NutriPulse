@@ -76,8 +76,8 @@ struct GLP1SetupStepView: View {
                 }
             }
 
-            sectionLabel("Last injection")
-            DatePicker("Last injection", selection: $vm.glp1LastInjected, in: ...Date.now, displayedComponents: .date)
+            sectionLabel("Last dose")
+            DatePicker("Last dose", selection: $vm.glp1LastInjected, in: ...Date.now, displayedComponents: .date)
                 .datePickerStyle(.compact)
                 .labelsHidden()
                 .padding(12)

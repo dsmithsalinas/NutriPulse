@@ -124,13 +124,13 @@ final class GLP1ViewModel {
     // and protein-first is the through-line. Framed to protect results, never to scold.
     var coachNote: String {
         guard let days = daysSinceShot else {
-            return "Log an injection and Pulse can time your protein around your dose cycle."
+            return "Log a dose and Pulse can time your protein around your cycle."
         }
         if isOverdue {
             return "You're past your usual dose day — appetite tends to climb here. Keep protein first so it stays easy."
         }
         switch days {
-        case 0:      return "Injection day. Appetite usually dips over the next day or two — get your protein in while it's easy."
+        case 0:      return "Shot day. Appetite usually dips over the next day or two — get your protein in while it's easy."
         case 1...2:  return "Day \(days) after your shot — appetite's usually lowest now. Keep protein dense so you don't have to fight the volume."
         case 3...4:  return "Appetite starts returning around now. Stay ahead of your protein floor before the hunger does."
         default:     return "Appetite's usually highest right before your next dose — a good window to bank a little extra protein."
@@ -142,6 +142,6 @@ final class GLP1ViewModel {
         if let days = daysSinceShot {
             return "I'm on \(latest?.medication ?? "a GLP-1"), day \(days) after my last shot. What should I focus on eating today to protect my muscle and hit my protein?"
         }
-        return "How should I eat around my GLP-1 injection cycle to protect my muscle and hit my protein?"
+        return "How should I eat around my GLP-1 shot cycle to protect my muscle and hit my protein?"
     }
 }

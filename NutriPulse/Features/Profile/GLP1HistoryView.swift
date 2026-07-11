@@ -29,16 +29,16 @@ struct GLP1HistoryView: View {
             .padding(.vertical, 2)
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Injection History")
+        .navigationTitle("Dose History")
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
             if isLoading {
                 ProgressView()
             } else if logs.isEmpty {
                 ContentUnavailableView(
-                    "No Injections Logged",
+                    "No Doses Logged",
                     systemImage: "syringe",
-                    description: Text("Your injection history will appear here.")
+                    description: Text("Your dose history will appear here.")
                 )
             }
         }
