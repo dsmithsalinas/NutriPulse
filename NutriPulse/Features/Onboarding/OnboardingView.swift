@@ -6,7 +6,7 @@ import SwiftUI
 // Push a value onto `path` to navigate forward; pop it to go back.
 // .navigationDestination(for:) maps each route to the view that renders it.
 enum OnboardingRoute: Hashable {
-    case sex, dob, heightWeight, activity, goal, healthKit, glp1, summary
+    case name, sex, dob, heightWeight, activity, goal, healthKit, glp1, summary
 }
 
 // ─── Top-level shell ─────────────────────────────────────────────────────────
@@ -17,10 +17,12 @@ struct OnboardingView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            // Root = step 1 (name) — no back button since it's the NavigationStack root
-            NameStepView(vm: vm) { path.append(.sex) }
+            // Root = the splash where Pulse introduces itself, then push into the questions.
+            OnboardingSplashView { path.append(.name) }
                 .navigationDestination(for: OnboardingRoute.self) { route in
                     switch route {
+                    case .name:
+                        NameStepView(vm: vm) { path.append(.sex) }
                     case .sex:
                         BiologicalSexStepView(vm: vm) { path.append(.dob) }
                     case .dob:

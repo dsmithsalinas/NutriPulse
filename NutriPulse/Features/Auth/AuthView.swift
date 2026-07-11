@@ -8,9 +8,7 @@ struct AuthView: View {
         VStack(spacing: Theme.Spacing.lg) {
             Spacer()
 
-            Image(systemName: "fork.knife.circle.fill")
-                .font(.system(size: 72))
-                .foregroundStyle(Theme.Colors.primaryGradient)
+            OnboardingPulseAvatar(size: 84)
 
             Text("NutriPulse")
                 .font(.largeTitle.bold())
