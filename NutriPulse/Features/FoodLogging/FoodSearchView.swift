@@ -91,6 +91,12 @@ struct FoodSearchView: View {
                     .scrollContentBackground(.hidden)
                 }
             }
+
+            // FatSecret licensing requires attribution on every screen that shows their
+            // data. Pinned at the bottom of the Search tab so it's always visible.
+            Divider().overlay(Theme.Colors.hairline)
+            FatSecretAttribution()
+                .padding(.vertical, Theme.Spacing.sm)
         }
         .task { await vm.loadQuickAdds() }
         // SWIFT CONCEPT — .task(id:) re-runs the async block whenever `id` changes,
@@ -243,6 +249,14 @@ struct FoodDetailSheet: View {
                     MacroPreviewRow(label: "Fat",       value: preview.fatG,      unit: "g",    color: Theme.NutrientColor.fat)
                     MacroPreviewRow(label: "Fiber",     value: preview.fiberG,    unit: "g",    color: Theme.NutrientColor.fiber)
                 }
+            }
+
+            // FatSecret attribution — this sheet displays their nutrition data (from search
+            // and barcode scans alike).
+            Section {
+                FatSecretAttribution()
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
             }
         }
         .scrollContentBackground(.hidden)
