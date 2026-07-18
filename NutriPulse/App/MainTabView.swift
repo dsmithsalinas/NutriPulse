@@ -6,6 +6,7 @@ struct MainTabView: View {
     // Owned here so the tab bar's Log action can log to the exact day Today is showing.
     @State private var todayVM = TodayViewModel()
     @State private var showLogger = false
+    @State private var tabBarHeight: CGFloat = 0
 
     // Log to the day being viewed on Today; anywhere else, log to today.
     private var logDate: Date {
@@ -39,6 +40,8 @@ struct MainTabView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             MainTabBar(selected: $selectedTab, onLog: { showLogger = true })
         }
+        .onPreferenceChange(TabBarHeightKey.self) { tabBarHeight = $0 }
+        .environment(\.tabBarHeight, tabBarHeight)
         .sheet(isPresented: $showLogger, onDismiss: {
             Task { await todayVM.loadData() }
         }) {

@@ -1,11 +1,22 @@
 import SwiftUI
+import UIKit
 
 struct CoachView: View {
     let isActive: Bool
     @Environment(AppState.self) private var appState
+    @Environment(\.tabBarHeight) private var tabBarHeight
     @State private var vm = CoachViewModel()
     @AppStorage("chatHistoryVersion") private var chatHistoryVersion = 0
     @FocusState private var isInputFocused: Bool
+    @State private var keyboardVisible = false
+
+    // With the keyboard down, only the raised Log (+) juts into content, so a modest gap does
+    // it. With the keyboard up, SwiftUI stops insetting content by the tab bar entirely and the
+    // bar lands right on top of the composer — hiding the text and the keyboard's Done button —
+    // so the whole bar height has to be cleared by hand. Measured, so Dynamic Type still works.
+    private var composerClearance: CGFloat {
+        keyboardVisible ? max(tabBarHeight, 96) : 48
+    }
 
     var body: some View {
         NavigationStack {
@@ -16,10 +27,7 @@ struct CoachView: View {
                 }
                 Divider()
                 inputBar
-                    // Clear the tab bar's raised Log button, which floats ~18pt above the bar
-                    // surface into content. The scrolling tabs slide under it; this pinned bar
-                    // can't, so it needs its own clearance.
-                    .padding(.bottom, 22)
+                    .padding(.bottom, composerClearance)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
@@ -39,6 +47,12 @@ struct CoachView: View {
                     Button("Done") { isInputFocused = false }
                 }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.25)) { keyboardVisible = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.25)) { keyboardVisible = false }
         }
         .onChange(of: isActive) { _, active in
             guard active else { return }

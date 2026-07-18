@@ -3,6 +3,28 @@ import UIKit
 
 enum MainTab: Hashable { case today, analytics, pulse, profile }
 
+// SwiftUI places `.safeAreaInset` content above the keyboard but does NOT inset the main
+// content by it, so a pinned composer ends up underneath this bar (and under the raised Log
+// button) whenever the keyboard is up. Screens with pinned bottom content read this height
+// and add the clearance themselves. See CoachView.
+struct TabBarHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct TabBarHeightEnvironmentKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var tabBarHeight: CGFloat {
+        get { self[TabBarHeightEnvironmentKey.self] }
+        set { self[TabBarHeightEnvironmentKey.self] = newValue }
+    }
+}
+
 // Custom bottom bar: the four destinations plus a raised, gradient Log action in the center
 // slot. Logging is the most frequent thing a GLP-1 user does and the hardest habit to keep, so
 // it gets the most prominent control on the screen without costing a navigation destination.
@@ -25,6 +47,11 @@ struct MainTabBar: View {
         .padding(.horizontal, 10)
         .padding(.top, lift + 10)
         .padding(.bottom, 4)
+        .background {
+            GeometryReader { geo in
+                Color.clear.preference(key: TabBarHeightKey.self, value: geo.size.height)
+            }
+        }
         .background(alignment: .bottom) {
             // Bar surface fills everything BELOW the reserved lift zone, so the FAB floats
             // above a clean edge rather than sitting on it.
