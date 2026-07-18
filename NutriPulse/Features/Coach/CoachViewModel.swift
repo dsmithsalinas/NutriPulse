@@ -10,6 +10,9 @@ final class CoachViewModel {
     var error: String? = nil
     private(set) var canLoadOlder = false
     private(set) var isLoadingOlder = false
+    // History fetch failed (offline, 5xx). Drives the retry state — without it the tab is
+    // just an empty scroll view, which reads as a broken build rather than "no connection".
+    private(set) var historyLoadFailed = false
 
     private(set) var profile: UserProfile?
     private var hasInitialized = false
@@ -42,9 +45,19 @@ final class CoachViewModel {
 
     private func loadAndInitialize() async {
         await loadProfile()
-        await loadHistory()
+        let historyLoaded = await loadHistory()
+        // Same double-billing the reload() comment above describes, reached through a failed
+        // fetch instead of a race: maybeGenerateCheckin's 8-hour cutoff reads `messages.last`,
+        // so an empty history clears it and bills a duplicate Claude call for a check-in that
+        // may already exist. Without a known-good history we can't tell, so don't guess.
+        guard historyLoaded else { return }
         await maybeGenerateCheckin()
         await maybeGenerateWeeklySummary()
+    }
+
+    // Retry entry point for the offline/error state.
+    func retryInitialLoad() async {
+        await loadAndInitialize()
     }
 
     private func loadProfile() async {
@@ -63,12 +76,20 @@ final class CoachViewModel {
 
     private static let historyPageSize = 30
 
-    private func loadHistory() async {
+    // Returns whether the fetch actually succeeded — callers must not treat a failed load as
+    // "no messages", which is what silently swallowing this error used to cause.
+    @discardableResult
+    private func loadHistory() async -> Bool {
         do {
             messages = try await repo.fetchHistory(limit: Self.historyPageSize)
             // A full page means there is probably more behind it.
             canLoadOlder = messages.count == Self.historyPageSize
-        } catch { }
+            historyLoadFailed = false
+            return true
+        } catch {
+            historyLoadFailed = true
+            return false
+        }
     }
 
     // Everything older than the newest 30 messages used to be unreachable in the UI,

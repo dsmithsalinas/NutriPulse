@@ -109,6 +109,21 @@ struct CoachView: View {
                         .padding(.bottom, 4)
                     }
 
+                    // Without this the tab is a blank scroll view when the history fetch
+                    // fails — no spinner, no error, no way back. Reads as a broken build.
+                    if vm.historyLoadFailed && vm.messages.isEmpty {
+                        BrandedEmptyState(
+                            icon: "wifi.exclamationmark",
+                            title: "Can't reach Pulse",
+                            message: "Your conversation didn't load. Check your connection and try again."
+                        )
+                        Button("Try again") {
+                            Task { await vm.retryInitialLoad() }
+                        }
+                        .buttonStyle(.brandPrimary)
+                        .padding(.horizontal, Theme.Spacing.xl)
+                    }
+
                     ForEach(vm.messages) { msg in
                         MessageBubble(message: msg)
                     }
