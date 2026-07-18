@@ -135,12 +135,25 @@ final class TodayViewModel {
     // where a view's .onChange could race against an in-flight async load.
     private(set) var justClosedAllRings = false
 
+    // Protein is the hero ring — "did I hit protein?" is the daily question — so it gets
+    // its own celebration, fired the instant protein alone crosses the goal, independent
+    // of the other macros. Protein is a FLOOR (met when consumed >= goal), same as ringsClosed.
+    var proteinGoalHit: Bool {
+        guard let goal = dailyGoal, goal.proteinG > 0 else { return false }
+        return totalProteinG >= goal.proteinG
+    }
+
+    // The protein-only sibling of justClosedAllRings: true for exactly the one loadData()
+    // where proteinGoalHit flips false → true, edge-detected atomically around the reload.
+    private(set) var justHitProteinGoal = false
+
     var healthDataAvailable: Bool {
         activeCalories != nil || restingHeartRate != nil || hrv != nil || sleepHours != nil
     }
 
     func loadData() async {
-        let wasClosed = allRingsClosed
+        let wasClosed      = allRingsClosed
+        let wasProteinHit  = proteinGoalHit
         isLoading    = true
         errorMessage = nil
         defer { isLoading = false }
@@ -186,6 +199,7 @@ final class TodayViewModel {
         }
 
         justClosedAllRings = !wasClosed && allRingsClosed
+        justHitProteinGoal = !wasProteinHit && proteinGoalHit
 
         // Feed the protein-floor widget with today's numbers (only for the current day).
         if isToday {

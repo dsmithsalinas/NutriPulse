@@ -9,6 +9,7 @@ struct TodayView: View {
     @State private var showDatePicker = false
     @State private var showRitual = false
     @State private var ringCelebrationTrigger = 0
+    @State private var proteinRippleTrigger = 0
     @State private var editingLog: FoodLog? = nil
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppState.self) private var appState
@@ -82,6 +83,7 @@ struct TodayView: View {
                             goal:     vm.dailyGoal
                         )
                         .celebrationBeat(trigger: ringCelebrationTrigger)
+                        .proteinRipple(trigger: proteinRippleTrigger)
 
                         if let nudge = vm.nudge {
                             UnderEatingNudgeCard(nudge: nudge) {
@@ -200,6 +202,16 @@ struct TodayView: View {
                 guard vm.isToday, justClosed else { return }
                 ringCelebrationTrigger += 1
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+            .onChange(of: vm.justHitProteinGoal) { _, justHit in
+                guard vm.isToday, justHit else { return }
+                // The protein hero moment: ripple out from the ring. The generic ring-close
+                // haptic already covers the all-rings case, so only buzz here when protein
+                // hit on its own (not the same load that closed every ring).
+                proteinRippleTrigger += 1
+                if !vm.justClosedAllRings {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
             }
             .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
                 Task { await vm.loadData() }

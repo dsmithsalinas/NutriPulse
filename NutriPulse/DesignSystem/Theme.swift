@@ -183,6 +183,92 @@ extension View {
     }
 }
 
+/// The protein hero moment. When protein alone crosses its goal, concentric brand-gradient
+/// rings radiate from the protein ring and wash outward across the card — bigger and more
+/// specific than `celebrationBeat`, reserved for "did I hit protein?" landing yes. Fired by
+/// incrementing `trigger`. Honors Reduce Motion (no ripple; pair with `celebrationBeat` so the
+/// subtle scale+glow still marks the moment). Usage: `card.proteinRipple(trigger:, anchorY:)`
+struct ProteinRipple: ViewModifier {
+    let trigger: Int
+    /// Vertical center of the protein ring within the modified view, in points — the ripple's origin.
+    var anchorY: CGFloat = 132
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var waves: [Int] = []
+    @State private var washID: Int? = nil
+    @State private var nextID = 0
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                GeometryReader { geo in
+                    ZStack {
+                        if let washID { RippleWash().id(washID) }
+                        ForEach(waves, id: \.self) { id in RippleWave().id(id) }
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    // Anchor the origin on the ring center regardless of the card's height.
+                    .position(x: geo.size.width / 2, y: anchorY)
+                }
+                .allowsHitTesting(false)
+            }
+            .onChange(of: trigger) { _, newValue in
+                guard newValue > 0, !reduceMotion else { return }
+                // A soft bloom, then three staggered rings expanding out from the ring.
+                let bloom = nextID; nextID += 1
+                washID = bloom
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+                    if washID == bloom { washID = nil }
+                }
+                for i in 0..<3 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.16) {
+                        let id = nextID; nextID += 1
+                        waves.append(id)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+                            waves.removeAll { $0 == id }
+                        }
+                    }
+                }
+            }
+    }
+}
+
+/// One expanding ring of the brand sweep — self-animates on appear, then the parent removes it.
+private struct RippleWave: View {
+    @State private var animate = false
+    var body: some View {
+        Circle()
+            .strokeBorder(Theme.Colors.primaryGradient, lineWidth: animate ? 1.5 : 7)
+            .frame(width: animate ? 760 : 44, height: animate ? 760 : 44)
+            .opacity(animate ? 0 : 0.85)
+            .onAppear {
+                withAnimation(.easeOut(duration: 1.25)) { animate = true }
+            }
+    }
+}
+
+/// A soft violet bloom behind the rings that fades out — gives the ripple a filled center.
+private struct RippleWash: View {
+    @State private var out = false
+    var body: some View {
+        Circle()
+            .fill(RadialGradient(
+                colors: [Theme.Colors.accent.opacity(0.5), .clear],
+                center: .center, startRadius: 4, endRadius: 300))
+            .frame(width: 560, height: 560)
+            .opacity(out ? 0 : 0.8)
+            .onAppear {
+                withAnimation(.easeOut(duration: 1.0)) { out = true }
+            }
+    }
+}
+
+extension View {
+    func proteinRipple(trigger: Int, anchorY: CGFloat = 132) -> some View {
+        modifier(ProteinRipple(trigger: trigger, anchorY: anchorY))
+    }
+}
+
 // MARK: - Color(hex:)
 
 extension Color {
