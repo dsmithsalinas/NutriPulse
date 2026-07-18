@@ -51,6 +51,11 @@ enum TelemetrySignal: String {
     /// back to an in-memory store for the session (data won't persist across
     /// launches, but the app stays usable instead of hard-crashing at launch).
     case localStoreFallback = "app.localStoreFallback"
+
+    /// Fired when the coach couldn't load the user's profile and answered without it.
+    /// Pulse stays usable but its advice is generic; without this signal a "Pulse gave
+    /// me a bad answer" report can't be told apart from "Pulse never had my profile".
+    case coachProfileUnavailable = "coach.profileUnavailable"
 }
 
 // Parameter values for `TelemetrySignal.logIntentStarted` / `.logConfirmed`'s

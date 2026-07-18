@@ -13,6 +13,8 @@ final class CoachViewModel {
     // History fetch failed (offline, 5xx). Drives the retry state — without it the tab is
     // just an empty scroll view, which reads as a broken build rather than "no connection".
     private(set) var historyLoadFailed = false
+    // Profile fetch failed, so the coach is answering without the user's goals/GLP-1 context.
+    private(set) var profileLoadFailed = false
 
     private(set) var profile: UserProfile?
     private var hasInitialized = false
@@ -71,7 +73,22 @@ final class CoachViewModel {
                 .execute()
                 .value
             profile = profiles.first
-        } catch { }
+            profileLoadFailed = false
+        } catch {
+            // Deliberately non-blocking: Pulse is still useful without the profile, just
+            // more generic, so failing the whole tab would be worse than answering. But it
+            // can't be silent — an un-recorded degradation makes "Pulse gave me a bad
+            // answer" indistinguishable from "Pulse never had my profile".
+            profileLoadFailed = true
+        }
+    }
+
+    // The profile is what makes Pulse's advice specific, so a transient failure at init
+    // shouldn't degrade every answer for the rest of the session. Retry once before we
+    // build context; if it still fails, record that this reply went out without it.
+    private func ensureProfileLoaded() async {
+        if profileLoadFailed { await loadProfile() }
+        if profileLoadFailed { Telemetry.coachProfileUnavailable() }
     }
 
     private static let historyPageSize = 30
@@ -135,6 +152,7 @@ final class CoachViewModel {
 
     private func generateAutoMessage(type: String, trigger: String) async {
         isLoading = true
+        await ensureProfileLoaded()
         let context = await contextBuilder.build(profile: profile)
         let historyItems = messages.suffix(15).map { ChatRequest.HistoryItem(role: $0.role, content: $0.content) }
         do {
@@ -174,6 +192,7 @@ final class CoachViewModel {
             userMessageWasPersisted = true
             messages.append(userMsg)
 
+            await ensureProfileLoaded()
             let context = await contextBuilder.build(profile: profile)
             // Send up to 14 prior turns (7 exchanges) as history
             let historyItems = messages.dropLast().suffix(14).map {

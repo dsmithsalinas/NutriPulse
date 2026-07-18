@@ -84,4 +84,8 @@ enum Telemetry {
     static func localStoreFallback() {
         TelemetryDeck.signal(TelemetrySignal.localStoreFallback.rawValue)
     }
+
+    static func coachProfileUnavailable() {
+        TelemetryDeck.signal(TelemetrySignal.coachProfileUnavailable.rawValue)
+    }
 }
