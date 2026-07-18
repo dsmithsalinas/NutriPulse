@@ -110,6 +110,11 @@ targets:
       path: NutriPulseWidgets/Info.plist
       properties:
         CFBundleDisplayName: NutriPulse
+        # Must match the parent app's, or upload validation complains (and the drift grows
+        # the moment MARKETING_VERSION moves off 1.0.0). CFBundleVersion is already kept in
+        # lockstep by the post-build script below.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:
