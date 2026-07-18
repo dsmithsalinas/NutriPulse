@@ -28,6 +28,9 @@ struct CoachView: View {
                 Divider()
                 inputBar
                     .padding(.bottom, composerClearance)
+                    // Paint the clearance too, so the composer, the gap and the tab bar read as
+                    // one surface instead of a band of `ground` stranded between two cards.
+                    .background(Theme.Colors.surfaceCard)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
@@ -42,10 +45,9 @@ struct CoachView: View {
                             .fontWeight(.semibold)
                     }
                 }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { isInputFocused = false }
-                }
+                // No `.keyboard` toolbar item here: the tab bar sits in exactly that strip above
+                // the keyboard, so a Done button lands on top of it and reads as broken. The
+                // composer carries its own dismiss control instead.
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
@@ -117,7 +119,14 @@ struct CoachView: View {
                 }
                 .padding(.vertical, 8)
             }
-            .scrollDismissesKeyboard(.interactively)
+            // `.immediately` (not `.interactively`): with the keyboard up the transcript is
+            // squeezed into a half window, so the fastest way back to the full conversation
+            // should be to start scrolling it. Tapping the transcript dismisses too.
+            .scrollDismissesKeyboard(.immediately)
+            .contentShape(Rectangle())
+            // Simultaneous, not `.onTapGesture`: a plain tap gesture on the ScrollView can
+            // swallow taps meant for "Load earlier messages" and the bubbles.
+            .simultaneousGesture(TapGesture().onEnded { isInputFocused = false })
             // Keyed on the newest message, not the count: prepending a page of older
             // messages changes the count too, and would yank the user back to the bottom
             // of the conversation they just scrolled up from.
@@ -188,6 +197,19 @@ struct CoachView: View {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
                     }
+
+                // Explicit way out of the keyboard. Only while editing, so it doesn't clutter
+                // the resting state — and it lives here rather than in a `.keyboard` toolbar,
+                // which the tab bar would cover.
+                if isInputFocused {
+                    Button { isInputFocused = false } label: {
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textFaint)
+                    }
+                    .accessibilityLabel("Hide keyboard")
+                    .transition(.scale.combined(with: .opacity))
+                }
 
                 Button {
                     Task { await vm.sendMessage() }
