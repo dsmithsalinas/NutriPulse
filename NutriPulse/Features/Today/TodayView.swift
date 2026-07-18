@@ -5,11 +5,15 @@ struct TodayView: View {
     // The ViewModel is owned by MainTabView and passed in, so the tab bar's Log action and
     // this screen share one selected date — logging always lands on the day you're viewing.
     let vm: TodayViewModel
+    // False while the logging sheet is up or another tab is showing. The protein win is
+    // latched until this goes true, so the celebration always plays to a watching user.
+    var isFrontmost: Bool = true
     @State private var showBodyCompSheet = false
     @State private var showDatePicker = false
     @State private var showRitual = false
     @State private var ringCelebrationTrigger = 0
     @State private var proteinRippleTrigger = 0
+    @State private var proteinCelebrationPending = false
     @State private var editingLog: FoodLog? = nil
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppState.self) private var appState
@@ -22,6 +26,22 @@ struct TodayView: View {
     // Health permissions live in the Health app (Sharing → Apps), not in this app's
     // Settings page, so openSettingsURLString would drop the user somewhere with no
     // Health controls at all. Fall back to it only if the Health app can't be opened.
+    // Plays a latched protein win, but only with Today actually in front of the user. The short
+    // delay lets the ring spring up to full first, so the ripple reads as the ring completing
+    // rather than firing over a half-drawn ring the instant the sheet clears.
+    private func playProteinCelebrationIfVisible() {
+        guard proteinCelebrationPending, isFrontmost, vm.isToday else { return }
+        proteinCelebrationPending = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            proteinRippleTrigger += 1
+            // The generic ring-close haptic already covers the all-rings case, so only buzz
+            // here when protein hit on its own.
+            if !vm.justClosedAllRings {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+        }
+    }
+
     private func openHealthApp() {
         if let health = URL(string: "x-apple-health://"), UIApplication.shared.canOpenURL(health) {
             UIApplication.shared.open(health)
@@ -205,13 +225,14 @@ struct TodayView: View {
             }
             .onChange(of: vm.justHitProteinGoal) { _, justHit in
                 guard vm.isToday, justHit else { return }
-                // The protein hero moment: ripple out from the ring. The generic ring-close
-                // haptic already covers the all-rings case, so only buzz here when protein
-                // hit on its own (not the same load that closed every ring).
-                proteinRippleTrigger += 1
-                if !vm.justClosedAllRings {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                }
+                // Don't fire here — logging food is what pushes protein over the line, and the
+                // reload lands while the logging sheet still covers the ring. Latch it and let
+                // the handler below play it once Today is actually on screen.
+                proteinCelebrationPending = true
+                playProteinCelebrationIfVisible()
+            }
+            .onChange(of: isFrontmost) { _, _ in
+                playProteinCelebrationIfVisible()
             }
             .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
                 Task { await vm.loadData() }

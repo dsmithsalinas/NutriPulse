@@ -12,9 +12,16 @@ struct MainTabView: View {
         selectedTab == .today ? todayVM.selectedDate : .now
     }
 
+    // Today only celebrates the protein goal once it's actually on screen — the tab is
+    // selected and the logging sheet is down. Logging is what pushes protein over the line,
+    // so without this the ripple fires behind the sheet and is over before the user sees it.
+    private var todayIsFrontmost: Bool {
+        selectedTab == .today && !showLogger
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
-            TodayView(vm: todayVM)
+            TodayView(vm: todayVM, isFrontmost: todayIsFrontmost)
                 .tag(MainTab.today)
 
             AnalyticsView()
