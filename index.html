@@ -131,6 +131,8 @@
   .lede { font-size: clamp(17px, 2vw, 20px); color: var(--ink-soft); max-width: 34ch; margin: 0 0 34px; line-height: 1.5; }
   .hero-cta { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
   .hero-note { font-size: 13.5px; color: var(--muted); margin-top: 20px; }
+  .beta-note { font-size: 13.5px; color: var(--muted); margin-top: 14px; line-height: 1.55; }
+  .beta-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
   /* ---------- phone ---------- */
   .phone-stage { display: flex; justify-content: center; position: relative; }
@@ -278,6 +280,7 @@
   .final h2 .grad { background: linear-gradient(115deg, var(--indigo), var(--violet)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .final p { font-size: clamp(17px, 2vw, 20px); color: var(--muted); max-width: 40ch; margin: 0 auto 34px; }
   .final .hero-cta { justify-content: center; }
+  .final .beta-note { font-size: 14px; max-width: 52ch; margin: 22px auto 0; }
 
   /* footer */
   footer { background: var(--ink); color: #A9A8CC; padding: 52px 0 40px; }
@@ -330,6 +333,7 @@
         <button class="btn btn-ghost btn-lg" data-reveal="glp1" type="button">For GLP-1</button>
       </div>
       <p class="hero-note">Built for GLP-1 · Great for anyone tracking</p>
+      <p class="beta-note">New to TestFlight? Install <a href="https://apps.apple.com/app/testflight/id899247664" target="_blank" rel="noopener">Apple's free TestFlight app</a> first, then tap Join in Safari.</p>
     </div>
 
     <div class="phone-stage">
@@ -491,6 +495,7 @@
       <h2>Stop getting graded.<br><span class="grad">Start getting coached.</span></h2>
       <p>The NutriPulse beta is open. Grab a spot and be one of the first to track like you've got someone in your corner.</p>
       <div class="hero-cta"><a class="btn btn-primary btn-lg" href="https://testflight.apple.com/join/tGubSF3Z" target="_blank" rel="noopener">Join the beta on TestFlight →</a></div>
+      <p class="beta-note">Two steps, in this order: install <a href="https://apps.apple.com/app/testflight/id899247664" target="_blank" rel="noopener">Apple's free TestFlight app</a>, then tap the button above in Safari on your iPhone. Opening TestFlight on its own — or tapping the link inside another app's browser — lands you on an empty screen asking for a code you don't need.</p>
     </div>
   </section>
 
