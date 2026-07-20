@@ -483,7 +483,9 @@ final class LocalStoreSyncStateTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        let schema = Schema([SDFoodLog.self, SDWaterLog.self, SDDailyGoal.self])
+        // The app's latest versioned schema, not a hand-listed copy — a new @Model
+        // (SDWorkoutLog was the lesson) must not silently be missing from the test store.
+        let schema = Schema(versionedSchema: NutriPulseSchemaLatest.self)
         container = try ModelContainer(
             for: schema,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
@@ -875,5 +877,124 @@ final class HKWeightImportTests: XCTestCase {
         XCTAssertTrue(TodayViewModel.shouldImportHKWeight(
             sampleDate: almostMidnight, isFromThisApp: false, alreadySyncedToday: false, now: now
         ))
+    }
+}
+
+// MARK: - Day nudge (workout-aware)
+
+// TodayViewModel.buildNudge is the pure decision + copy behind the Today under-eating
+// nudge, extracted (like shouldImportHKWeight) so this truth table needs no ViewModel,
+// clock, or SwiftData.
+final class DayNudgeTests: XCTestCase {
+
+    // 2000 kcal, 150g protein — round numbers so percentages read at a glance.
+    private let goal = DailyGoal(
+        id: UUID(), userId: UUID(), effectiveDate: "2026-07-19",
+        calories: 2000, proteinG: 150, carbsG: 200, fatG: 65, fiberG: 30, waterMlTarget: 2000
+    )
+
+    private func workout(
+        _ activityType: String = "strength",
+        minutes: Double = 30,
+        source: WorkoutSource = .manual
+    ) -> WorkoutLog {
+        WorkoutLog(
+            id: UUID(), userId: UUID(), loggedAt: .now, logDate: "2026-07-19",
+            activityType: activityType, durationMinutes: minutes,
+            activeCalories: nil, distanceMeters: nil,
+            source: source, healthKitUUID: nil, startedAt: .now
+        )
+    }
+
+    private func nudge(
+        protein: Double, calories: Double,
+        workouts: [WorkoutLog] = [], hour: Int = 18
+    ) -> DayNudge? {
+        TodayViewModel.buildNudge(
+            goal: goal, totalProteinG: protein, totalCalories: calories,
+            todaysWorkouts: workouts, hour: hour
+        )
+    }
+
+    func testMorningsStayQuietEvenAfterAWorkout() {
+        XCTAssertNil(nudge(protein: 0, calories: 0, workouts: [workout()], hour: 9))
+        XCTAssertNotNil(nudge(protein: 0, calories: 0, workouts: [workout()], hour: 14),
+                        "2pm is the existing afternoon gate")
+    }
+
+    // The workout-aware part: 75% of protein is fine on a rest day but behind on a
+    // training day, because the protein floor matters more after a session.
+    func testWorkoutDayRaisesTheProteinTrigger() {
+        // Calories held at 70% so they can't trip the (unchanged) calorie trigger.
+        let protein75 = 112.5
+        XCTAssertNil(nudge(protein: protein75, calories: 1400),
+                     "75% protein on a rest day: no nudge")
+        XCTAssertNotNil(nudge(protein: protein75, calories: 1400, workouts: [workout()]),
+                        "75% protein on a training day: nudge")
+        XCTAssertNil(nudge(protein: 125, calories: 1900, workouts: [workout()]),
+                     "83% protein clears even the raised trigger")
+    }
+
+    // Movement must never turn into eat-more-because-you-burned: the calorie trigger is
+    // identical with and without a workout.
+    func testWorkoutDoesNotChangeTheCalorieTrigger() {
+        let proteinFine = 140.0
+        XCTAssertNil(nudge(protein: proteinFine, calories: 1300, workouts: [workout()]),
+                     "65% calories triggers on neither day type")
+        XCTAssertNotNil(nudge(protein: proteinFine, calories: 1100, workouts: [workout()]))
+        XCTAssertNotNil(nudge(protein: proteinFine, calories: 1100))
+    }
+
+    func testAlmostThereGuardStillApplies() {
+        // 79% protein on a workout day, but only 14g and 200 kcal left — no nagging.
+        let smallGoal = DailyGoal(
+            id: UUID(), userId: UUID(), effectiveDate: "2026-07-19",
+            calories: 1000, proteinG: 65, carbsG: 100, fatG: 35, fiberG: 20, waterMlTarget: 2000
+        )
+        XCTAssertNil(TodayViewModel.buildNudge(
+            goal: smallGoal, totalProteinG: 51, totalCalories: 800,
+            todaysWorkouts: [workout()], hour: 18
+        ))
+    }
+
+    func testSingleSessionIsNamedInBodyAndPrompt() {
+        let n = nudge(protein: 40, calories: 900, workouts: [workout("strength", minutes: 32)])
+        XCTAssertEqual(n?.headline, "Feed the work you put in")
+        XCTAssertTrue(n?.body.contains("32 minutes of strength") == true, n?.body ?? "nil")
+        XCTAssertTrue(n?.prompt.contains("32 minutes of strength") == true, n?.prompt ?? "nil")
+    }
+
+    func testHealthKitSlugIsHumanizedInTheCopy() {
+        let n = nudge(protein: 40, calories: 900,
+                      workouts: [workout("traditionalStrengthTraining", minutes: 45, source: .healthkit)])
+        XCTAssertTrue(n?.body.contains("45 minutes of traditional strength training") == true,
+                      n?.body ?? "nil")
+    }
+
+    func testMultipleSessionsRollUpToCountAndMinutes() {
+        let n = nudge(protein: 40, calories: 900,
+                      workouts: [workout(minutes: 32), workout("walk", minutes: 30)])
+        XCTAssertTrue(n?.body.contains("2 sessions (62 min)") == true, n?.body ?? "nil")
+    }
+
+    func testRestDayCopyIsUnchanged() {
+        let n = nudge(protein: 40, calories: 900)
+        XCTAssertEqual(n?.headline, "You've got room to finish strong")
+        XCTAssertEqual(n?.cta, "Ask Pulse for dinner ideas")
+    }
+
+    // The banned-vocabulary spot check: nothing the nudge ever renders may use
+    // burn/earn framing, in any variant.
+    func testCopyNeverUsesBurnOrEarnFraming() {
+        for n in [
+            nudge(protein: 40, calories: 900),
+            nudge(protein: 40, calories: 900, workouts: [workout()]),
+            nudge(protein: 40, calories: 900, workouts: [workout(minutes: 20), workout(minutes: 25)]),
+        ].compactMap({ $0 }) {
+            for text in [n.headline, n.body, n.cta, n.prompt] {
+                XCTAssertFalse(text.lowercased().contains("burn"), text)
+                XCTAssertFalse(text.lowercased().contains("earn"), text)
+            }
+        }
     }
 }

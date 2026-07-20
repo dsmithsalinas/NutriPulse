@@ -97,27 +97,75 @@ final class TodayViewModel {
     // their targets. GLP-1 suppresses appetite, so under-eating (and losing muscle) is the real
     // risk here — the framing protects results, it never scolds. Only surfaces on today, only in
     // the afternoon/evening (mornings are legitimately low), and only when genuinely behind.
+    // On a day with a logged workout the copy becomes workout-aware and the protein trigger
+    // reaches a little higher — see buildNudge.
     var nudge: DayNudge? {
-        guard isToday, let goal = dailyGoal, goal.proteinG > 0 else { return nil }
-        guard Calendar.current.component(.hour, from: .now) >= 14 else { return nil }
+        guard isToday, let goal = dailyGoal else { return nil }
+        return Self.buildNudge(
+            goal: goal,
+            totalProteinG: totalProteinG,
+            totalCalories: totalCalories,
+            todaysWorkouts: workouts,
+            hour: Calendar.current.component(.hour, from: .now)
+        )
+    }
+
+    // The pure decision + copy behind the nudge, extracted (like shouldImportHKWeight) so its
+    // truth table is testable without a ViewModel, a clock, or SwiftData. `hour` is injectable
+    // for the same reason.
+    nonisolated static func buildNudge(
+        goal: DailyGoal,
+        totalProteinG: Double,
+        totalCalories: Double,
+        todaysWorkouts: [WorkoutLog],
+        hour: Int
+    ) -> DayNudge? {
+        guard goal.proteinG > 0 else { return nil }
+        guard hour >= 14 else { return nil }
 
         let proteinLeft = goal.proteinG - totalProteinG
         let calorieLeft = goal.calories - totalCalories
         let proteinPct = totalProteinG / goal.proteinG
         let caloriePct = goal.calories > 0 ? totalCalories / goal.calories : 1
 
+        // On a training day the protein floor matters more, so the nudge speaks up a
+        // little earlier on the protein scale (80% vs 70%). Calories are unchanged —
+        // movement never turns into an eat-more-because-you-burned framing.
+        let workedOut = !todaysWorkouts.isEmpty
+        let proteinTrigger = workedOut ? 0.8 : 0.7
+
         // Behind on the day's priority (protein) or well under on energy…
-        guard proteinPct < 0.7 || caloriePct < 0.6 else { return nil }
+        guard proteinPct < proteinTrigger || caloriePct < 0.6 else { return nil }
         // …but not when they're basically there — no nagging over the last few grams.
         guard proteinLeft > 15 || calorieLeft > 400 else { return nil }
 
         let pLeft = max(Int(proteinLeft.rounded()), 0)
         let cLeft = max(Int(calorieLeft.rounded()), 0)
+
+        guard workedOut else {
+            return DayNudge(
+                headline: "You've got room to finish strong",
+                body: "You're pacing a little under today. A protein-forward dinner keeps your muscle protected while the medication does its part — you're about \(pLeft)g of protein and \(cLeft) calories from your goals.",
+                cta: "Ask Pulse for dinner ideas",
+                prompt: "I have about \(pLeft)g of protein and \(cLeft) calories left today — what should I eat to finish strong?"
+            )
+        }
+
+        // Lead with the session the user actually did. Multiple sessions roll up into a
+        // count + total minutes; a single session gets named.
+        let totalMinutes = Int(todaysWorkouts.reduce(0) { $0 + $1.durationMinutes }.rounded())
+        let sessionPhrase: String
+        if todaysWorkouts.count == 1, let session = todaysWorkouts.first {
+            sessionPhrase = "\(Int(session.durationMinutes.rounded())) minutes of \(session.displayName.lowercased())"
+        } else {
+            sessionPhrase = "\(todaysWorkouts.count) sessions (\(totalMinutes) min)"
+        }
+
         return DayNudge(
-            headline: "You've got room to finish strong",
-            body: "You're pacing a little under today. A protein-forward dinner keeps your muscle protected while the medication does its part — you're about \(pLeft)g of protein and \(cLeft) calories from your goals.",
-            cta: "Ask Pulse for dinner ideas",
-            prompt: "I have about \(pLeft)g of protein and \(cLeft) calories left today — what should I eat to finish strong?"
+            headline: "Feed the work you put in",
+            body: "You logged \(sessionPhrase) today. Protein is how that work turns into protected muscle — you're about \(pLeft)g of protein and \(cLeft) calories from your goals.",
+            cta: "Ask Pulse for a recovery dinner",
+            prompt: "I did \(sessionPhrase) today and I'm about \(pLeft)g of protein and \(cLeft) calories short of my goals — what should I eat tonight to support it?"
         )
     }
 
