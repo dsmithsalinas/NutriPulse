@@ -45,10 +45,23 @@ final class HealthKitManager {
     private init() {
         // Deliberately ignores the legacy boolean and the decided-share-status fallback
         // that used to live here: both only prove the v1 scope was asked about, and any
-        // install below the current version *should* see the Connect row once more so
-        // the expanded scope gets its one system prompt.
+        // install below the current version should re-request so the expanded scope gets
+        // its one system prompt (see needsScopeUpgrade).
         hasRequestedAuthorization =
             UserDefaults.standard.integer(forKey: Self.authVersionKey) >= Self.currentAuthVersion
+    }
+
+    // True when this install went through a PREVIOUS version's ask but not the current
+    // one — the signal to re-request automatically rather than wait for a tap. Waiting
+    // doesn't work for upgrades: the "Connect Apple Health" row only renders when the
+    // signals card has no data, and the very users who need the new scope are the ones
+    // whose card is full of data. Auto-requesting is fine here because the system sheet
+    // lists only the still-undetermined new types; users who never connected at all
+    // (legacy flag unset AND no decided share status) keep the tap-initiated flow.
+    var needsScopeUpgrade: Bool {
+        guard isAvailable, !hasRequestedAuthorization else { return false }
+        return UserDefaults.standard.bool(forKey: Self.didRequestKey)
+            || writeTypes.contains { store.authorizationStatus(for: $0) != .notDetermined }
     }
 
     private let readTypes: Set<HKObjectType> = [

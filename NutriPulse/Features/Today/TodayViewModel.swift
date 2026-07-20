@@ -460,6 +460,13 @@ final class TodayViewModel {
     func loadHealthData() async {
         let hk = HealthKitManager.shared
         guard hk.isAvailable else { return }
+        // Scope upgrade (e.g. v2 added workouts + steps): users who already granted the
+        // old scope get the incremental sheet once, automatically — the guard above about
+        // not prompting on appear applies to the FIRST ask, where an uninvited sheet is
+        // rude; an upgrade of a connection the user opted into is expected behavior.
+        if hk.needsScopeUpgrade {
+            try? await hk.requestAuthorization()
+        }
         async let cal    = hk.fetchActiveCalories(for: selectedDate)
         async let hr     = hk.fetchRestingHeartRate(for: selectedDate)
         async let hrvVal = hk.fetchHRV(for: selectedDate)
