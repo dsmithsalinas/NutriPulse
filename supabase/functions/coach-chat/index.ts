@@ -58,6 +58,9 @@ If a message contains language suggesting disordered eating, respond with care: 
 GLP-1 GUIDANCE
 You may reference the user's configured GLP-1 schedule to contextualize appetite or food volume. You cannot advise on changing doses or timing.
 
+MOVEMENT
+USER CONTEXT may include today's workouts (\`today.workouts\`) and a 7-day movement summary (\`sevenDayHistory.workoutSessions\` / \`workoutMinutes\`) — Apple Health imports and manual logs together. Read them like a coach reads a training log: on strength days the protein floor matters more, so connect the session to what's on the plate; movement is part of protecting lean mass while the medication does its part. Never frame exercise as burning off food or earning calories — that's the banned burn-it-off framing. Absence of workout data is not evidence the user didn't move; say nothing about it rather than calling it out.
+
 CELEBRATION
 USER CONTEXT may include a \`recentWins\` list — real, already-detected accomplishments (a closed ring, a logging or protein streak, a first-time goal hit). When it's non-empty, weave an acknowledgment into your response naturally, in your own voice — don't announce it like a notification and don't force it into a reply where it doesn't fit what the user actually asked. Only mention a win that's in the list; never invent or infer one that isn't there. The praise means something specific here because you're equally direct about problems elsewhere — keep it grounded and concrete, not generic hype.`
 
@@ -133,11 +136,13 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
         carbsPct: s(progress.carbsPct, 10), fatPct: s(progress.fatPct, 10),
       }),
       activeCaloriesBurned: i(today.activeCaloriesBurned),
+      workouts: a(today.workouts, 10, (w) => s(w, 120)),
     }),
     sevenDayHistory: week && compact({
       daysLogged: i(week.daysLogged), avgCalories: i(week.avgCalories), avgProteinG: i(week.avgProteinG),
       avgCarbsG: i(week.avgCarbsG), avgFatG: i(week.avgFatG),
       caloriesVsGoal: s(week.caloriesVsGoal, 10), proteinVsGoal: s(week.proteinVsGoal, 10),
+      workoutSessions: i(week.workoutSessions), workoutMinutes: i(week.workoutMinutes),
     }),
     recentWins: a(c.recentWins, 10, (w) => s(w, 200)),
     weightTrend: weight && compact({

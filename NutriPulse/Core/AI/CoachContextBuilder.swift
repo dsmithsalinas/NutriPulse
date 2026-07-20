@@ -34,6 +34,9 @@ struct CoachContextBundle: Encodable {
         let totals: MacroTotals
         let goalProgress: GoalProgress
         let activeCaloriesBurned: Int?
+        // Formatted like foodLog items — "Traditional Strength Training (32 min, 208 cal)".
+        // nil (not empty) when nothing is logged, so Pulse can't read absence as rest.
+        let workouts: [String]?
 
         struct MealContext: Encodable {
             let meal: String
@@ -66,6 +69,9 @@ struct CoachContextBundle: Encodable {
         let avgFatG: Int
         let caloriesVsGoal: String?
         let proteinVsGoal: String?
+        // Movement across the window — sessions and total minutes, both sources.
+        let workoutSessions: Int
+        let workoutMinutes: Int
     }
 
     struct WeightTrendContext: Encodable {
@@ -125,6 +131,16 @@ struct CoachContextBuilder {
         let hr = await hrTask
         let hrv = await hrvTask
 
+        // Workouts come from LocalStore, not Supabase: a HealthKit import made seconds
+        // ago is still pendingCreate locally, and the coach should know about the
+        // session the user just finished. LocalStore is @MainActor, hence the hop.
+        var workouts: [WorkoutLog] = []
+        if let userId = try? await supabase.auth.session.user.id {
+            workouts = await MainActor.run {
+                (try? LocalStore.shared.fetchRecentWorkoutLogs(days: 7, userId: userId)) ?? []
+            }
+        }
+
         return assemble(
             profile: profile,
             logs: logs,
@@ -132,6 +148,7 @@ struct CoachContextBuilder {
             goal: goal,
             glp1Log: glp1Logs.first,
             weightLogs: weightLogs,
+            workouts: workouts,
             activeCal: activeCal,
             sleep: sleep,
             hr: hr,
@@ -148,6 +165,7 @@ struct CoachContextBuilder {
         goal: DailyGoal?,
         glp1Log: GLP1Log?,
         weightLogs: [WeightLog],
+        workouts: [WorkoutLog],
         activeCal: Double?,
         sleep: Double?,
         hr: Double?,
@@ -221,7 +239,18 @@ struct CoachContextBuilder {
                 fatPct:      pct(totalFat,  goal?.fatG)
             ),
             // nil when HealthKit reported nothing — don't tell Pulse the user burned zero.
-            activeCaloriesBurned: activeCal.map { Int($0.rounded()) }
+            activeCaloriesBurned: activeCal.map { Int($0.rounded()) },
+            workouts: {
+                let todayStr = Date.now.isoDateString
+                let todays = workouts.filter { $0.logDate == todayStr }.map { w -> String in
+                    let minutes = Int(w.durationMinutes.rounded())
+                    if let kcal = w.activeCalories, kcal > 0 {
+                        return "\(w.displayName) (\(minutes) min, \(Int(kcal.rounded())) cal)"
+                    }
+                    return "\(w.displayName) (\(minutes) min)"
+                }
+                return todays.isEmpty ? nil : todays
+            }()
         )
 
         // 7-day history — tail of the wider window fetched above
@@ -240,7 +269,9 @@ struct CoachContextBuilder {
             avgCarbsG: Int(avgCarb),
             avgFatG: Int(avgFat),
             caloriesVsGoal: loggedDays.isEmpty ? nil : pct(avgCal, goal?.calories),
-            proteinVsGoal:  loggedDays.isEmpty ? nil : pct(avgPro, goal?.proteinG)
+            proteinVsGoal:  loggedDays.isEmpty ? nil : pct(avgPro, goal?.proteinG),
+            workoutSessions: workouts.count,
+            workoutMinutes: Int(workouts.reduce(0) { $0 + $1.durationMinutes }.rounded())
         )
 
         // Weight trend

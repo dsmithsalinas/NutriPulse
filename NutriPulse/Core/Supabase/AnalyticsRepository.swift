@@ -54,6 +54,44 @@ struct AnalyticsRepository {
         }
     }
 
+    // Per-day workout rollup, zeros included — same full-axis contract as
+    // fetchDailySummaries so the movement chart never has gaps in its x-axis.
+    func fetchDailyMovement(days: Int) async throws -> [DailyMovement] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: .now)
+        let startDate = cal.date(byAdding: .day, value: -(days - 1), to: today)!
+
+        struct WorkoutRow: Decodable {
+            let logDate: String
+            let durationMinutes: Double
+
+            enum CodingKeys: String, CodingKey {
+                case logDate         = "log_date"
+                case durationMinutes = "duration_minutes"
+            }
+        }
+
+        let rows: [WorkoutRow] = try await supabase
+            .from("workout_logs")
+            .select("log_date, duration_minutes")
+            .gte("log_date", value: startDate.isoDateString)
+            .lte("log_date", value: today.isoDateString)
+            .execute()
+            .value
+
+        let grouped = Dictionary(grouping: rows, by: \.logDate)
+
+        return (0..<days).map { offset in
+            let date = cal.date(byAdding: .day, value: offset, to: startDate)!
+            let dayRows = grouped[date.isoDateString] ?? []
+            return DailyMovement(
+                date: date,
+                sessions: dayRows.count,
+                minutes: dayRows.reduce(0) { $0 + $1.durationMinutes }
+            )
+        }
+    }
+
     func fetchGLP1History() async throws -> [GLP1Log] {
         try await GLP1Repository().fetchHistory()
     }

@@ -37,6 +37,14 @@ struct AnalyticsView: View {
 
                     MacrosChartCard(summaries: vm.summaries)
 
+                    if !vm.activeDays.isEmpty {
+                        MovementChartCard(
+                            movement: vm.movement,
+                            sessions: vm.totalWorkoutSessions,
+                            avgMinutes: vm.avgMinutesPerActiveDay
+                        )
+                    }
+
                     if !vm.weightLogs.isEmpty {
                         WeightChartCard(
                             logs:   vm.weightLogs,
@@ -279,6 +287,60 @@ private struct MacrosChartCard: View {
                 }
                 .frame(height: 160)
             }
+        }
+        .padding(Theme.Spacing.md)
+        .card()
+    }
+}
+
+// MARK: - Movement chart
+
+// Minutes per day, deliberately goal-free: movement has no target line or "should have"
+// framing anywhere in the app — the chart shows what happened, nothing else.
+private struct MovementChartCard: View {
+    let movement: [DailyMovement]
+    let sessions: Int
+    let avgMinutes: Double
+
+    private var xAxisStride: Int {
+        switch movement.count {
+        case ..<8:  return 1
+        case ..<15: return 2
+        default:    return 7
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack {
+                Text("Movement")
+                    .font(.headline)
+                Spacer()
+                Text("\(sessions) session\(sessions == 1 ? "" : "s") · avg \(Int(avgMinutes.rounded())) min")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Chart(movement) { day in
+                BarMark(
+                    x: .value("Date", day.date, unit: .day),
+                    y: .value("min", day.minutes)
+                )
+                .foregroundStyle(Theme.Colors.primary.gradient)
+                .cornerRadius(3)
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day, count: xAxisStride)) {
+                    AxisValueLabel(format: .dateTime.month(.twoDigits).day(.twoDigits))
+                }
+            }
+            .chartYAxis {
+                AxisMarks { value in
+                    AxisValueLabel("\(value.as(Double.self).map { Int($0) } ?? 0)m")
+                    AxisGridLine()
+                }
+            }
+            .frame(height: 140)
         }
         .padding(Theme.Spacing.md)
         .card()

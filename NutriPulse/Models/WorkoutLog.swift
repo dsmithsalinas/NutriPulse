@@ -35,6 +35,17 @@ enum ManualActivityType: String, CaseIterable, Codable {
     }
 }
 
+// One day's movement rollup for the Analytics chart — mirrors DailySummary's
+// full-axis contract: one element per day in the window, zeros included.
+struct DailyMovement: Identifiable {
+    let date: Date
+    let sessions: Int
+    let minutes: Double
+
+    var id: Date { date }
+    var hasData: Bool { sessions > 0 }
+}
+
 struct WorkoutLog: Codable, Identifiable, Hashable {
     let id: UUID
     let userId: UUID

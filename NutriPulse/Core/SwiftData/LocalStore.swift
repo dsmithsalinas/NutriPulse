@@ -398,6 +398,22 @@ final class LocalStore {
         try context.save()
     }
 
+    // Last `days` days of workouts, newest-first within each day. Serves the coach
+    // context: local-first means fresh HealthKit imports (still pendingCreate) are
+    // included, and the sync engine's 7-day pull window bounds what's here anyway.
+    func fetchRecentWorkoutLogs(days: Int, userId: UUID) throws -> [WorkoutLog] {
+        guard let context else { return [] }
+        let cal = Calendar.current
+        let start = cal.date(byAdding: .day, value: -(days - 1), to: cal.startOfDay(for: .now))!
+        let startStr = start.isoDateString
+        // String >= isn't #Predicate-translatable (same reason as pruneDeletedFoodLogs).
+        return try context.fetch(FetchDescriptor<SDWorkoutLog>(sortBy: [SortDescriptor(\.startedAt)]))
+            .filter {
+                $0.userId == userId && $0.syncState != "pendingDelete" && $0.logDate >= startStr
+            }
+            .map(\.asWorkoutLog)
+    }
+
     // Same contract and caveats as pruneDeletedFoodLogs: synced rows only, and
     // remoteIds must come from a successful pull.
     func pruneDeletedWorkoutLogs(userId: UUID, since startDate: String, remoteIds: Set<UUID>) throws {

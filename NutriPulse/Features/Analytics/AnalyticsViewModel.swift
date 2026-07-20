@@ -22,6 +22,7 @@ final class AnalyticsViewModel {
 
     var selectedRange: TimeRange = .week
     var summaries: [DailySummary]             = []
+    var movement: [DailyMovement]             = []
     var weightLogs: [WeightLog]               = []
     var bodyCompHistory: [BodyCompositionLog] = []
     var glp1History: [GLP1Log]               = []
@@ -65,18 +66,28 @@ final class AnalyticsViewModel {
         return weightLogs.last!.weightKg - weightLogs.first!.weightKg
     }
 
+    // Movement rollups — active days only, so a rest day doesn't drag the average.
+    var activeDays: [DailyMovement] { movement.filter(\.hasData) }
+    var totalWorkoutSessions: Int { activeDays.reduce(0) { $0 + $1.sessions } }
+    var avgMinutesPerActiveDay: Double {
+        guard !activeDays.isEmpty else { return 0 }
+        return activeDays.reduce(0) { $0 + $1.minutes } / Double(activeDays.count)
+    }
+
     func loadData() async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
             async let summariesTask  = repo.fetchDailySummaries(days: selectedRange.rawValue)
+            async let movementTask   = repo.fetchDailyMovement(days: selectedRange.rawValue)
             async let weightTask     = repo.fetchWeightLogs(days: selectedRange.rawValue)
             async let bodyCompTask   = repo.fetchBodyCompositionHistory(days: selectedRange.rawValue)
             async let glp1Task       = repo.fetchGLP1History()
             async let goalTask       = goalRepo.fetchGoal(for: .now)
-            let (s, w, bc, glp1, g)  = try await (summariesTask, weightTask, bodyCompTask, glp1Task, goalTask)
+            let (s, m, w, bc, glp1, g) = try await (summariesTask, movementTask, weightTask, bodyCompTask, glp1Task, goalTask)
             summaries        = s
+            movement         = m
             weightLogs       = w
             bodyCompHistory  = bc
             glp1History      = glp1
