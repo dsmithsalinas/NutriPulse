@@ -141,19 +141,54 @@ struct HeroNutritionCard: View {
 
     private var macroChips: some View {
         HStack(spacing: Theme.Spacing.sm) {
-            chip("Carbs", carbsG, Theme.NutrientColor.carbs)
-            chip("Fat",   fatG,   Theme.NutrientColor.fat)
-            chip("Fiber", fiberG, Theme.NutrientColor.fiber)
+            // Carbs and fat are ceilings; fiber is a floor. The distinction only shows
+            // at 100%+: a ceiling bar caps and dims (the number above already says how
+            // far over — the bar declines to dramatize it), a full floor bar stays its
+            // own color, quietly complete.
+            chip("Carbs", carbsG, goal?.carbsG, Theme.NutrientColor.carbs, isCeiling: true)
+            chip("Fat",   fatG,   goal?.fatG,   Theme.NutrientColor.fat,   isCeiling: true)
+            chip("Fiber", fiberG, goal?.fiberG, Theme.NutrientColor.fiber, isCeiling: false)
         }
     }
 
-    private func chip(_ label: String, _ value: Double, _ color: Color) -> some View {
-        VStack(spacing: 1) {
+    private func chip(
+        _ label: String,
+        _ value: Double,
+        _ target: Double?,
+        _ color: Color,
+        isCeiling: Bool
+    ) -> some View {
+        // No goal row, or this macro's goal is 0 → the chip renders exactly as it
+        // used to: no "of —g", no empty track.
+        let target = target.flatMap { $0 > 0 ? $0 : nil }
+        let pct = target.map { min(value / $0, 1) } ?? 0
+        let dimmed = isCeiling && target.map { value > $0 } == true
+
+        return VStack(spacing: 1) {
             Text("\(Int(value))g")
                 .font(.system(size: 15, weight: .bold, design: .rounded))
                 .foregroundStyle(color)
                 .monospacedDigit()
                 .contentTransition(.numericText(value: value))
+            if let target {
+                Text("of \(Int(target))g")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.Colors.textFaint)
+                    .monospacedDigit()
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.Colors.ringTrack)
+                        Capsule()
+                            .fill(color)
+                            .opacity(dimmed ? 0.45 : 1)
+                            .frame(width: max(geo.size.width * pct, pct > 0 ? 4 : 0))
+                            .animation(.spring(response: 0.6, dampingFraction: 0.85), value: pct)
+                    }
+                }
+                .frame(height: 3)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 3)
+            }
             Text(label)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
