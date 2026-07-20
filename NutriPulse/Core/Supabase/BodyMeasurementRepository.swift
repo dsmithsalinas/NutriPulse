@@ -46,6 +46,19 @@ struct BodyMeasurementRepository {
         return latest
     }
 
+    // Every site in one query; the Body hub groups client-side.
+    func fetchHistoryAll(days: Int) async throws -> [BodyMeasurementLog] {
+        let cal = Calendar.current
+        let start = cal.date(byAdding: .day, value: -(days - 1), to: cal.startOfDay(for: .now))!
+        return try await supabase
+            .from("body_measurement_logs")
+            .select()
+            .gte("log_date", value: start.isoDateString)
+            .order("logged_at", ascending: true)
+            .execute()
+            .value
+    }
+
     func fetchHistory(site: MeasurementSite, days: Int) async throws -> [BodyMeasurementLog] {
         let cal = Calendar.current
         let start = cal.date(byAdding: .day, value: -(days - 1), to: cal.startOfDay(for: .now))!

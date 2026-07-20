@@ -1,18 +1,22 @@
 import SwiftUI
 
+// The door to the Body hub. Once a 2×2 detail grid, now a compact four-chip summary —
+// the detail (history, trends, measurements) lives in the hub; this card answers
+// "where am I right now" and gets out of the way. The + keeps the direct-log shortcut.
 struct BodyCompositionCard: View {
     let data: BodyCompositionData
+    let waistCm: Double?
     let units: UnitSystem
+    let onOpen: () -> Void
     let onAddTapped: () -> Void
 
     var body: some View {
         VStack(spacing: Theme.Spacing.sm) {
-            // Header
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "scalemass.fill")
                         .foregroundStyle(Theme.Colors.primary)
-                    Text("Body Composition")
+                    Text("Body")
                         .fontWeight(.semibold)
                 }
                 Spacer()
@@ -22,29 +26,31 @@ struct BodyCompositionCard: View {
                         .font(.title3)
                 }
                 .buttonStyle(.plain)
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
 
-            // 2×2 metric grid
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: Theme.Spacing.sm) {
-                MetricTile(
-                    label: "Weight",
-                    value: data.weightKg.map { units.formatWeight($0) },
-                    fromHK: data.weightFromHK
+            HStack(spacing: Theme.Spacing.sm) {
+                chip(
+                    value: data.weightKg.map { String(format: "%.1f", units.weightInput(from: $0)) },
+                    label: "WEIGHT \(units.weightUnit.uppercased())",
+                    color: Theme.Colors.primary
                 )
-                MetricTile(
-                    label: "Body Fat",
+                chip(
                     value: data.bodyFatPct.map { String(format: "%.1f%%", $0) },
-                    fromHK: data.bodyFatFromHK
+                    label: "BODY FAT",
+                    color: Theme.Colors.accent
                 )
-                MetricTile(
-                    label: "BMI",
-                    value: data.bmi.map { String(format: "%.1f", $0) },
-                    fromHK: data.bmiFromHK
+                chip(
+                    value: data.lbmKg.map { String(format: "%.1f", units.weightInput(from: $0)) },
+                    label: "LEAN \(units.weightUnit.uppercased())",
+                    color: Theme.NutrientColor.fiber
                 )
-                MetricTile(
-                    label: "Lean Body Mass",
-                    value: data.lbmKg.map { units.formatWeight($0) },
-                    fromHK: data.lbmFromHK
+                chip(
+                    value: waistCm.map { String(format: "%.1f", units.lengthInput(fromCm: $0)) },
+                    label: "WAIST \(units.lengthUnit.uppercased())",
+                    color: Theme.NutrientColor.water
                 )
             }
 
@@ -57,33 +63,33 @@ struct BodyCompositionCard: View {
         }
         .padding(Theme.Spacing.md)
         .card()
+        // The whole card opens the hub; the + above stays its own button because it sits
+        // on top of this gesture in the hit-test order.
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onOpen)
     }
-}
 
-private struct MetricTile: View {
-    let label: String
-    let value: String?
-    let fromHK: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+    private func chip(value: String?, label: String, color: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(value ?? "—")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(value != nil ? color : Color.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack(spacing: 4) {
-                Text(value ?? "—")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(value != nil ? .primary : .tertiary)
-                if fromHK {
-                    Image(systemName: "heart.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.red.opacity(0.7))
-                }
-            }
+                .font(.system(size: 9))
+                .foregroundStyle(Theme.Colors.textFaint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Spacing.sm)
-        .background(Color(.tertiarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(Theme.Colors.surfaceInset)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+        }
     }
 }

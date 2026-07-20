@@ -9,6 +9,7 @@ struct TodayView: View {
     // latched until this goes true, so the celebration always plays to a watching user.
     var isFrontmost: Bool = true
     @State private var showBodyCompSheet = false
+    @State private var showBodyHub = false
     @State private var showWorkoutSheet = false
     @State private var showDatePicker = false
     @State private var showRitual = false
@@ -143,7 +144,9 @@ struct TodayView: View {
 
                         BodyCompositionCard(
                             data: vm.bodyComp,
+                            waistCm: vm.latestWaistCm,
                             units: units,
+                            onOpen: { showBodyHub = true },
                             onAddTapped: { showBodyCompSheet = true }
                         )
 
@@ -199,6 +202,9 @@ struct TodayView: View {
                         }
                     }
             )
+            .navigationDestination(isPresented: $showBodyHub) {
+                BodyHubView(todayVM: vm, heightCm: appState.profile?.heightCm)
+            }
             .sheet(isPresented: $showDatePicker) {
                 DatePickerSheet(selected: vm.selectedDate) { picked in
                     vm.goTo(date: picked)

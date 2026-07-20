@@ -52,6 +52,8 @@ final class TodayViewModel {
 
     // Body composition
     var bodyComp = BodyCompositionData()
+    // Latest waist for the Body card's fourth chip (all-time latest, like the others).
+    var latestWaistCm: Double? = nil
 
     // Workouts for the selected date — HealthKit imports and manual logs merged,
     // read from LocalStore (imports land there via loadWorkouts()).
@@ -280,6 +282,7 @@ final class TodayViewModel {
 
         latestGLP1 = (try? await glp1Task)?.first
         bodyComp = await bodyCompTask
+        latestWaistCm = ((try? await measurementRepo.fetchLatestPerSite()) ?? [:])[.waist]?.valueCm
         await loadHealthData()
         await loadWorkouts()
         await checkWeightDrift()

@@ -1110,3 +1110,58 @@ final class BodyMeasurementTests: XCTestCase {
         XCTAssertNil(row.siteType)
     }
 }
+
+// MARK: - Body hub insights
+
+// Rule-based, hand-written insight triggers — no generated copy. The non-shaming
+// invariant: no insight ever fires on a waist increase.
+final class BodyHubInsightTests: XCTestCase {
+
+    private func insight(
+        waistDelta: Double?, waistPoints: Int = 3,
+        leanDelta: Double? = nil, leanBaseline: Double? = nil, leanPoints: Int = 0,
+        weightDelta: Double? = nil, weightBaseline: Double? = nil, weightPoints: Int = 0
+    ) -> String? {
+        BodyHubViewModel.insight(
+            waistDeltaCm: waistDelta, waistPoints: waistPoints,
+            leanDeltaKg: leanDelta, leanBaselineKg: leanBaseline, leanPoints: leanPoints,
+            weightDeltaKg: weightDelta, weightBaselineKg: weightBaseline, weightPoints: weightPoints,
+            rangePhrase: "this quarter"
+        )
+    }
+
+    func testWaistDownWithLeanSteadyFiresTheThesisLine() {
+        let text = insight(waistDelta: -2.5, leanDelta: -0.4, leanBaseline: 57, leanPoints: 3)
+        XCTAssertEqual(text, "Your waist moved this quarter while lean mass held steady.")
+    }
+
+    func testScaleFlatButWaistDownFiresTheStallReassurance() {
+        let text = insight(waistDelta: -1.5, weightDelta: 0.3, weightBaseline: 84, weightPoints: 4)
+        XCTAssertNotNil(text)
+        XCTAssertTrue(text?.contains("scale held still") == true, text ?? "nil")
+    }
+
+    func testWaistIncreaseNeverGetsCommentary() {
+        XCTAssertNil(insight(waistDelta: 2.5, leanDelta: 0, leanBaseline: 57, leanPoints: 3,
+                             weightDelta: 0, weightBaseline: 84, weightPoints: 4),
+                     "a waist increase must produce silence, not judgment")
+    }
+
+    func testSmallWaistChangeIsBelowTheTrigger() {
+        XCTAssertNil(insight(waistDelta: -0.6, leanDelta: 0, leanBaseline: 57, leanPoints: 3))
+    }
+
+    func testSinglePointsNeverTrigger() {
+        XCTAssertNil(insight(waistDelta: -3, waistPoints: 1, leanDelta: 0, leanBaseline: 57, leanPoints: 3))
+        XCTAssertNil(insight(waistDelta: -3, leanDelta: 0, leanBaseline: 57, leanPoints: 1))
+    }
+
+    func testLeanFloorTwoPercentBand() {
+        // 2% of 57 kg = 1.14 kg — the band edge.
+        XCTAssertEqual(BodyHubViewModel.leanHeldSteady(deltaKg: -1.2, baselineKg: 57), false)
+        XCTAssertEqual(BodyHubViewModel.leanHeldSteady(deltaKg: -1.1, baselineKg: 57), true)
+        XCTAssertEqual(BodyHubViewModel.leanHeldSteady(deltaKg: 2.0, baselineKg: 57), false,
+                       "gaining past the band is also not 'steady' — it just renders as a quiet delta")
+        XCTAssertNil(BodyHubViewModel.leanHeldSteady(deltaKg: nil, baselineKg: 57))
+    }
+}
