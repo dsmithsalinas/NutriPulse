@@ -43,19 +43,31 @@ enum NutriPulseSchemaV1: VersionedSchema {
     }
 }
 
+// V2 adds SDWorkoutLog (workout/activity tracking). A brand-new model with no changes
+// to existing ones is purely additive, so a lightweight stage suffices.
+enum NutriPulseSchemaV2: VersionedSchema {
+    static var versionIdentifier = Schema.Version(2, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [SDFoodLog.self, SDWaterLog.self, SDDailyGoal.self, SDWorkoutLog.self]
+    }
+}
+
 // The newest versioned schema. Referenced by NutriPulseApp when building the container;
-// bump this alias when you add a V2 so there's a single place that names "latest".
-typealias NutriPulseSchemaLatest = NutriPulseSchemaV1
+// bump this alias when you add a new version so there's a single place that names "latest".
+typealias NutriPulseSchemaLatest = NutriPulseSchemaV2
 
 enum NutriPulseMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [NutriPulseSchemaV1.self]
+        [NutriPulseSchemaV1.self, NutriPulseSchemaV2.self]
     }
 
-    // No stages yet — V1 is the baseline. Each future version adds one stage here linking
-    // it to its predecessor, so SwiftData always has a migration path and never has to
-    // fail-open into the destructive fallback.
     static var stages: [MigrationStage] {
-        []
+        [
+            MigrationStage.lightweight(
+                fromVersion: NutriPulseSchemaV1.self,
+                toVersion: NutriPulseSchemaV2.self
+            ),
+        ]
     }
 }
