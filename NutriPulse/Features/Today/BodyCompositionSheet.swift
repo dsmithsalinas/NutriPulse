@@ -3,7 +3,14 @@ import SwiftUI
 struct BodyCompositionSheet: View {
     let current: BodyCompositionData
     let heightCm: Double?
-    let onSave: (_ weightKg: Double?, _ bodyFatPct: Double?, _ bmi: Double?, _ lbmKg: Double?, _ writeToHK: Bool) async -> Void
+    let onSave: (
+        _ weightKg: Double?,
+        _ bodyFatPct: Double?,
+        _ bmi: Double?,
+        _ lbmKg: Double?,
+        _ measurementsCm: [MeasurementSite: Double],
+        _ writeToHK: Bool
+    ) async -> Void
 
     @Environment(\.dismiss) private var dismiss
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
@@ -14,6 +21,11 @@ struct BodyCompositionSheet: View {
     @State private var bodyFatText   = ""
     @State private var bmiText       = ""
     @State private var lbmText       = ""
+    // Tape measurements, keyed by site. Waist renders as its own row; the rest live
+    // behind a disclosure so the sheet stays as light as it is today.
+    @State private var measurementTexts: [MeasurementSite: String] =
+        Dictionary(uniqueKeysWithValues: MeasurementSite.allCases.map { ($0, "") })
+    @State private var showMoreSites = false
     @State private var writeToHK     = false
     @State private var isSaving      = false
     @State private var errorMessage: String? = nil
@@ -23,7 +35,7 @@ struct BodyCompositionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Measurements") {
+                Section("Body composition") {
                     LabeledContent("\(units.weightUnit.capitalized)") {
                         TextField("e.g. \(units == .metric ? "75.0" : "165.0")", text: $weightText)
                             .keyboardType(.decimalPad)
@@ -53,6 +65,24 @@ struct BodyCompositionSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                Section {
+                    measurementRow(.waist)
+                    if showMoreSites {
+                        ForEach(MeasurementSite.allCases.filter { $0 != .waist }) { site in
+                            measurementRow(site)
+                        }
+                    } else {
+                        Button("Also add hips, chest, arm, or thigh") {
+                            showMoreSites = true
+                        }
+                        .font(.subheadline)
+                    }
+                } header: {
+                    Text("Tape measurements")
+                } footer: {
+                    Text("Measurements move slowly — every few weeks is plenty.")
                 }
 
                 if hkAvailable {
@@ -89,7 +119,22 @@ struct BodyCompositionSheet: View {
 
     private var allEmpty: Bool {
         weightText.trimmed.isEmpty && bodyFatText.trimmed.isEmpty &&
-        bmiText.trimmed.isEmpty    && lbmText.trimmed.isEmpty
+        bmiText.trimmed.isEmpty    && lbmText.trimmed.isEmpty &&
+        measurementTexts.values.allSatisfy { $0.trimmed.isEmpty }
+    }
+
+    private func measurementRow(_ site: MeasurementSite) -> some View {
+        LabeledContent("\(site.displayName) (\(units.lengthUnit))") {
+            TextField(
+                units == .metric ? "e.g. 96.5" : "e.g. 38.0",
+                text: Binding(
+                    get: { measurementTexts[site] ?? "" },
+                    set: { measurementTexts[site] = $0 }
+                )
+            )
+            .keyboardType(.decimalPad)
+            .multilineTextAlignment(.trailing)
+        }
     }
 
     private func prefill() {
@@ -126,6 +171,9 @@ struct BodyCompositionSheet: View {
     private static let bodyFatRange = 1.0...75.0
     private static let bmiRange     = 8.0...100.0
     private static let weightKgRange = 20.0...500.0
+    // Generous enough for any site from upper arm to hips; tight enough to catch a
+    // fat-fingered "382" or a value typed in the wrong unit.
+    private static let measurementCmRange = 15.0...250.0
 
     private func validationError() -> String? {
         if let bf = parse(bodyFatText), !Self.bodyFatRange.contains(bf) {
@@ -137,6 +185,12 @@ struct BodyCompositionSheet: View {
         for (text, label) in [(weightText, "Weight"), (lbmText, "Lean body mass")] {
             if let value = parse(text), !Self.weightKgRange.contains(units.kgFrom(value)) {
                 return "\(label) looks out of range. Check the value and try again."
+            }
+        }
+        for site in MeasurementSite.allCases {
+            if let value = parse(measurementTexts[site] ?? ""),
+               !Self.measurementCmRange.contains(units.cmFromLength(value)) {
+                return "\(site.displayName) looks out of range. Check the value and try again."
             }
         }
         return nil
@@ -156,7 +210,14 @@ struct BodyCompositionSheet: View {
         let bmi        = parse(bmiText)
         let lbmKg      = parse(lbmText).map   { units.kgFrom($0) }
 
-        await onSave(weightKg, bodyFatPct, bmi, lbmKg, writeToHK)
+        var measurementsCm: [MeasurementSite: Double] = [:]
+        for site in MeasurementSite.allCases {
+            if let value = parse(measurementTexts[site] ?? ""), value > 0 {
+                measurementsCm[site] = units.cmFromLength(value)
+            }
+        }
+
+        await onSave(weightKg, bodyFatPct, bmi, lbmKg, measurementsCm, writeToHK)
         dismiss()
     }
 }

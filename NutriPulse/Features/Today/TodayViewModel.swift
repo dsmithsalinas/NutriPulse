@@ -10,6 +10,7 @@ import Foundation
 final class TodayViewModel {
     private let goalRepo     = GoalRepository()
     private let bodyCompRepo = BodyCompositionRepository()
+    private let measurementRepo = BodyMeasurementRepository()
     private let foodLogRepo  = FoodLogRepository()
     private let glp1Repo     = GLP1Repository()
 
@@ -473,7 +474,22 @@ final class TodayViewModel {
             async let bf = hk.fetchMostRecentBodyFat()
             async let b  = hk.fetchMostRecentBMI()
             async let l  = hk.fetchMostRecentLBM()
+            async let wc = hk.fetchMostRecentWaist()
             (hkWeight, hkBodyFat, hkBMI, hkLBM) = await (w, bf, b, l)
+
+            // Waist auto-import: identical contract to the weight import below — today's
+            // sample, not written by this app, at most once per calendar day. The pure
+            // decision function is shared; only the UserDefaults key differs.
+            if let waist = await wc {
+                let today = Date().isoDateString
+                let alreadySynced = UserDefaults.standard.string(forKey: "lastHKWaistSyncDate") == today
+                if Self.shouldImportHKWeight(sampleDate: waist.date, isFromThisApp: waist.isFromThisApp, alreadySyncedToday: alreadySynced) {
+                    UserDefaults.standard.set(today, forKey: "lastHKWaistSyncDate")
+                    try? await measurementRepo.insert(
+                        site: .waist, valueCm: waist.value, source: "healthkit"
+                    )
+                }
+            }
         }
 
         let saved = await savedTask
@@ -537,6 +553,7 @@ final class TodayViewModel {
         bodyFatPct: Double?,
         bmi: Double?,
         lbmKg: Double?,
+        measurementsCm: [MeasurementSite: Double] = [:],
         writeToHK: Bool
     ) async {
         let today = Date().isoDateString
@@ -549,6 +566,9 @@ final class TodayViewModel {
                 leanBodyMassKg: lbmKg,
                 source: "manual"
             )
+            for (site, valueCm) in measurementsCm {
+                try? await measurementRepo.insert(site: site, valueCm: valueCm)
+            }
             if let weight = weightKg, let userId = try? await supabase.auth.session.user.id {
                 try await supabase.from("weight_logs")
                     .insert(NewWeightLog(userId: userId, weightKg: weight, source: "manual"))

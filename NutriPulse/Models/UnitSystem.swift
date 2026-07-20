@@ -26,10 +26,18 @@ enum UnitSystem: String {
 
     var weightUnit: String { self == .metric ? "kg" : "lbs" }
 
+    // Tape measurements (waist, hips, …) — a plain linear length, unlike height's
+    // whole-inch feet/inches special case.
+    var lengthUnit: String { self == .metric ? "cm" : "in" }
+
     // MARK: Conversion helpers (input → storage)
 
     func kgFrom(_ value: Double) -> Double {
         self == .imperial ? value / 2.20462 : value
+    }
+
+    func cmFromLength(_ value: Double) -> Double {
+        self == .imperial ? value * 2.54 : value
     }
 
     // cm → ft/in → cm is lossy, because the UI only offers whole inches: 172 cm displays
@@ -50,6 +58,10 @@ enum UnitSystem: String {
 
     func weightInput(from kg: Double) -> Double {
         self == .imperial ? kg * 2.20462 : kg
+    }
+
+    func lengthInput(fromCm cm: Double) -> Double {
+        self == .imperial ? cm / 2.54 : cm
     }
 
     // Whole inches, ROUNDED. Truncating instead — `Int(cm / 2.54)` — lost up to an inch

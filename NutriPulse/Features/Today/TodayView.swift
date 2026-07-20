@@ -214,12 +214,13 @@ struct TodayView: View {
                 BodyCompositionSheet(
                     current: vm.bodyComp,
                     heightCm: appState.profile?.heightCm
-                ) { weightKg, bodyFatPct, bmi, lbmKg, writeToHK in
+                ) { weightKg, bodyFatPct, bmi, lbmKg, measurementsCm, writeToHK in
                     await vm.saveBodyComposition(
                         weightKg: weightKg,
                         bodyFatPct: bodyFatPct,
                         bmi: bmi,
                         lbmKg: lbmKg,
+                        measurementsCm: measurementsCm,
                         writeToHK: writeToHK
                     )
                 }

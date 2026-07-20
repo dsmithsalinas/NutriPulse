@@ -20,7 +20,8 @@ final class HealthKitManager {
     // false again, so the UI re-offers "Connect" — and the system sheet then shows only
     // the still-undetermined new types (already-decided ones never re-prompt).
     private static let authVersionKey = "healthKitAuthVersion"
-    private static let currentAuthVersion = 2
+    // v2 added workouts + steps; v3 added waist circumference.
+    private static let currentAuthVersion = 3
 
     // HealthKit never reveals whether *read* access was granted — denied reads simply
     // return no samples, indistinguishable from "no data". Write access it does reveal.
@@ -77,6 +78,8 @@ final class HealthKitManager {
         // v2 additions — bump currentAuthVersion when this set changes again.
         HKObjectType.workoutType(),
         HKObjectType.quantityType(forIdentifier: .stepCount)!,
+        // v3 addition — the one tape-measurement site HealthKit models.
+        HKObjectType.quantityType(forIdentifier: .waistCircumference)!,
     ]
 
     private let writeTypes: Set<HKSampleType> = [
@@ -111,11 +114,12 @@ final class HealthKitManager {
         let hrv     = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!
         let steps   = HKQuantityType.quantityType(forIdentifier: .stepCount)!
         let sleep   = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis)!
+        let waist   = HKQuantityType.quantityType(forIdentifier: .waistCircumference)!
         // One prompt that grants everything a demo needs: WRITE for the types we seed here
         // (so store.save succeeds) PLUS the app's normal read+write set (so Today's signals
         // and the coach can actually read the samples back). Without the read grant the
         // seeded samples are invisible — HealthKit returns nothing for un-authorized reads.
-        let seedShareTypes = writeTypes.union([active, resting, hrv, steps, sleep, HKObjectType.workoutType()])
+        let seedShareTypes = writeTypes.union([active, resting, hrv, steps, sleep, waist, HKObjectType.workoutType()])
         try? await store.requestAuthorization(toShare: seedShareTypes, read: readTypes)
         // Flip the app to "connected" so Profile/onboarding stop offering a dead Connect
         // button and Today starts querying — same state a real Connect tap would leave.
@@ -154,6 +158,24 @@ final class HealthKitManager {
                 samples.append(HKCategorySample(type: sleep, value: HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue, start: sleepStart, end: sleepEnd))
             }
         }
+        // A couple of waist readings a week apart, so the waist auto-import and (later)
+        // the Body hub's trend row have something real to chew on in the simulator.
+        if let today = cal.date(bySettingHour: 8, minute: 30, second: 0, of: .now) {
+            samples.append(HKQuantitySample(
+                type: waist,
+                quantity: HKQuantity(unit: .meterUnit(with: .centi), doubleValue: 97.0),
+                start: today, end: today
+            ))
+        }
+        if let lastWeek = cal.date(byAdding: .day, value: -7, to: .now),
+           let morning = cal.date(bySettingHour: 8, minute: 30, second: 0, of: lastWeek) {
+            samples.append(HKQuantitySample(
+                type: waist,
+                quantity: HKQuantity(unit: .meterUnit(with: .centi), doubleValue: 98.1),
+                start: morning, end: morning
+            ))
+        }
+
         try? await store.save(samples)
 
         // A handful of workouts across the week so the Movement card has real HealthKit
@@ -484,6 +506,10 @@ final class HealthKitManager {
 
     func fetchMostRecentLBM() async -> HKMeasurement? {
         await fetchMostRecent(identifier: .leanBodyMass, unit: .gramUnit(with: .kilo))
+    }
+
+    func fetchMostRecentWaist() async -> HKMeasurement? {
+        await fetchMostRecent(identifier: .waistCircumference, unit: .meterUnit(with: .centi))
     }
 
     private func fetchMostRecent(identifier: HKQuantityTypeIdentifier, unit: HKUnit) async -> HKMeasurement? {

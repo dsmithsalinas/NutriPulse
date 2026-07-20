@@ -1067,3 +1067,46 @@ final class DayNudgeTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Body measurements
+
+final class BodyMeasurementTests: XCTestCase {
+
+    // Raw values are stored in body_measurement_logs.site and CHECKed by the migration —
+    // renaming a case is a data migration, not a refactor. This test is the tripwire.
+    func testSiteRawValuesAreAStableAPIContract() {
+        XCTAssertEqual(
+            MeasurementSite.allCases.map(\.rawValue),
+            ["waist", "hips", "chest", "upperArm", "thigh"]
+        )
+    }
+
+    // Only the waist has a HealthKit quantity type; the app must not pretend otherwise.
+    func testOnlyWaistIsHealthKitBacked() {
+        XCTAssertEqual(MeasurementSite.allCases.filter(\.isHealthKitBacked), [.waist])
+    }
+
+    func testLengthConversionRoundTrips() {
+        let imperial = UnitSystem.imperial
+        XCTAssertEqual(imperial.cmFromLength(38.0), 96.52, accuracy: 0.001)
+        XCTAssertEqual(imperial.lengthInput(fromCm: 96.52), 38.0, accuracy: 0.001)
+        // Metric is identity in both directions.
+        XCTAssertEqual(UnitSystem.metric.cmFromLength(96.5), 96.5)
+        XCTAssertEqual(UnitSystem.metric.lengthInput(fromCm: 96.5), 96.5)
+    }
+
+    func testUnknownSiteDecodesWithoutCrashing() throws {
+        // A future app version may write sites this build doesn't know. The row must
+        // decode (site stays a String); only siteType comes back nil.
+        let json = """
+        {"id":"\(UUID().uuidString)","user_id":"\(UUID().uuidString)","log_date":"2026-07-20",
+         "site":"neck","value_cm":38.5,"source":"manual","healthkit_uuid":null,
+         "logged_at":"2026-07-20T12:00:00Z"}
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let row = try decoder.decode(BodyMeasurementLog.self, from: json)
+        XCTAssertEqual(row.site, "neck")
+        XCTAssertNil(row.siteType)
+    }
+}
