@@ -700,18 +700,22 @@ private struct EditProfileSheet: View {
 
         let oldTDEE = GoalCalculator.tdee(
             sex: oldSex, ageYears: GoalCalculator.ageYears(fromDOB: oldDOB),
-            heightCm: oldHeightCm, weightKg: oldWeightKg, activity: oldActivity
+            heightCm: oldHeightCm, weightKg: oldWeightKg, activity: oldActivity,
+            bodyFatPct: vm.latestBodyFatPct
         )
         let newTDEE = GoalCalculator.tdee(
             sex: sex, ageYears: GoalCalculator.ageYears(fromDOB: dob),
-            heightCm: newHeightCm, weightKg: newWeightKg, activity: activity
+            heightCm: newHeightCm, weightKg: newWeightKg, activity: activity,
+            bodyFatPct: vm.latestBodyFatPct
         )
 
         let goals = GoalCalculator.retargeted(
             currentCalories: currentCalories,
             oldTDEE: oldTDEE,
             newTDEE: newTDEE,
-            newWeightKg: newWeightKg
+            newWeightKg: newWeightKg,
+            heightCm: newHeightCm,
+            sex: sex
         )
 
         // Don't nag over rounding noise.

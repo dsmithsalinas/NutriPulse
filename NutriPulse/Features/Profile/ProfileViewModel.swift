@@ -9,6 +9,9 @@ final class ProfileViewModel {
     var profile: UserProfile?    = nil
     var goal: DailyGoal?         = nil
     var latestWeight: WeightLog? = nil
+    // Latest known body-fat %, if any — feeds the Katch-McArdle BMR path when the
+    // edit-stats recalc runs. nil (or junk) falls back to Mifflin inside GoalCalculator.
+    var latestBodyFatPct: Double? = nil
     var glp1Logs: [GLP1Log]      = []
     var isLoading                = false
     var errorMessage: String?    = nil
@@ -76,10 +79,12 @@ final class ProfileViewModel {
             async let goalTask   = goalRepo.fetchGoal(for: .now)
             async let weightTask = fetchLatestWeight()
             async let glp1Task   = glp1Repo.fetchRecentLogs(limit: 5)
+            async let bodyCompTask = BodyCompositionRepository().fetchLatest()
             let (g, w, logs) = try await (goalTask, weightTask, glp1Task)
             goal         = g
             latestWeight = w
             glp1Logs     = logs
+            latestBodyFatPct = (try? await bodyCompTask)?.bodyFatPct
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -182,6 +187,12 @@ final class ProfileViewModel {
         // showing the OLD targets until the next foreground sync heals the cache. Mirror
         // the write TodayViewModel does on its own cache-miss fetch.
         try? LocalStore.shared.upsertGoal(saved)
+        // Any deliberate goal change (recalc accept or a hand-tuned edit) re-anchors the
+        // weight-drift baseline: the user just chose targets for their CURRENT body, so
+        // Today's drift prompt should stay quiet until the next real change.
+        if let w = latestWeight?.weightKg, w > 0 {
+            UserDefaults.standard.set(w, forKey: GoalCalculator.weightBaselineKey)
+        }
     }
 
     // MARK: - GLP-1 logging

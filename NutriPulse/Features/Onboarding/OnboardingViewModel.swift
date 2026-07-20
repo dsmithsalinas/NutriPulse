@@ -229,6 +229,12 @@ final class OnboardingViewModel {
             ), onConflict: "user_id,effective_date")
             .execute()
 
+        // Record the weight these goals were computed from, so Today's drift check has a
+        // baseline to compare the rolling average against.
+        if weightKg > 0 {
+            UserDefaults.standard.set(weightKg, forKey: GoalCalculator.weightBaselineKey)
+        }
+
         // 3. GLP-1 log (optional — skipped if user didn't set it up)
         if isOnGLP1 {
             let nextDue = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: glp1LastInjected) ?? glp1LastInjected

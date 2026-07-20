@@ -113,6 +113,16 @@ struct TodayView: View {
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
 
+                        if let suggestion = vm.retargetSuggestion {
+                            RetargetCard(
+                                suggestion: suggestion,
+                                units: units,
+                                onAccept: { Task { await vm.acceptRetarget() } },
+                                onKeep: { vm.dismissRetarget() }
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+
                         if HealthKitManager.shared.isAvailable {
                             HealthStatsCard(
                                 activeCalories: vm.activeCalories,
@@ -234,6 +244,8 @@ struct TodayView: View {
                 )
             }
             .task(id: vm.selectedDate) {
+                // The drift check inside loadData needs the user's stats.
+                vm.profile = appState.profile
                 await vm.loadData()
             }
             .onChange(of: vm.justClosedAllRings) { _, justClosed in

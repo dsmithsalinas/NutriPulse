@@ -56,6 +56,21 @@ final class TodayViewModel {
     // read from LocalStore (imports land there via loadWorkouts()).
     var workouts: [WorkoutLog] = []
 
+    // Set by TodayView from AppState before loadData — the weight-drift check needs the
+    // user's stats (sex, height, DOB, activity) to rebuild TDEEs.
+    var profile: UserProfile? = nil
+
+    // Non-nil when the 7-day average weight has drifted far enough from the weight the
+    // current goals were computed from that recalculated targets meaningfully differ.
+    // Surfaces as an offer on Today; never applied without the user's say-so.
+    struct RetargetSuggestion {
+        let goals: CalculatedGoals
+        let currentCalories: Double
+        let avgWeightKg: Double
+        let baselineKg: Double
+    }
+    var retargetSuggestion: RetargetSuggestion? = nil
+
     // HealthKit data for the selected date
     // nil = HealthKit reported nothing (no data, or read access denied — HealthKit won't
     // say which). 0 would be a claim we can't support.
@@ -266,7 +281,107 @@ final class TodayViewModel {
         bodyComp = await bodyCompTask
         await loadHealthData()
         await loadWorkouts()
+        await checkWeightDrift()
         await FavoritesStore.shared.loadIfNeeded()
+    }
+
+    // MARK: - Weight-drift retarget
+
+    // The Profile edit-stats flow only recalculates when the user edits stats by hand — but
+    // weight flows in continuously from weigh-ins and HealthKit, so someone losing steadily
+    // keeps targets computed for a body they no longer have. This compares the 7-day average
+    // against the baseline recorded when the goals were set and OFFERS a recalc; the
+    // suggestion is never applied silently.
+    private func checkWeightDrift() async {
+        guard isToday, let profile, let goal = dailyGoal,
+              let sexRaw = profile.sex, let sex = BiologicalSex(rawValue: sexRaw),
+              let activityRaw = profile.activityLevel,
+              let activity = ActivityLevel(rawValue: activityRaw),
+              let heightCm = profile.heightCm,
+              let dobStr = profile.dob, let dob = Date.fromISODateString(dobStr)
+        else { return }
+
+        let logs = (try? await AnalyticsRepository().fetchWeightLogs(days: 7)) ?? []
+        guard !logs.isEmpty else { return }
+        let avgKg = logs.reduce(0) { $0 + $1.weightKg } / Double(logs.count)
+
+        let ud = UserDefaults.standard
+        let baseline = ud.double(forKey: GoalCalculator.weightBaselineKey)
+        guard baseline > 0 else {
+            // Existing installs never recorded the weight their goals came from. Seed
+            // silently from today's average; prompting starts at the next real drift.
+            ud.set(avgKg, forKey: GoalCalculator.weightBaselineKey)
+            return
+        }
+        guard GoalCalculator.weightDriftExceeds(baselineKg: baseline, recentAvgKg: avgKg) else {
+            retargetSuggestion = nil
+            return
+        }
+
+        // Same shape as Profile's recalc: rebuild TDEE at the baseline weight and at the
+        // current average, and let retargeted() carry the user's adjustment across.
+        let age = GoalCalculator.ageYears(fromDOB: dob)
+        let bodyFat = bodyComp.bodyFatPct
+        let oldTDEE = GoalCalculator.tdee(
+            sex: sex, ageYears: age, heightCm: heightCm, weightKg: baseline,
+            activity: activity, bodyFatPct: bodyFat
+        )
+        let newTDEE = GoalCalculator.tdee(
+            sex: sex, ageYears: age, heightCm: heightCm, weightKg: avgKg,
+            activity: activity, bodyFatPct: bodyFat
+        )
+        let goals = GoalCalculator.retargeted(
+            currentCalories: goal.calories, oldTDEE: oldTDEE, newTDEE: newTDEE,
+            newWeightKg: avgKg, heightCm: heightCm, sex: sex
+        )
+        // Don't offer a recalc that barely moves the number.
+        guard abs(goals.calories - goal.calories) >= 25 else { return }
+        retargetSuggestion = RetargetSuggestion(
+            goals: goals, currentCalories: goal.calories,
+            avgWeightKg: avgKg, baselineKg: baseline
+        )
+    }
+
+    func acceptRetarget() async {
+        guard let suggestion = retargetSuggestion,
+              let userId = try? await supabase.auth.session.user.id else { return }
+        let newGoal = NewDailyGoal(
+            userId:        userId,
+            effectiveDate: Date.now.isoDateString,
+            calories:      suggestion.goals.calories,
+            proteinG:      suggestion.goals.proteinG,
+            carbsG:        suggestion.goals.carbsG,
+            fatG:          suggestion.goals.fatG,
+            fiberG:        suggestion.goals.fiberG,
+            waterMlTarget: suggestion.goals.waterMlTarget
+        )
+        do {
+            // Named conflict target for the same reason as ProfileViewModel.updateGoals:
+            // daily_goals is UNIQUE (user_id, effective_date) and a bare upsert resolves
+            // on the always-fresh primary key.
+            let saved: DailyGoal = try await supabase
+                .from("daily_goals")
+                .upsert(newGoal, onConflict: "user_id,effective_date")
+                .select()
+                .single()
+                .execute()
+                .value
+            dailyGoal = saved
+            waterGoalMl = saved.waterMlTarget
+            try? LocalStore.shared.upsertGoal(saved)
+            UserDefaults.standard.set(suggestion.avgWeightKg, forKey: GoalCalculator.weightBaselineKey)
+            retargetSuggestion = nil
+        } catch {
+            errorMessage = "Couldn't update your targets."
+        }
+    }
+
+    // "Keep current" means keep them for THIS body: the baseline moves to today's average,
+    // so the card returns only after another meaningful drift — not tomorrow morning.
+    func dismissRetarget() {
+        guard let suggestion = retargetSuggestion else { return }
+        UserDefaults.standard.set(suggestion.avgWeightKg, forKey: GoalCalculator.weightBaselineKey)
+        retargetSuggestion = nil
     }
 
     // Import-then-read: any HealthKit workout for this day that LocalStore hasn't seen

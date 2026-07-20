@@ -234,19 +234,88 @@ final class GoalCalculatorTests: XCTestCase {
         XCTAssertGreaterThan(goals.calories, 0, "never negative")
     }
 
-    func testMacroSplitAndMinimums() {
+    // Allocation order: protein anchored to weight (1.6 g/kg), fat 30% of calories,
+    // carbs the remainder. Protein must NOT scale with calories — a deficit that deepens
+    // may not shrink the protein target.
+    func testProteinIsAnchoredToWeightNotCalories() {
         let goals = GoalCalculator.macros(calories: 2000, weightKg: 80)
-        XCTAssertEqual(goals.proteinG, 150)   // 30% / 4
-        XCTAssertEqual(goals.carbsG,   200)   // 40% / 4
+        XCTAssertEqual(goals.proteinG, 128)   // 1.6 × 80
         XCTAssertEqual(goals.fatG,      67)   // 30% / 9, rounded
+        XCTAssertEqual(goals.carbsG,   221)   // remainder
         XCTAssertEqual(goals.fiberG,    28)   // 14g per 1000 kcal
         XCTAssertEqual(goals.waterMlTarget, 2800)  // 35 ml/kg
+
+        // The same body at a deeper deficit keeps the same protein target.
+        XCTAssertEqual(GoalCalculator.macros(calories: 1600, weightKg: 80).proteinG, 128)
+    }
+
+    func testMacrosSumToTheCalorieGoal() {
+        for calories in [1200.0, 1850, 2470, 3000] {
+            let g = GoalCalculator.macros(calories: calories, weightKg: 90)
+            let sum = g.proteinG * 4 + g.carbsG * 4 + g.fatG * 9
+            XCTAssertEqual(sum, calories, accuracy: 6,
+                           "independent rounding must not drift the displayed total")
+        }
+    }
+
+    // The 35%-of-calories cap: the 1200-floor + high-body-weight corner can't prescribe a
+    // plate that's half protein.
+    func testProteinCapsAtThirtyFivePercentOfCalories() {
+        let goals = GoalCalculator.macros(calories: 1200, weightKg: 130, heightCm: 160, sex: .male)
+        XCTAssertEqual(goals.proteinG, 105)   // 1200 × 0.35 / 4, not 1.6 × anchor
+    }
+
+    // Above BMI 30 the anchor is adjusted body weight (Devine IBW + 25% of the excess),
+    // so heavy users get reachable targets. At or below BMI 30, actual weight.
+    func testProteinAnchorUsesAdjustedWeightAboveBMI30() {
+        // 175 cm, 120 kg (BMI 39): IBW ≈ 70.5, adjusted ≈ 82.9 → 1.6 g/kg ≈ 133 g.
+        let heavy = GoalCalculator.macros(calories: 2200, weightKg: 120, heightCm: 175, sex: .male)
+        XCTAssertEqual(heavy.proteinG, 133)
+        // 175 cm, 90 kg (BMI 29.4): no adjustment → 1.6 × 90 = 144 g.
+        let under = GoalCalculator.macros(calories: 2200, weightKg: 90, heightCm: 175, sex: .male)
+        XCTAssertEqual(under.proteinG, 144)
     }
 
     func testFiberAndWaterMinimums() {
         let goals = GoalCalculator.macros(calories: 1200, weightKg: 45)
         XCTAssertEqual(goals.fiberG, 25, "floor, not 16.8")
         XCTAssertEqual(goals.waterMlTarget, 2000, "floor, not 1575")
+    }
+
+    func testFiberAndWaterCaps() {
+        let goals = GoalCalculator.macros(calories: 3000, weightKg: 150)
+        XCTAssertEqual(goals.fiberG, 38, "capped, not 42")
+        XCTAssertEqual(goals.waterMlTarget, 4000, "capped, not 5250")
+    }
+
+    // Katch-McArdle when body fat is known: 370 + 21.6 × lean mass. Junk readings fall
+    // back to Mifflin rather than producing an absurd lean mass.
+    func testKatchMcArdleWhenBodyFatKnown() {
+        XCTAssertEqual(
+            GoalCalculator.bmr(sex: .male, ageYears: 30, heightCm: 180, weightKg: 100, bodyFatPct: 30),
+            370 + 21.6 * 70, accuracy: 0.001
+        )
+        // Sex drops out of Katch-McArdle entirely.
+        XCTAssertEqual(
+            GoalCalculator.bmr(sex: .female, ageYears: 30, heightCm: 180, weightKg: 100, bodyFatPct: 30),
+            GoalCalculator.bmr(sex: .male, ageYears: 30, heightCm: 180, weightKg: 100, bodyFatPct: 30)
+        )
+        // nil and out-of-range values use Mifflin.
+        let mifflin = GoalCalculator.bmr(sex: .male, ageYears: 30, heightCm: 180, weightKg: 100)
+        XCTAssertEqual(
+            GoalCalculator.bmr(sex: .male, ageYears: 30, heightCm: 180, weightKg: 100, bodyFatPct: 75),
+            mifflin, accuracy: 0.001, "junk body fat falls back"
+        )
+    }
+
+    // The pure trigger behind Today's "update your targets?" card. Direction-agnostic.
+    func testWeightDriftThreshold() {
+        XCTAssertFalse(GoalCalculator.weightDriftExceeds(baselineKg: 100, recentAvgKg: 102.4))
+        XCTAssertTrue(GoalCalculator.weightDriftExceeds(baselineKg: 100, recentAvgKg: 102.5))
+        XCTAssertTrue(GoalCalculator.weightDriftExceeds(baselineKg: 100, recentAvgKg: 97.5),
+                      "losing drifts too, not just gaining")
+        XCTAssertFalse(GoalCalculator.weightDriftExceeds(baselineKg: 0, recentAvgKg: 90),
+                       "no baseline, no prompt")
     }
 
     // Retargeting must preserve the user's current adjustment — the deficit they chose, or a
