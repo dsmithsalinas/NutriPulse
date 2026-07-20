@@ -52,6 +52,10 @@ final class TodayViewModel {
     // Body composition
     var bodyComp = BodyCompositionData()
 
+    // Workouts for the selected date — HealthKit imports and manual logs merged,
+    // read from LocalStore (imports land there via loadWorkouts()).
+    var workouts: [WorkoutLog] = []
+
     // HealthKit data for the selected date
     // nil = HealthKit reported nothing (no data, or read access denied — HealthKit won't
     // say which). 0 would be a claim we can't support.
@@ -213,7 +217,82 @@ final class TodayViewModel {
         latestGLP1 = (try? await glp1Task)?.first
         bodyComp = await bodyCompTask
         await loadHealthData()
+        await loadWorkouts()
         await FavoritesStore.shared.loadIfNeeded()
+    }
+
+    // Import-then-read: any HealthKit workout for this day that LocalStore hasn't seen
+    // becomes a local row (source "healthkit", pendingCreate → syncs like any other log),
+    // then the merged list is read back. The importHealthKitWorkout guard makes re-runs
+    // no-ops, so calling this on every loadData() is safe.
+    func loadWorkouts() async {
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+        let hk = HealthKitManager.shared
+        if hk.isAvailable {
+            var didImport = false
+            for workout in await hk.fetchWorkouts(for: selectedDate) {
+                let inserted = (try? LocalStore.shared.importHealthKitWorkout(
+                    userId: userId,
+                    logDate: workout.startDate.isoDateString,
+                    activityType: workout.activitySlug,
+                    durationMinutes: workout.durationMinutes,
+                    activeCalories: workout.activeCalories,
+                    distanceMeters: workout.distanceMeters,
+                    healthKitUUID: workout.uuid,
+                    startedAt: workout.startDate
+                )) ?? false
+                didImport = didImport || inserted
+            }
+            if didImport {
+                SyncEngine.shared.refreshPendingCount()
+                Task { await SyncEngine.shared.pushPendingChanges() }
+            }
+        }
+        workouts = (try? LocalStore.shared.fetchWorkoutLogs(for: selectedDate, userId: userId)) ?? []
+    }
+
+    func addManualWorkout(
+        activity: ManualActivityType,
+        durationMinutes: Double,
+        calories: Double?,
+        distanceMeters: Double?
+    ) async {
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+        // Logging onto a past day: noon is an honest-enough anchor for a session whose
+        // real start time the user never gave us.
+        let startedAt = isToday
+            ? Date.now
+            : Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: selectedDate) ?? selectedDate
+        do {
+            try LocalStore.shared.insertWorkoutLog(
+                id: UUID(),
+                userId: userId,
+                logDate: selectedDate.isoDateString,
+                activityType: activity.rawValue,
+                durationMinutes: durationMinutes,
+                activeCalories: calories,
+                distanceMeters: distanceMeters,
+                source: "manual",
+                healthKitUUID: nil,
+                startedAt: startedAt
+            )
+            workouts = (try? LocalStore.shared.fetchWorkoutLogs(for: selectedDate, userId: userId)) ?? workouts
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+        } catch {
+            errorMessage = "Couldn't log workout."
+        }
+    }
+
+    func deleteWorkout(id: UUID) async {
+        do {
+            try LocalStore.shared.markWorkoutLogDeleted(id: id)
+            workouts.removeAll { $0.id == id }
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+        } catch {
+            errorMessage = "Couldn't remove workout."
+        }
     }
 
     private func buildBodyCompData() async -> BodyCompositionData {

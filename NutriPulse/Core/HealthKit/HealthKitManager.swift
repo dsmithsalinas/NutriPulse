@@ -12,7 +12,15 @@ final class HealthKitManager {
     // who had just denied every permission.
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
-    private static let didRequestKey = "healthKitAuthorizationRequested"
+    private static let didRequestKey = "healthKitAuthorizationRequested"  // legacy v1 boolean
+
+    // Authorization is versioned because the boolean can't survive a scope change: v2
+    // added workouts + steps to readTypes, and a user who granted v1 has never been
+    // asked about those. A stored version below current makes hasRequestedAuthorization
+    // false again, so the UI re-offers "Connect" — and the system sheet then shows only
+    // the still-undetermined new types (already-decided ones never re-prompt).
+    private static let authVersionKey = "healthKitAuthVersion"
+    private static let currentAuthVersion = 2
 
     // HealthKit never reveals whether *read* access was granted — denied reads simply
     // return no samples, indistinguishable from "no data". Write access it does reveal.
@@ -35,15 +43,12 @@ final class HealthKitManager {
     private let store = HKHealthStore()
 
     private init() {
-        // Assign before touching `store` / `writeTypes`: reading them inside a closure
-        // captures self, which isn't legal until every stored property is initialized.
-        hasRequestedAuthorization = UserDefaults.standard.bool(forKey: Self.didRequestKey)
-        if !hasRequestedAuthorization {
-            // Installed before this flag existed: a decided share status proves we asked.
-            hasRequestedAuthorization = writeTypes.contains {
-                store.authorizationStatus(for: $0) != .notDetermined
-            }
-        }
+        // Deliberately ignores the legacy boolean and the decided-share-status fallback
+        // that used to live here: both only prove the v1 scope was asked about, and any
+        // install below the current version *should* see the Connect row once more so
+        // the expanded scope gets its one system prompt.
+        hasRequestedAuthorization =
+            UserDefaults.standard.integer(forKey: Self.authVersionKey) >= Self.currentAuthVersion
     }
 
     private let readTypes: Set<HKObjectType> = [
@@ -56,6 +61,9 @@ final class HealthKitManager {
         HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!,
         HKObjectType.quantityType(forIdentifier: .restingHeartRate)!,
         HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!,
+        // v2 additions — bump currentAuthVersion when this set changes again.
+        HKObjectType.workoutType(),
+        HKObjectType.quantityType(forIdentifier: .stepCount)!,
     ]
 
     private let writeTypes: Set<HKSampleType> = [
@@ -70,8 +78,11 @@ final class HealthKitManager {
         guard isAvailable else { return }
         try await store.requestAuthorization(toShare: writeTypes, read: readTypes)
         // iOS presents the permission sheet exactly once per type. Record that we've been
-        // through it, so the UI can stop offering a "Connect" button that does nothing.
+        // through it — at the current scope version — so the UI can stop offering a
+        // "Connect" button that does nothing. The legacy boolean is kept in sync for
+        // anything (or any rollback) still reading it.
         UserDefaults.standard.set(true, forKey: Self.didRequestKey)
+        UserDefaults.standard.set(Self.currentAuthVersion, forKey: Self.authVersionKey)
         hasRequestedAuthorization = true
     }
 
@@ -91,7 +102,7 @@ final class HealthKitManager {
         // (so store.save succeeds) PLUS the app's normal read+write set (so Today's signals
         // and the coach can actually read the samples back). Without the read grant the
         // seeded samples are invisible — HealthKit returns nothing for un-authorized reads.
-        let seedShareTypes = writeTypes.union([active, resting, hrv, steps, sleep])
+        let seedShareTypes = writeTypes.union([active, resting, hrv, steps, sleep, HKObjectType.workoutType()])
         try? await store.requestAuthorization(toShare: seedShareTypes, read: readTypes)
         // Flip the app to "connected" so Profile/onboarding stop offering a dead Connect
         // button and Today starts querying — same state a real Connect tap would leave.
@@ -131,8 +142,170 @@ final class HealthKitManager {
             }
         }
         try? await store.save(samples)
+
+        // A handful of workouts across the week so the Movement card has real HealthKit
+        // imports to exercise (dedup, activity slugs, calories). HKWorkoutBuilder is the
+        // non-deprecated way to author a workout sample.
+        let workoutPlan: [(HKWorkoutActivityType, Int, Double)] = [
+            (.traditionalStrengthTraining, 0, 32),
+            (.walking,                     1, 24),
+            (.running,                     2, 28),
+            (.cycling,                     3, 45),
+            (.traditionalStrengthTraining, 4, 35),
+            (.yoga,                        6, 30),
+        ]
+        for (activity, daysAgo, minutes) in workoutPlan {
+            guard let day = cal.date(byAdding: .day, value: -daysAgo, to: .now),
+                  let start = cal.date(bySettingHour: 9, minute: 5, second: 0, of: day)
+            else { continue }
+            let end = start.addingTimeInterval(minutes * 60)
+            let config = HKWorkoutConfiguration()
+            config.activityType = activity
+            let builder = HKWorkoutBuilder(healthStore: store, configuration: config, device: .local())
+            do {
+                try await builder.beginCollection(at: start)
+                let energy = HKQuantitySample(
+                    type: active,
+                    quantity: HKQuantity(unit: .kilocalorie(), doubleValue: minutes * 6.5),
+                    start: start, end: end
+                )
+                try await builder.addSamples([energy])
+                try await builder.endCollection(at: end)
+                _ = try await builder.finishWorkout()
+            } catch { }
+        }
     }
     #endif
+
+    // MARK: - Workouts
+
+    struct HKWorkoutSummary {
+        let uuid: String
+        let activitySlug: String
+        let startDate: Date
+        let durationMinutes: Double
+        let activeCalories: Double?
+        let distanceMeters: Double?
+    }
+
+    // Workouts that STARTED on `date` (.strictStartDate) — a session is attributed to
+    // the day it began, so one crossing midnight can't be imported on both days.
+    func fetchWorkouts(for date: Date) async -> [HKWorkoutSummary] {
+        let (start, end) = dayInterval(for: date)
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: .workoutType(),
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, _ in
+                let workouts = (samples as? [HKWorkout] ?? []).map { workout in
+                    HKWorkoutSummary(
+                        uuid: workout.uuid.uuidString,
+                        activitySlug: Self.activitySlug(for: workout.workoutActivityType),
+                        startDate: workout.startDate,
+                        durationMinutes: workout.duration / 60,
+                        activeCalories: workout.statistics(for: HKQuantityType(.activeEnergyBurned))?
+                            .sumQuantity()?.doubleValue(for: .kilocalorie()),
+                        distanceMeters: Self.distanceMeters(of: workout)
+                    )
+                }
+                continuation.resume(returning: workouts)
+            }
+            store.execute(query)
+        }
+    }
+
+    // workout.totalDistance is deprecated; statistics(for:) is the modern read, but the
+    // right distance type depends on the activity, so try the common ones in order.
+    nonisolated private static func distanceMeters(of workout: HKWorkout) -> Double? {
+        let candidates: [HKQuantityTypeIdentifier] = [
+            .distanceWalkingRunning, .distanceCycling, .distanceSwimming,
+        ]
+        for identifier in candidates {
+            if let meters = workout.statistics(for: HKQuantityType(identifier))?
+                .sumQuantity()?.doubleValue(for: .meter()), meters > 0 {
+                return meters
+            }
+        }
+        return nil
+    }
+
+    // HKWorkoutActivityType → the string stored in workout_logs.activity_type. Imported
+    // workouts keep HealthKit's own vocabulary (the product decision: no bucketing into
+    // the manual five), and WorkoutLog.displayName humanizes these slugs for the UI.
+    // The default covers HealthKit's long tail; "workout" renders as a generic session.
+    nonisolated static func activitySlug(for type: HKWorkoutActivityType) -> String {
+        switch type {
+        case .walking:                       return "walking"
+        case .running:                       return "running"
+        case .cycling:                       return "cycling"
+        case .hiking:                        return "hiking"
+        case .yoga:                          return "yoga"
+        case .traditionalStrengthTraining:   return "traditionalStrengthTraining"
+        case .functionalStrengthTraining:    return "functionalStrengthTraining"
+        case .highIntensityIntervalTraining: return "highIntensityIntervalTraining"
+        case .swimming:                      return "swimming"
+        case .elliptical:                    return "elliptical"
+        case .rowing:                        return "rowing"
+        case .pilates:                       return "pilates"
+        case .stairClimbing:                 return "stairClimbing"
+        case .coreTraining:                  return "coreTraining"
+        case .cardioDance:                   return "dance"
+        case .socialDance:                   return "socialDance"
+        case .barre:                         return "barre"
+        case .taiChi:                        return "taiChi"
+        case .mindAndBody:                   return "mindAndBody"
+        case .flexibility:                   return "stretching"
+        case .cooldown:                      return "cooldown"
+        case .crossTraining:                 return "crossTraining"
+        case .mixedCardio:                   return "mixedCardio"
+        case .jumpRope:                      return "jumpRope"
+        case .martialArts:                   return "martialArts"
+        case .boxing:                        return "boxing"
+        case .kickboxing:                    return "kickboxing"
+        case .climbing:                      return "climbing"
+        case .tennis:                        return "tennis"
+        case .pickleball:                    return "pickleball"
+        case .badminton:                     return "badminton"
+        case .tableTennis:                   return "tableTennis"
+        case .racquetball:                   return "racquetball"
+        case .squash:                        return "squash"
+        case .golf:                          return "golf"
+        case .basketball:                    return "basketball"
+        case .soccer:                        return "soccer"
+        case .americanFootball:              return "football"
+        case .baseball:                      return "baseball"
+        case .softball:                      return "softball"
+        case .volleyball:                    return "volleyball"
+        case .hockey:                        return "hockey"
+        case .lacrosse:                      return "lacrosse"
+        case .rugby:                         return "rugby"
+        case .trackAndField:                 return "trackAndField"
+        case .gymnastics:                    return "gymnastics"
+        case .wrestling:                     return "wrestling"
+        case .fencing:                       return "fencing"
+        case .snowboarding:                  return "snowboarding"
+        case .downhillSkiing:                return "skiing"
+        case .crossCountrySkiing:            return "crossCountrySkiing"
+        case .skatingSports:                 return "skating"
+        case .paddleSports:                  return "paddling"
+        case .surfingSports:                 return "surfing"
+        case .sailing:                       return "sailing"
+        case .waterFitness:                  return "waterFitness"
+        case .waterPolo:                     return "waterPolo"
+        case .equestrianSports:              return "equestrian"
+        case .fitnessGaming:                 return "fitnessGaming"
+        case .wheelchairWalkPace:            return "wheelchairWalkPace"
+        case .wheelchairRunPace:             return "wheelchairRunPace"
+        case .handCycling:                   return "handCycling"
+        case .swimBikeRun:                   return "triathlon"
+        case .preparationAndRecovery:        return "recovery"
+        default:                             return "workout"
+        }
+    }
 
     // MARK: - Active Calories
 

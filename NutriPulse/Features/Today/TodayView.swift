@@ -9,6 +9,7 @@ struct TodayView: View {
     // latched until this goes true, so the celebration always plays to a watching user.
     var isFrontmost: Bool = true
     @State private var showBodyCompSheet = false
+    @State private var showWorkoutSheet = false
     @State private var showDatePicker = false
     @State private var showRitual = false
     @State private var ringCelebrationTrigger = 0
@@ -124,6 +125,12 @@ struct TodayView: View {
                             )
                         }
 
+                        MovementCard(
+                            workouts: vm.workouts,
+                            onLog: { showWorkoutSheet = true },
+                            onDelete: { workout in Task { await vm.deleteWorkout(id: workout.id) } }
+                        )
+
                         BodyCompositionCard(
                             data: vm.bodyComp,
                             units: units,
@@ -206,6 +213,17 @@ struct TodayView: View {
                         writeToHK: writeToHK
                     )
                 }
+            }
+            .sheet(isPresented: $showWorkoutSheet) {
+                WorkoutEntrySheet { activity, minutes, calories, distanceMeters in
+                    await vm.addManualWorkout(
+                        activity: activity,
+                        durationMinutes: minutes,
+                        calories: calories,
+                        distanceMeters: distanceMeters
+                    )
+                }
+                .presentationDetents([.medium, .large])
             }
             .sheet(item: $editingLog) { log in
                 EditFoodLogSheet(

@@ -262,6 +262,157 @@ final class LocalStore {
         try context.save()
     }
 
+    // MARK: - Workout Logs
+
+    func fetchWorkoutLogs(for date: Date, userId: UUID) throws -> [WorkoutLog] {
+        guard let context else { return [] }
+        let dateStr = date.isoDateString
+        let descriptor = FetchDescriptor<SDWorkoutLog>(
+            predicate: #Predicate { $0.logDate == dateStr },
+            sortBy: [SortDescriptor(\.startedAt)]
+        )
+        return try context.fetch(descriptor)
+            .filter { $0.userId == userId && $0.syncState != "pendingDelete" }
+            .map(\.asWorkoutLog)
+    }
+
+    func insertWorkoutLog(
+        id: UUID,
+        userId: UUID,
+        logDate: String,
+        activityType: String,
+        durationMinutes: Double,
+        activeCalories: Double?,
+        distanceMeters: Double?,
+        source: String,
+        healthKitUUID: String?,
+        startedAt: Date
+    ) throws {
+        guard let context else { return }
+        let log = SDWorkoutLog(
+            id: id, userId: userId, logDate: logDate,
+            activityType: activityType, durationMinutes: durationMinutes,
+            activeCalories: activeCalories, distanceMeters: distanceMeters,
+            source: source, healthKitUUID: healthKitUUID, startedAt: startedAt
+        )
+        context.insert(log)
+        try context.save()
+    }
+
+    // The entire HealthKit dedup story: an HKWorkout.uuid we've already stored —
+    // in any sync state, including a pendingDelete the user just removed — is
+    // skipped. Without the tombstone check, every Today refresh would re-import
+    // a workout the user deleted seconds earlier. Returns whether it inserted,
+    // so the caller knows if a sync push is warranted.
+    func importHealthKitWorkout(
+        userId: UUID,
+        logDate: String,
+        activityType: String,
+        durationMinutes: Double,
+        activeCalories: Double?,
+        distanceMeters: Double?,
+        healthKitUUID: String,
+        startedAt: Date
+    ) throws -> Bool {
+        guard let context else { return false }
+        let uuid: String? = healthKitUUID
+        let descriptor = FetchDescriptor<SDWorkoutLog>(
+            predicate: #Predicate { $0.healthKitUUID == uuid }
+        )
+        let existing = try context.fetch(descriptor).filter { $0.userId == userId }
+        guard existing.isEmpty else { return false }
+        try insertWorkoutLog(
+            id: UUID(), userId: userId, logDate: logDate,
+            activityType: activityType, durationMinutes: durationMinutes,
+            activeCalories: activeCalories, distanceMeters: distanceMeters,
+            source: "healthkit", healthKitUUID: healthKitUUID, startedAt: startedAt
+        )
+        return true
+    }
+
+    // Tombstone, never hard-delete — same reasoning as markFoodLogDeleted. For an
+    // imported row this also removes it from NutriPulse only; the workout stays in
+    // Apple Health, and the tombstone (kept until the server delete lands) is what
+    // stops the next import pass from resurrecting it.
+    func markWorkoutLogDeleted(id: UUID) throws {
+        guard let context else { return }
+        let descriptor = FetchDescriptor<SDWorkoutLog>(predicate: #Predicate { $0.id == id })
+        guard let log = try context.fetch(descriptor).first else { return }
+        log.syncState = "pendingDelete"
+        log.revision += 1
+        try context.save()
+    }
+
+    func pendingWorkoutLogs() throws -> [SDWorkoutLog] {
+        guard let context else { return [] }
+        let descriptor = FetchDescriptor<SDWorkoutLog>(
+            predicate: #Predicate { $0.syncState == "pendingCreate" }
+        )
+        return try context.fetch(descriptor)
+    }
+
+    func deletedWorkoutLogs() throws -> [SDWorkoutLog] {
+        guard let context else { return [] }
+        let descriptor = FetchDescriptor<SDWorkoutLog>(
+            predicate: #Predicate { $0.syncState == "pendingDelete" }
+        )
+        return try context.fetch(descriptor)
+    }
+
+    // Workouts are delete-only (no edit path), so unlike markFoodLogCreated there is
+    // no revision compare here: the only mid-flight mutation possible is a delete,
+    // and that flips syncState to pendingDelete, which the guard already respects.
+    func markWorkoutLogSynced(id: UUID) throws {
+        guard let context else { return }
+        let descriptor = FetchDescriptor<SDWorkoutLog>(predicate: #Predicate { $0.id == id })
+        guard let log = try context.fetch(descriptor).first else { return }
+        guard log.syncState == "pendingCreate" else { return }
+        log.syncState = "synced"
+        try context.save()
+    }
+
+    func removeWorkoutLogAfterDelete(id: UUID) throws {
+        guard let context else { return }
+        let descriptor = FetchDescriptor<SDWorkoutLog>(predicate: #Predicate { $0.id == id })
+        guard let log = try context.fetch(descriptor).first else { return }
+        guard log.syncState == "pendingDelete" else { return }
+        context.delete(log)
+        try context.save()
+    }
+
+    func upsertWorkoutLog(from remote: WorkoutLog) throws {
+        guard let context else { return }
+        let id = remote.id
+        let descriptor = FetchDescriptor<SDWorkoutLog>(predicate: #Predicate { $0.id == id })
+        // Rows are immutable once created (delete-only), so an existing row —
+        // whatever its sync state — needs nothing from the pull.
+        guard (try context.fetch(descriptor).first) == nil else { return }
+        let log = SDWorkoutLog(
+            id: remote.id, userId: remote.userId, logDate: remote.logDate,
+            activityType: remote.activityType, durationMinutes: remote.durationMinutes,
+            activeCalories: remote.activeCalories, distanceMeters: remote.distanceMeters,
+            source: remote.source.rawValue, healthKitUUID: remote.healthKitUUID,
+            startedAt: remote.startedAt, loggedAt: remote.loggedAt, syncState: "synced"
+        )
+        context.insert(log)
+        try context.save()
+    }
+
+    // Same contract and caveats as pruneDeletedFoodLogs: synced rows only, and
+    // remoteIds must come from a successful pull.
+    func pruneDeletedWorkoutLogs(userId: UUID, since startDate: String, remoteIds: Set<UUID>) throws {
+        guard let context else { return }
+        let stale = try context.fetch(FetchDescriptor<SDWorkoutLog>()).filter { log in
+            log.userId == userId
+                && log.syncState == "synced"
+                && log.logDate >= startDate
+                && !remoteIds.contains(log.id)
+        }
+        guard !stale.isEmpty else { return }
+        for log in stale { context.delete(log) }
+        try context.save()
+    }
+
     // MARK: - Daily Goals
 
     // Filtering by userId matters even though this is "just a cache": goals are the
@@ -317,6 +468,7 @@ final class LocalStore {
         try context.delete(model: SDFoodLog.self)
         try context.delete(model: SDWaterLog.self)
         try context.delete(model: SDDailyGoal.self)
+        try context.delete(model: SDWorkoutLog.self)
         try context.save()
     }
 
@@ -336,6 +488,12 @@ final class LocalStore {
         let waterCreate = try context.fetchCount(FetchDescriptor<SDWaterLog>(
             predicate: #Predicate { $0.syncState == "pendingCreate" }
         ))
-        return foodCreate + foodUpdate + foodDelete + waterCreate
+        let workoutCreate = try context.fetchCount(FetchDescriptor<SDWorkoutLog>(
+            predicate: #Predicate { $0.syncState == "pendingCreate" }
+        ))
+        let workoutDelete = try context.fetchCount(FetchDescriptor<SDWorkoutLog>(
+            predicate: #Predicate { $0.syncState == "pendingDelete" }
+        ))
+        return foodCreate + foodUpdate + foodDelete + waterCreate + workoutCreate + workoutDelete
     }
 }

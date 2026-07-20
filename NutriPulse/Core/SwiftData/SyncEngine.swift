@@ -62,9 +62,11 @@ final class SyncEngine {
 
         await pushPendingFoodLogs()
         await pushPendingWaterLogs()
+        await pushPendingWorkoutLogs()
         await pullGoal()
         await pullRecentFoodLogs()
         await pullTodayWater()
+        await pullRecentWorkoutLogs()
 
         isSyncing = false
         refreshPendingCount()
@@ -91,6 +93,7 @@ final class SyncEngine {
 
         await pushPendingFoodLogs()
         await pushPendingWaterLogs()
+        await pushPendingWorkoutLogs()
 
         isSyncing = false
         refreshPendingCount()
@@ -106,6 +109,7 @@ final class SyncEngine {
             isSyncing = true
             await pushPendingFoodLogs()
             await pushPendingWaterLogs()
+            await pushPendingWorkoutLogs()
             isSyncing = false
             refreshPendingCount()
         }
@@ -175,6 +179,36 @@ final class SyncEngine {
         }
     }
 
+    // MARK: - Push workout logs
+
+    // Workouts are delete-only (no edit path), so there is no update branch and no
+    // revision compare — markWorkoutLogSynced's pendingCreate guard covers the only
+    // possible mid-flight mutation (a delete). The upsert's onConflict "id" also makes
+    // re-pushing after a half-failed batch safe, and the server's partial unique index
+    // on (user_id, healthkit_uuid) independently rejects duplicate HealthKit imports.
+    private func pushPendingWorkoutLogs() async {
+        if let pending = try? LocalStore.shared.pendingWorkoutLogs() {
+            for log in pending {
+                let id = log.id
+                do {
+                    try await supabase.from("workout_logs")
+                        .upsert(WorkoutLogInsert(from: log), onConflict: "id", ignoreDuplicates: true)
+                        .execute()
+                    try? LocalStore.shared.markWorkoutLogSynced(id: id)
+                } catch { }
+            }
+        }
+        if let toDelete = try? LocalStore.shared.deletedWorkoutLogs() {
+            for log in toDelete {
+                let id = log.id
+                do {
+                    try await supabase.from("workout_logs").delete().eq("id", value: id).execute()
+                    try? LocalStore.shared.removeWorkoutLogAfterDelete(id: id)
+                } catch { }
+            }
+        }
+    }
+
     // MARK: - Pull goal
 
     private func pullGoal() async {
@@ -206,6 +240,33 @@ final class SyncEngine {
             // succeeded — on failure we throw and leave the cache alone rather than
             // interpreting "no rows" as "everything was deleted".
             try? LocalStore.shared.pruneDeletedFoodLogs(
+                userId: userId,
+                since: startDate.isoDateString,
+                remoteIds: Set(logs.map(\.id))
+            )
+        } catch { }
+    }
+
+    // MARK: - Pull workout logs (last 7 days)
+
+    private func pullRecentWorkoutLogs() async {
+        do {
+            let userId = try await supabase.auth.session.user.id
+            let cal = Calendar.current
+            let startDate = cal.date(byAdding: .day, value: -7, to: cal.startOfDay(for: .now))!
+            let logs: [WorkoutLog] = try await supabase
+                .from("workout_logs")
+                .select()
+                .gte("log_date", value: startDate.isoDateString)
+                .execute()
+                .value
+            for log in logs {
+                try? LocalStore.shared.upsertWorkoutLog(from: log)
+            }
+            // Same deletion-reconciliation contract as pullRecentFoodLogs: only
+            // reachable after a successful fetch, so "no rows" is never misread
+            // as "everything was deleted".
+            try? LocalStore.shared.pruneDeletedWorkoutLogs(
                 userId: userId,
                 since: startDate.isoDateString,
                 remoteIds: Set(logs.map(\.id))
@@ -287,6 +348,48 @@ private struct FoodLogInsert: Encodable {
 private struct FoodLogUpdate: Encodable {
     let meal: String
     let quantity: Double
+}
+
+private struct WorkoutLogInsert: Encodable {
+    let id: UUID
+    let userId: UUID
+    let loggedAt: Date
+    let logDate: String
+    let activityType: String
+    let durationMinutes: Double
+    let activeCalories: Double?
+    let distanceMeters: Double?
+    let source: String
+    let healthkitUUID: String?
+    let startedAt: Date
+
+    init(from log: SDWorkoutLog) {
+        id              = log.id
+        userId          = log.userId
+        loggedAt        = log.loggedAt
+        logDate         = log.logDate
+        activityType    = log.activityType
+        durationMinutes = log.durationMinutes
+        activeCalories  = log.activeCalories
+        distanceMeters  = log.distanceMeters
+        source          = log.source
+        healthkitUUID   = log.healthKitUUID
+        startedAt       = log.startedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId          = "user_id"
+        case loggedAt        = "logged_at"
+        case logDate         = "log_date"
+        case activityType    = "activity_type"
+        case durationMinutes = "duration_minutes"
+        case activeCalories  = "active_calories"
+        case distanceMeters  = "distance_meters"
+        case source
+        case healthkitUUID   = "healthkit_uuid"
+        case startedAt       = "started_at"
+    }
 }
 
 private struct WaterLogInsert: Encodable {
