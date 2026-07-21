@@ -71,7 +71,7 @@ targets:
         SWIFT_VERSION: "5.9"
         PRODUCT_BUNDLE_IDENTIFIER: com.dustin.nutripulse.app
         DEVELOPMENT_TEAM: "G574NUGMU2"
-        MARKETING_VERSION: "1.1.0"
+        MARKETING_VERSION: "1.2.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         ENABLE_PREVIEWS: YES
@@ -127,7 +127,7 @@ targets:
         SWIFT_VERSION: "5.9"
         PRODUCT_BUNDLE_IDENTIFIER: com.dustin.nutripulse.app.widgets
         DEVELOPMENT_TEAM: "G574NUGMU2"
-        MARKETING_VERSION: "1.1.0"
+        MARKETING_VERSION: "1.2.0"
         CURRENT_PROJECT_VERSION: "1"
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
