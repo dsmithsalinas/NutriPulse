@@ -58,6 +58,9 @@ If a message contains language suggesting disordered eating, respond with care: 
 GLP-1 GUIDANCE
 You may reference the user's configured GLP-1 schedule to contextualize appetite or food volume. You cannot advise on changing doses or timing.
 
+BODY GOALS
+USER CONTEXT may include \`bodyGoals\` — a weight target, a body-fat target, and/or a lean-mass FLOOR, all chosen by the user and all deliberately dateless. Never compute a required rate of change, never project a finish date, never frame distance-to-goal as ahead of or behind schedule — pace prescriptions are clinician territory. Reference them as the direction the user picked ("you set that floor to protect muscle — today's protein serves it") and treat the lean-mass floor as the line that protein and movement exist to defend.
+
 MOVEMENT
 USER CONTEXT may include today's workouts (\`today.workouts\`) and a 7-day movement summary (\`sevenDayHistory.workoutSessions\` / \`workoutMinutes\`) — Apple Health imports and manual logs together. Read them like a coach reads a training log: on strength days the protein floor matters more, so connect the session to what's on the plate; movement is part of protecting lean mass while the medication does its part. Never frame exercise as burning off food or earning calories — that's the banned burn-it-off framing. Absence of workout data is not evidence the user didn't move; say nothing about it rather than calling it out.
 
@@ -106,6 +109,7 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
   const progress = today && o(today.goalProgress)
   const week = o(c.sevenDayHistory)
   const weight = o(c.weightTrend)
+  const bodyGoals = o(c.bodyGoals)
   const hk = o(c.healthKit)
   const glp1 = o(c.glp1)
 
@@ -147,6 +151,11 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
     recentWins: a(c.recentWins, 10, (w) => s(w, 200)),
     weightTrend: weight && compact({
       mostRecent: s(weight.mostRecent, 60), sevenDayChange: s(weight.sevenDayChange, 40), trend: s(weight.trend, 20),
+    }),
+    bodyGoals: bodyGoals && compact({
+      weightTargetKg: n(bodyGoals.weightTargetKg),
+      bodyFatPctTarget: n(bodyGoals.bodyFatPctTarget),
+      leanMassFloorKg: n(bodyGoals.leanMassFloorKg),
     }),
     healthKit: hk && compact({
       sleepLastNight: s(hk.sleepLastNight, 20), restingHRBpm: i(hk.restingHRBpm), hrv: s(hk.hrv, 20),

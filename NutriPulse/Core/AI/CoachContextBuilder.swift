@@ -12,6 +12,7 @@ struct CoachContextBundle: Encodable {
     let sevenDayHistory: WeekHistoryContext
     let recentWins: [String]
     let weightTrend: WeightTrendContext?
+    let bodyGoals: BodyGoalsContext?
     let healthKit: HealthKitContext?
     let glp1: GLP1Context?
 
@@ -80,6 +81,14 @@ struct CoachContextBundle: Encodable {
         let trend: String
     }
 
+    // User-chosen, dateless. The prompt forbids Pulse from turning these into rates or
+    // deadlines — they're direction, not schedule.
+    struct BodyGoalsContext: Encodable {
+        let weightTargetKg: Double?
+        let bodyFatPctTarget: Double?
+        let leanMassFloorKg: Double?
+    }
+
     struct HealthKitContext: Encodable {
         let sleepLastNight: String?
         let restingHRBpm: Int?
@@ -116,6 +125,7 @@ struct CoachContextBuilder {
         async let goalTask = goalRepo.fetchGoal(for: .now)
         async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
         async let weightTask = analyticsRepo.fetchWeightLogs(days: 7)
+        async let bodyGoalsTask = BodyGoalsRepository().fetch()
         async let activeCalTask = hk.fetchActiveCalories(for: .now)
         async let sleepTask = hk.fetchSleepHours(for: .now)
         async let hrTask = hk.fetchRestingHeartRate(for: .now)
@@ -126,6 +136,7 @@ struct CoachContextBuilder {
         let goal: DailyGoal? = (try? await goalTask) ?? nil
         let glp1Logs = (try? await glp1Task) ?? []
         let weightLogs = (try? await weightTask) ?? []
+        let bodyGoals = (try? await bodyGoalsTask) ?? nil
         let activeCal = await activeCalTask
         let sleep = await sleepTask
         let hr = await hrTask
@@ -148,6 +159,7 @@ struct CoachContextBuilder {
             goal: goal,
             glp1Log: glp1Logs.first,
             weightLogs: weightLogs,
+            bodyGoals: bodyGoals,
             workouts: workouts,
             activeCal: activeCal,
             sleep: sleep,
@@ -165,6 +177,7 @@ struct CoachContextBuilder {
         goal: DailyGoal?,
         glp1Log: GLP1Log?,
         weightLogs: [WeightLog],
+        bodyGoals: BodyGoals?,
         workouts: [WorkoutLog],
         activeCal: Double?,
         sleep: Double?,
@@ -337,6 +350,18 @@ struct CoachContextBuilder {
             glp1Ctx = nil
         }
 
+        // Body goals — only when at least one is set, so an empty row isn't noise.
+        let bodyGoalsCtx: CoachContextBundle.BodyGoalsContext?
+        if let bodyGoals, !bodyGoals.isEmpty {
+            bodyGoalsCtx = .init(
+                weightTargetKg: bodyGoals.weightKgTarget,
+                bodyFatPctTarget: bodyGoals.bodyFatPctTarget,
+                leanMassFloorKg: bodyGoals.leanMassKgFloor
+            )
+        } else {
+            bodyGoalsCtx = nil
+        }
+
         return CoachContextBundle(
             currentDateTime: dateStr,
             user: userCtx,
@@ -345,6 +370,7 @@ struct CoachContextBuilder {
             sevenDayHistory: weekCtx,
             recentWins: CelebrationEngine.detectWins(goal: goal, history: summaries),
             weightTrend: weightTrend,
+            bodyGoals: bodyGoalsCtx,
             healthKit: hkCtx,
             glp1: glp1Ctx
         )

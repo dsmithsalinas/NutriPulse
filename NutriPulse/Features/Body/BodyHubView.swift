@@ -10,6 +10,7 @@ struct BodyHubView: View {
 
     @State private var vm = BodyHubViewModel()
     @State private var showCheckIn = false
+    @State private var showGoals = false
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
@@ -116,8 +117,28 @@ struct BodyHubView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
         .toolbar(.visible, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showGoals = true
+                } label: {
+                    Image(systemName: "scope")
+                        .foregroundStyle(Theme.Colors.primary)
+                }
+                .accessibilityLabel("Body goals")
+            }
+        }
         .task(id: vm.selectedRange) {
             await vm.loadData()
+        }
+        .sheet(isPresented: $showGoals) {
+            BodyGoalsSheet(current: vm.goals) { weightKg, bodyFatPct, leanKg in
+                await vm.saveGoals(
+                    weightKgTarget: weightKg,
+                    bodyFatPctTarget: bodyFatPct,
+                    leanMassKgFloor: leanKg
+                )
+            }
         }
         .sheet(isPresented: $showCheckIn) {
             BodyCompositionSheet(
@@ -163,12 +184,21 @@ struct BodyHubView: View {
                     sparkline(series, color: metric.color)
                 }
 
-                Text(currentText(metric, series: series, fallback: fallbackValue))
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .monospacedDigit()
-                    .foregroundStyle(.primary)
-                    .frame(minWidth: 56, alignment: .trailing)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(currentText(metric, series: series, fallback: fallbackValue))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                    // Quiet by design: the goal is a caption, not a progress meter.
+                    if let goal = vm.goalValue(for: metric) {
+                        Text("\(metric.goalNoun) \(metric.format(goal, units: units))")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.Colors.textFaint)
+                            .monospacedDigit()
+                    }
+                }
+                .frame(minWidth: 56, alignment: .trailing)
 
                 Image(systemName: "chevron.right")
                     .font(.caption2)

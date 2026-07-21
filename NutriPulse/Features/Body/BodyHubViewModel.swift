@@ -39,11 +39,13 @@ final class BodyHubViewModel {
     // All-time latest per site — a row keeps showing its last value even when the
     // selected range predates it, the same way a scale app never blanks your weight.
     var latestPerSite: [MeasurementSite: BodyMeasurementLog] = [:]
+    var goals: BodyGoals? = nil
     var isLoading = false
 
     private let analyticsRepo   = AnalyticsRepository()
     private let compRepo        = BodyCompositionRepository()
     private let measurementRepo = BodyMeasurementRepository()
+    private let goalsRepo       = BodyGoalsRepository()
 
     func loadData() async {
         isLoading = true
@@ -52,8 +54,10 @@ final class BodyHubViewModel {
         async let compTask    = compRepo.fetchHistory(days: selectedRange.rawValue)
         async let historyTask = measurementRepo.fetchHistoryAll(days: selectedRange.rawValue)
         async let latestTask  = measurementRepo.fetchLatestPerSite()
+        async let goalsTask   = goalsRepo.fetch()
 
         weightLogs = (try? await weightTask) ?? []
+        goals = (try? await goalsTask) ?? nil
         compLogs   = (try? await compTask) ?? []
         var grouped: [MeasurementSite: [BodyMeasurementLog]] = [:]
         for row in (try? await historyTask) ?? [] {
@@ -138,6 +142,25 @@ final class BodyHubViewModel {
             return "The scale held still \(rangePhrase), but your waist didn't — that's change the scale can't see."
         }
         return nil
+    }
+
+    func saveGoals(weightKgTarget: Double?, bodyFatPctTarget: Double?, leanMassKgFloor: Double?) async {
+        try? await goalsRepo.upsert(
+            weightKgTarget: weightKgTarget,
+            bodyFatPctTarget: bodyFatPctTarget,
+            leanMassKgFloor: leanMassKgFloor
+        )
+        goals = (try? await goalsRepo.fetch()) ?? nil
+    }
+
+    // The goal (or floor) attached to a metric, if any. Measurement sites have none.
+    func goalValue(for metric: BodyMetric) -> Double? {
+        switch metric {
+        case .weight:   return goals?.weightKgTarget
+        case .bodyFat:  return goals?.bodyFatPctTarget
+        case .leanMass: return goals?.leanMassKgFloor
+        case .site:     return nil
+        }
     }
 
     var insightText: String? {

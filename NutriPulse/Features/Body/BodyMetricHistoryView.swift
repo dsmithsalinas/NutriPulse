@@ -64,6 +64,12 @@ enum BodyMetric: Hashable, Identifiable {
         default:       return format(magnitude, units: units)
         }
     }
+
+    // "goal" for targets, "floor" for lean mass — the word carries the semantics.
+    var goalNoun: String {
+        if case .leanMass = self { return "floor" }
+        return "goal"
+    }
 }
 
 // Full history for one metric: a real chart plus the entries behind it. Self-contained —
@@ -84,6 +90,7 @@ struct BodyMetricHistoryView: View {
     }
 
     @State private var entries: [Entry] = []
+    @State private var goalValue: Double? = nil   // storage units; nil for measurement sites
     @State private var isLoading = false
 
     private let measurementRepo = BodyMeasurementRepository()
@@ -124,6 +131,24 @@ struct BodyMetricHistoryView: View {
                 )
                 .foregroundStyle(metric.color)
                 .symbolSize(40)
+
+                // The goal line — same dashed grammar as the calorie goal in Analytics.
+                // Deliberately no shading above or below it: a line to approach, not a
+                // zone to be in or out of.
+                if let goalValue {
+                    RuleMark(y: .value(metric.goalNoun.capitalized, displayValue(goalValue)))
+                        .foregroundStyle(.secondary.opacity(0.6))
+                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
+                        .annotation(
+                            position: .top,
+                            alignment: .leading,
+                            overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        ) {
+                            Text(metric.goalNoun.capitalized)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                }
             }
             .chartYScale(domain: .automatic(includesZero: false))
             .frame(height: 180)
@@ -198,6 +223,15 @@ struct BodyMetricHistoryView: View {
     private func load() async {
         isLoading = true
         defer { isLoading = false }
+
+        let goals = try? await BodyGoalsRepository().fetch()
+        switch metric {
+        case .weight:   goalValue = goals?.weightKgTarget
+        case .bodyFat:  goalValue = goals?.bodyFatPctTarget
+        case .leanMass: goalValue = goals?.leanMassKgFloor
+        case .site:     goalValue = nil
+        }
+
         switch metric {
         case .weight:
             let logs = (try? await AnalyticsRepository().fetchWeightLogs(days: 1095)) ?? []
