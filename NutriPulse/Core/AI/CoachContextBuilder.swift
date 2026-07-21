@@ -20,6 +20,7 @@ struct CoachContextBundle: Encodable {
         let name: String
         let sex: String?
         let activityLevel: String?
+        let weightGoal: String?   // "lose" | "maintain" | "gain" — nil until chosen post-onboarding
     }
 
     struct GoalContext: Encodable {
@@ -192,7 +193,8 @@ struct CoachContextBuilder {
         let userCtx = CoachContextBundle.UserContext(
             name: profile?.fullName?.components(separatedBy: " ").first ?? "there",
             sex: profile?.sex,
-            activityLevel: profile?.activityLevel
+            activityLevel: profile?.activityLevel,
+            weightGoal: profile?.weightGoal
         )
 
         // Goals

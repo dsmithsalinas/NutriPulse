@@ -48,6 +48,30 @@ struct ProfileView: View {
             .sheet(isPresented: $vm.showEditGoals) {
                 EditGoalsSheet(vm: vm)
             }
+            .confirmationDialog(
+                "What's the aim right now?",
+                isPresented: $vm.showRecalcAimDialog,
+                titleVisibility: .visible
+            ) {
+                ForEach(WeightGoal.allCases) { aim in
+                    Button(aim.displayName) { vm.prepareRecalc(for: aim) }
+                }
+            }
+            .alert(
+                "Use these targets?",
+                isPresented: Binding(
+                    get: { vm.pendingTargetRecalc != nil },
+                    set: { if !$0 { vm.pendingTargetRecalc = nil } }
+                ),
+                presenting: vm.pendingTargetRecalc
+            ) { pending in
+                Button("Keep current", role: .cancel) { vm.pendingTargetRecalc = nil }
+                Button("Update targets") {
+                    Task { await vm.applyRecalc(pending) }
+                }
+            } message: { pending in
+                Text("\(pending.weightGoal.displayName): \(Int(pending.goals.calories)) kcal, \(Int(pending.goals.proteinG))g protein a day (currently \(Int(pending.currentCalories)) kcal).")
+            }
             .sheet(isPresented: $vm.showLogInjection) {
                 LogInjectionSheet(vm: vm)
             }
@@ -231,6 +255,10 @@ struct ProfileView: View {
                 row(label: "Fiber",    value: "\(Int(g.fiberG))g")
             }
             Button("Edit Goals") { vm.showEditGoals = true }
+                .foregroundStyle(Theme.Colors.primary)
+            // The intent-change flow: re-asks the one onboarding question and recomputes
+            // from current stats. Doubles as "reset to recommended" for hand-tuned goals.
+            Button("Recalculate Targets") { vm.showRecalcAimDialog = true }
                 .foregroundStyle(Theme.Colors.primary)
         }
     }
@@ -590,7 +618,8 @@ private struct EditProfileSheet: View {
                     Task {
                         try? await vm.updateGoals(
                             calories: goals.calories, proteinG: goals.proteinG,
-                            carbsG: goals.carbsG, fatG: goals.fatG, fiberG: goals.fiberG
+                            carbsG: goals.carbsG, fatG: goals.fatG, fiberG: goals.fiberG,
+                            waterMlTarget: goals.waterMlTarget
                         )
                         dismiss()
                     }

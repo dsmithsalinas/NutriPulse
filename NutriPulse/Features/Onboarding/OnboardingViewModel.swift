@@ -258,6 +258,14 @@ final class OnboardingViewModel {
             await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
         }
 
+        // 3.5 Record the chosen direction. Separate from the UpdateProfile commit below
+        //     (whose shape several flows share) and safe to repeat.
+        try await supabase
+            .from("profiles")
+            .update(["weight_goal": goal.rawValue])
+            .eq("id", value: userId)
+            .execute()
+
         // 4. Commit the profile last — this is what marks onboarding complete.
         //    Returning the saved row lets the caller update AppState without a
         //    second network round trip that could fail and strand the user.

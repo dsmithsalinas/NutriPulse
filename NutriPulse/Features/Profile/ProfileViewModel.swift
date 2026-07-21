@@ -27,6 +27,17 @@ final class ProfileViewModel {
     var showLogInjection   = false
     var showSendFeedback   = false
 
+    // Recalculate Targets — the intent-change flow. The dialog re-asks the one
+    // onboarding question (lose/maintain/gain); the preview alert shows the computed
+    // numbers; nothing is applied until the user accepts.
+    var showRecalcAimDialog = false
+    struct TargetRecalc {
+        let weightGoal: WeightGoal
+        let goals: CalculatedGoals
+        let currentCalories: Double
+    }
+    var pendingTargetRecalc: TargetRecalc? = nil
+
     private let goalRepo = GoalRepository()
     private let glp1Repo = GLP1Repository()
     private let feedbackRepo = FeedbackRepository()
@@ -156,8 +167,11 @@ final class ProfileViewModel {
 
     // MARK: - Goals update
 
+    // `waterMlTarget` nil = keep the current target (Edit Goals has no water field, and a
+    // hand-tuned macro edit shouldn't move it). Recalc paths pass their computed value —
+    // previously they silently dropped it, leaving water stale while everything else moved.
     func updateGoals(calories: Double, proteinG: Double, carbsG: Double,
-                     fatG: Double, fiberG: Double) async throws {
+                     fatG: Double, fiberG: Double, waterMlTarget: Double? = nil) async throws {
         let userId = try await supabase.auth.session.user.id
         let newGoal = NewDailyGoal(
             userId:        userId,
@@ -167,7 +181,7 @@ final class ProfileViewModel {
             carbsG:        carbsG,
             fatG:          fatG,
             fiberG:        fiberG,
-            waterMlTarget: goal?.waterMlTarget ?? 2000
+            waterMlTarget: waterMlTarget ?? goal?.waterMlTarget ?? 2000
         )
         // daily_goals has UNIQUE (user_id, effective_date) and effectiveDate is today, so a
         // plain INSERT threw a raw Postgres duplicate-key error straight into the alert the
@@ -192,6 +206,68 @@ final class ProfileViewModel {
         // Today's drift prompt should stay quiet until the next real change.
         if let w = latestWeight?.weightKg, w > 0 {
             UserDefaults.standard.set(w, forKey: GoalCalculator.weightBaselineKey)
+        }
+    }
+
+    // MARK: - Recalculate Targets (intent change)
+
+    // Computes fresh targets for a chosen aim from current stats + latest weight, via the
+    // same calculator onboarding uses (Katch-McArdle when body fat is known). Returns nil
+    // when the profile is missing something the formula needs.
+    func prepareRecalc(for weightGoal: WeightGoal) {
+        guard let profile,
+              let sexRaw = profile.sex, let sex = BiologicalSex(rawValue: sexRaw),
+              let activityRaw = profile.activityLevel,
+              let activity = ActivityLevel(rawValue: activityRaw),
+              let heightCm = profile.heightCm,
+              let dobStr = profile.dob, let dob = Date.fromISODateString(dobStr),
+              let weightKg = latestWeight?.weightKg,
+              let currentCalories = goal?.calories
+        else {
+            errorMessage = "Add your stats and a weight entry first, then try again."
+            return
+        }
+        let goals = GoalCalculator.goals(
+            sex: sex,
+            ageYears: GoalCalculator.ageYears(fromDOB: dob),
+            heightCm: heightCm,
+            weightKg: weightKg,
+            activity: activity,
+            weightGoal: weightGoal,
+            bodyFatPct: latestBodyFatPct
+        )
+        pendingTargetRecalc = TargetRecalc(
+            weightGoal: weightGoal, goals: goals, currentCalories: currentCalories
+        )
+    }
+
+    // Takes the value rather than reading pendingTargetRecalc: the alert's isPresented
+    // binding nils that state on dismiss, which races this Task — the same trap the
+    // edit-stats recalc alert sidesteps by capturing its `presenting` parameter.
+    func applyRecalc(_ pending: TargetRecalc) async {
+        do {
+            try await updateGoals(
+                calories: pending.goals.calories,
+                proteinG: pending.goals.proteinG,
+                carbsG: pending.goals.carbsG,
+                fatG: pending.goals.fatG,
+                fiberG: pending.goals.fiberG,
+                waterMlTarget: pending.goals.waterMlTarget
+            )
+            // The direction finally gets stored — the retarget flow's inference now has
+            // ground truth, and Pulse can name the aim instead of guessing it.
+            let userId = try await supabase.auth.session.user.id
+            let updated: UserProfile = try await supabase
+                .from("profiles")
+                .update(["weight_goal": pending.weightGoal.rawValue])
+                .eq("id", value: userId)
+                .select()
+                .single()
+                .execute()
+                .value
+            profile = updated
+        } catch {
+            errorMessage = "Couldn't update your targets."
         }
     }
 

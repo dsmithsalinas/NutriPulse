@@ -25,6 +25,9 @@ struct UserProfile: Codable, Identifiable {
     let sex: String?            // "male" | "female" | "other"
     let heightCm: Double?
     let activityLevel: String?  // "sedentary" | "light" | "moderate" | "active" | "very_active"
+    // "lose" | "maintain" | "gain" — nil for accounts that predate the column and haven't
+    // been through onboarding or Recalculate Targets since.
+    let weightGoal: String?
     let dietaryPrefs: [String]?
     let createdAt: Date
 
@@ -36,6 +39,7 @@ struct UserProfile: Codable, Identifiable {
         case sex
         case heightCm      = "height_cm"
         case activityLevel = "activity_level"
+        case weightGoal    = "weight_goal"
         case dietaryPrefs  = "dietary_prefs"
         case createdAt     = "created_at"
     }
