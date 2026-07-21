@@ -16,23 +16,40 @@ struct RetargetCard: View {
         return "\(String(format: "%.1f", display)) \(units.weightUnit) \(direction)"
     }
 
+    private var isMaintenance: Bool { suggestion.kind == .maintenance }
+
+    private var titleText: String {
+        // Calm, factual, and it earns no exclamation mark — the moment is the reward.
+        isMaintenance ? "You're at your goal weight" : "Update your targets?"
+    }
+
+    private var bodyText: String {
+        if isMaintenance {
+            let goalText = suggestion.goalWeightKg.map {
+                "\(String(format: "%.1f", units.weightInput(from: $0))) \(units.weightUnit)"
+            } ?? "your goal"
+            return "Your average weight is right around the \(goalText) goal you set. Shifting to maintenance would be about \(Int(suggestion.goals.calories)) kcal a day (currently \(Int(suggestion.currentCalories)))."
+        }
+        return "Your average weight is \(deltaText) than when your targets were set. Recalculated, that's \(Int(suggestion.goals.calories)) kcal a day (currently \(Int(suggestion.currentCalories)))."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(spacing: 6) {
-                Image(systemName: "arrow.triangle.2.circlepath")
+                Image(systemName: isMaintenance ? "checkmark.seal" : "arrow.triangle.2.circlepath")
                     .foregroundStyle(Theme.Colors.primary)
-                Text("Update your targets?")
+                Text(titleText)
                     .fontWeight(.semibold)
             }
 
-            Text("Your average weight is \(deltaText) than when your targets were set. Recalculated, that's \(Int(suggestion.goals.calories)) kcal a day (currently \(Int(suggestion.currentCalories))).")
+            Text(bodyText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: Theme.Spacing.sm) {
                 Button(action: onAccept) {
-                    Text("Update targets")
+                    Text(isMaintenance ? "Shift to maintenance" : "Update targets")
                         .font(.subheadline.weight(.medium))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)

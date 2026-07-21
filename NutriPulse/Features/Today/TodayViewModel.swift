@@ -63,16 +63,44 @@ final class TodayViewModel {
     // user's stats (sex, height, DOB, activity) to rebuild TDEEs.
     var profile: UserProfile? = nil
 
-    // Non-nil when the 7-day average weight has drifted far enough from the weight the
-    // current goals were computed from that recalculated targets meaningfully differ.
-    // Surfaces as an offer on Today; never applied without the user's say-so.
+    // Non-nil when Today should offer new targets — either because the 7-day average
+    // weight drifted from the weight the current goals were computed from (.drift), or
+    // because it reached the user's goal weight and there's a deficit/surplus worth
+    // ending (.maintenance). One card slot; maintenance outranks drift. Never applied
+    // without the user's say-so.
     struct RetargetSuggestion {
+        enum Kind { case drift, maintenance }
+        let kind: Kind
         let goals: CalculatedGoals
         let currentCalories: Double
         let avgWeightKg: Double
         let baselineKg: Double
+        let goalWeightKg: Double?   // set for .maintenance, for the card's copy
     }
     var retargetSuggestion: RetargetSuggestion? = nil
+
+    private static let maintenanceDismissedGoalKey = "maintenanceOfferDismissedGoalKg"
+
+    // The pure decision behind the maintenance offer. True when the 7-day average is at
+    // the user's goal weight — within 1%, or past it in the direction their current
+    // adjustment pushes — AND there is an adjustment (≥100 kcal from maintenance) worth
+    // ending. A dismissal suppresses the offer for that exact goal value; changing the
+    // goal re-arms it. Someone already eating at maintenance is never prompted.
+    nonisolated static func shouldOfferMaintenance(
+        avgWeightKg: Double,
+        goalWeightKg: Double?,
+        currentCalories: Double,
+        tdeeAtAvg: Double,
+        dismissedForGoalKg: Double?
+    ) -> Bool {
+        guard let goal = goalWeightKg, goal > 0, avgWeightKg > 0 else { return false }
+        if let dismissed = dismissedForGoalKg, abs(dismissed - goal) < 0.05 { return false }
+        let adjustment = currentCalories - tdeeAtAvg
+        guard abs(adjustment) >= 100 else { return false }
+        if abs(avgWeightKg - goal) <= goal * 0.01 { return true }
+        // Past the goal in the direction of travel: losing → below it, gaining → above it.
+        return adjustment < 0 ? avgWeightKg < goal : avgWeightKg > goal
+    }
 
     // HealthKit data for the selected date
     // nil = HealthKit reported nothing (no data, or read access denied — HealthKit won't
@@ -309,7 +337,37 @@ final class TodayViewModel {
         guard !logs.isEmpty else { return }
         let avgKg = logs.reduce(0) { $0 + $1.weightKg } / Double(logs.count)
 
+        let age = GoalCalculator.ageYears(fromDOB: dob)
+        let bodyFat = bodyComp.bodyFatPct
+        let newTDEE = GoalCalculator.tdee(
+            sex: sex, ageYears: age, heightCm: heightCm, weightKg: avgKg,
+            activity: activity, bodyFatPct: bodyFat
+        )
         let ud = UserDefaults.standard
+
+        // Reached the goal weight → the offer is to END the adjustment, not carry it.
+        // Outranks the drift offer: a user descending onto their goal trips both, and
+        // "shift to maintenance" is the decision that moment is actually about.
+        let goalWeight = ((try? await BodyGoalsRepository().fetch()) ?? nil)?.weightKgTarget
+        let dismissedFor = ud.object(forKey: Self.maintenanceDismissedGoalKey) as? Double
+        if Self.shouldOfferMaintenance(
+            avgWeightKg: avgKg, goalWeightKg: goalWeight,
+            currentCalories: goal.calories, tdeeAtAvg: newTDEE,
+            dismissedForGoalKg: dismissedFor
+        ) {
+            let target = max(GoalCalculator.calorieFloor, newTDEE).rounded()
+            let goals = GoalCalculator.macros(
+                calories: target, weightKg: avgKg, heightCm: heightCm, sex: sex
+            )
+            retargetSuggestion = RetargetSuggestion(
+                kind: .maintenance, goals: goals, currentCalories: goal.calories,
+                avgWeightKg: avgKg,
+                baselineKg: ud.double(forKey: GoalCalculator.weightBaselineKey),
+                goalWeightKg: goalWeight
+            )
+            return
+        }
+
         let baseline = ud.double(forKey: GoalCalculator.weightBaselineKey)
         guard baseline > 0 else {
             // Existing installs never recorded the weight their goals came from. Seed
@@ -324,14 +382,8 @@ final class TodayViewModel {
 
         // Same shape as Profile's recalc: rebuild TDEE at the baseline weight and at the
         // current average, and let retargeted() carry the user's adjustment across.
-        let age = GoalCalculator.ageYears(fromDOB: dob)
-        let bodyFat = bodyComp.bodyFatPct
         let oldTDEE = GoalCalculator.tdee(
             sex: sex, ageYears: age, heightCm: heightCm, weightKg: baseline,
-            activity: activity, bodyFatPct: bodyFat
-        )
-        let newTDEE = GoalCalculator.tdee(
-            sex: sex, ageYears: age, heightCm: heightCm, weightKg: avgKg,
             activity: activity, bodyFatPct: bodyFat
         )
         let goals = GoalCalculator.retargeted(
@@ -341,8 +393,8 @@ final class TodayViewModel {
         // Don't offer a recalc that barely moves the number.
         guard abs(goals.calories - goal.calories) >= 25 else { return }
         retargetSuggestion = RetargetSuggestion(
-            goals: goals, currentCalories: goal.calories,
-            avgWeightKg: avgKg, baselineKg: baseline
+            kind: .drift, goals: goals, currentCalories: goal.calories,
+            avgWeightKg: avgKg, baselineKg: baseline, goalWeightKg: nil
         )
     }
 
@@ -381,10 +433,15 @@ final class TodayViewModel {
     }
 
     // "Keep current" means keep them for THIS body: the baseline moves to today's average,
-    // so the card returns only after another meaningful drift — not tomorrow morning.
+    // so the drift card returns only after another meaningful drift — not tomorrow
+    // morning. Dismissing a maintenance offer additionally remembers WHICH goal it was
+    // for: that offer stays quiet until the goal itself changes.
     func dismissRetarget() {
         guard let suggestion = retargetSuggestion else { return }
         UserDefaults.standard.set(suggestion.avgWeightKg, forKey: GoalCalculator.weightBaselineKey)
+        if suggestion.kind == .maintenance, let goalKg = suggestion.goalWeightKg {
+            UserDefaults.standard.set(goalKg, forKey: Self.maintenanceDismissedGoalKey)
+        }
         retargetSuggestion = nil
     }
 

@@ -1165,3 +1165,48 @@ final class BodyHubInsightTests: XCTestCase {
         XCTAssertNil(BodyHubViewModel.leanHeldSteady(deltaKg: nil, baselineKg: 57))
     }
 }
+
+// MARK: - Maintenance offer
+
+// The pure trigger behind "you're at your goal weight — shift to maintenance?".
+final class MaintenanceOfferTests: XCTestCase {
+
+    private func offer(
+        avg: Double, goal: Double? = 72.5,
+        calories: Double = 2050, tdee: Double = 2550,
+        dismissedFor: Double? = nil
+    ) -> Bool {
+        TodayViewModel.shouldOfferMaintenance(
+            avgWeightKg: avg, goalWeightKg: goal,
+            currentCalories: calories, tdeeAtAvg: tdee,
+            dismissedForGoalKg: dismissedFor
+        )
+    }
+
+    func testWithinOnePercentOfGoalOffers() {
+        XCTAssertTrue(offer(avg: 73.2))          // 0.97% above 72.5
+        XCTAssertTrue(offer(avg: 71.8))          // just below
+        XCTAssertFalse(offer(avg: 73.5), "1.4% above, still descending — not there yet")
+    }
+
+    func testOvershootCountsOnlyInTheDirectionOfTravel() {
+        // Deficit (losing): past the goal means BELOW it.
+        XCTAssertTrue(offer(avg: 70.0))
+        // Surplus (gaining): past the goal means ABOVE it.
+        XCTAssertTrue(offer(avg: 75.0, calories: 2800, tdee: 2550))
+        XCTAssertFalse(offer(avg: 70.0, calories: 2800, tdee: 2550),
+                       "below goal while gaining toward it is not arrival")
+    }
+
+    func testNoGoalOrNoAdjustmentNeverOffers() {
+        XCTAssertFalse(offer(avg: 72.5, goal: nil))
+        XCTAssertFalse(offer(avg: 72.5, calories: 2500, tdee: 2550),
+                       "already within 100 kcal of maintenance — nothing to shift")
+    }
+
+    func testDismissalSuppressesForThatGoalOnly() {
+        XCTAssertFalse(offer(avg: 72.5, dismissedFor: 72.5))
+        XCTAssertTrue(offer(avg: 72.5, dismissedFor: 74.0),
+                      "changing the goal re-arms the offer")
+    }
+}
