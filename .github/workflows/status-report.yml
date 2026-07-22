@@ -1,0 +1,39 @@
+# Daily status report — health checks + aggregate usage stats, emailed each morning.
+# The email comes from scripts/status-report.mjs (via Resend); a failed run also
+# triggers GitHub's own workflow-failure email, so an outage alerts you even if
+# the report email itself can't send. Setup + secrets: docs/status-report.md
+name: Daily status report
+
+on:
+  schedule:
+    # 13:00 UTC = 6:00 AM Pacific during PDT (5:00 AM during PST)
+    - cron: '0 13 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: scripts
+        run: npm install --no-audit --no-fund
+
+      - name: Run status report
+        working-directory: scripts
+        run: node status-report.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          HEALTHCHECK_EMAIL: ${{ secrets.HEALTHCHECK_EMAIL }}
+          HEALTHCHECK_PASSWORD: ${{ secrets.HEALTHCHECK_PASSWORD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          REPORT_TO: dusteallen@me.com
+          REPORT_TZ: America/Los_Angeles
