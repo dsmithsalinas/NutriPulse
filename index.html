@@ -275,6 +275,22 @@
   .gm-pulse { display: flex; gap: 9px; align-items: flex-end; margin-top: 2px; }
   .gm-bubble { background: #fff; border: 1px solid var(--line); border-radius: 14px 14px 14px 4px; padding: 10px 12px; font-size: 12.5px; line-height: 1.45; color: var(--ink); }
 
+  /* why the name — a quiet beat between the GLP-1 pitch and the ask */
+  .why { text-align: center; }
+  .why .wrap { display: block; max-width: 760px; }
+  .why h2 { letter-spacing: -0.035em; }
+  .why .section-lede { max-width: 54ch; margin: 0 auto; }
+  /* The floor line, drawn: the closing line rests on it. */
+  .why .floor-line {
+    height: 2px; border: 0; border-radius: 2px; max-width: 260px; margin: 30px auto 26px;
+    background: linear-gradient(90deg, transparent, var(--indigo) 28%, var(--indigo) 72%, transparent);
+  }
+  .why .resolve {
+    font-size: clamp(17px, 2.1vw, 21px); font-weight: 600; color: var(--ink);
+    letter-spacing: -0.02em; text-wrap: balance; max-width: 42ch; margin: 0 auto;
+  }
+  .why .resolve .hl { color: var(--warm); }
+
   /* final */
   .final { text-align: center; }
   .final .wrap { display: block; }
@@ -488,6 +504,16 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="panel why" id="why">
+    <div class="wrap">
+      <p class="kicker">The name</p>
+      <h2>Why Footing?</h2>
+      <p class="section-lede">A footing is the base poured beneath a floor so nothing above it sinks. On a GLP-1, protein is that base — the shot does its part, and your protein floor is what keeps the result standing.</p>
+      <hr class="floor-line" aria-hidden="true">
+      <p class="resolve">Most apps in this category are named after the medication. This one is named after <span class="hl">the work</span>.</p>
     </div>
   </section>
 
