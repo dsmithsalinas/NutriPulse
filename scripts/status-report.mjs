@@ -29,6 +29,24 @@ const HC_EMAIL         = env('HEALTHCHECK_EMAIL')
 const HC_PASSWORD      = env('HEALTHCHECK_PASSWORD')
 const REPORT_TZ        = env('REPORT_TZ', 'America/Los_Angeles')
 
+// ── Egress preflight ────────────────────────────────────────────────────────
+// Sandboxed runners (e.g. Claude Code cloud sessions) route traffic through a
+// proxy that 403s hosts missing from the environment's network allowlist. That
+// failure mode means "the checks could not run" — NOT "production is down" —
+// so detect it up front and report it as its own thing instead of six red ❌s.
+async function detectEgressBlock() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: ANON_KEY } })
+    if (res.status === 403) {
+      const text = await res.text()
+      if (/not in allowlist|network egress/i.test(text)) return text.trim().slice(0, 300)
+    }
+  } catch {
+    // Unreachable for other reasons — let the real checks report it.
+  }
+  return null
+}
+
 // ── Health checks ───────────────────────────────────────────────────────────
 const checks = []
 
@@ -65,7 +83,7 @@ async function runHealthChecks() {
   // 1. Auth service up at all?
   await check('Auth service', async () => {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: ANON_KEY } })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
     return 'reachable'
   })
 
@@ -199,6 +217,24 @@ function buildReport(stats, statsError) {
 }
 
 // ── Main ────────────────────────────────────────────────────────────────────
+const egressBlock = await detectEgressBlock()
+if (egressBlock) {
+  const host = new URL(SUPABASE_URL).host
+  console.log([
+    '# 🚧 NutriPulse daily status — checks could not run',
+    '',
+    `The runner's network policy blocked access to \`${host}\`, so nothing was`,
+    'actually tested. **Production status is unknown** — this is a runner',
+    'configuration problem, not a NutriPulse outage.',
+    '',
+    `> ${egressBlock}`,
+    '',
+    `Fix: add \`${host}\` to the environment's allowed domains`,
+    '(see docs/status-report.md), then re-run.',
+  ].join('\n'))
+  process.exit(2)
+}
+
 const service = await runHealthChecks()
 
 let stats = null
