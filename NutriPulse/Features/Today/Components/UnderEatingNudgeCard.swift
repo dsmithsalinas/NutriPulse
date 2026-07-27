@@ -8,7 +8,7 @@ struct DayNudge {
     let prompt: String
 }
 
-// The NutriPulse "Pulse" mark (mark-indigo.svg) drawn in SwiftUI so it tints with foreground
+// The Footing "Pulse" mark (mark-indigo.svg) drawn in SwiftUI so it tints with foreground
 // style — a track ring, a ~250° progress arc, and the dot where the arc ends.
 struct PulseMark: View {
     var lineWidthRatio: CGFloat = 0.14

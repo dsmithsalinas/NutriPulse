@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  Privacy manifest for the NutriPulse app target.
+	  Privacy manifest for the Footing app target.
 
-	  NSPrivacyTracking = false: NutriPulse does not track users across apps or
+	  NSPrivacyTracking = false: Footing does not track users across apps or
 	  websites owned by other companies. Analytics go to TelemetryDeck, which is
 	  pseudonymous and does not link to third-party data or use the IDFA, so there
 	  are no NSPrivacyTrackingDomains.
@@ -119,7 +119,7 @@
 		<!--
 		  UserDefaults. CA92.1 = access defaults belonging to this app. 1C8F.1 =
 		  access defaults in an app group (the protein-floor data shared with the
-		  NutriPulseWidgets extension, both owned by the same developer).
+		  FootingWidgets extension, both owned by the same developer).
 		-->
 		<dict>
 			<key>NSPrivacyAccessedAPIType</key>

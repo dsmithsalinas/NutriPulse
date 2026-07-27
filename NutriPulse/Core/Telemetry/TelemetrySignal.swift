@@ -1,6 +1,6 @@
 import Foundation
 
-// The full catalog of analytics signals NutriPulse fires — kept in one enum so
+// The full catalog of analytics signals Footing fires — kept in one enum so
 // every call site is greppable and no signal name gets typo'd or duplicated.
 // Never call TelemetryDeck directly — go through `Telemetry` (Telemetry.swift),
 // which wraps every case here. See ENHANCEMENTS.md Phase 1C.

@@ -331,7 +331,7 @@ final class LocalStore {
     }
 
     // Tombstone, never hard-delete — same reasoning as markFoodLogDeleted. For an
-    // imported row this also removes it from NutriPulse only; the workout stays in
+    // imported row this also removes it from Footing only; the workout stays in
     // Apple Health, and the tombstone (kept until the server delete lands) is what
     // stops the next import pass from resurrecting it.
     func markWorkoutLogDeleted(id: UUID) throws {

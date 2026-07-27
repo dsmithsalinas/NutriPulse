@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 @main
-struct NutriPulseApp: App {
+struct FootingApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var appState = AppState()
     @Environment(\.scenePhase) private var scenePhase

@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  Privacy manifest for the NutriPulseWidgets extension.
+	  Privacy manifest for the FootingWidgets extension.
 
 	  The widget binary itself collects nothing new — it only reads the shared
 	  protein-floor snapshot the app writes into the App Group container. The one

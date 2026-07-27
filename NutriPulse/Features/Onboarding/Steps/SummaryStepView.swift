@@ -40,7 +40,7 @@ struct SummaryStepView: View {
                         .foregroundStyle(Theme.Colors.textFaint)
                         .padding(.top, 12)
 
-                    Text("NutriPulse is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing here is medical advice — always talk to your doctor about medication and health decisions.")
+                    Text("Footing is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing here is medical advice — always talk to your doctor about medication and health decisions.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.Colors.textFaint)
                         .multilineTextAlignment(.center)

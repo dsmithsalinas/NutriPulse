@@ -47,7 +47,7 @@ synthetic traffic never inflates the stats.
    The `@example.com` suffix is what keeps it out of the stats (see above).
 
 3. **Add environment variables to the Claude Code environment** (claude.ai →
-   Code → the NutriPulse environment → settings → environment variables), so
+   Code → the Footing environment → settings → environment variables), so
    every session — including the scheduled morning firing — can run the script:
 
    | Variable | Value |

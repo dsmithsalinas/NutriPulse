@@ -1,9 +1,12 @@
-name: NutriPulse
+name: Footing
 
-# XcodeGen generates NutriPulse.xcodeproj from this file.
+# XcodeGen generates Footing.xcodeproj from this file.
 # Edit project.yml and run `xcodegen generate` — never hand-edit the .xcodeproj.
 
 options:
+  # Bundle-ID prefix is deliberately still `nutripulse`: changing it would orphan every
+  # existing install (new bundle ID = new app to Apple) and break the App Group container.
+  # The rename to Footing is a display-name change only.
   bundleIdPrefix: com.dustin.nutripulse
   deploymentTarget:
     iOS: "17.0"
@@ -26,17 +29,19 @@ packages:
     from: "2.0.0"
 
 targets:
-  NutriPulse:
+  Footing:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
+    # Source directories keep their original names — renaming them would churn every
+    # path in this file and the whole git history for no user-visible gain.
     sources:
       - path: NutriPulse
       - path: Shared
     info:
       path: NutriPulse/Info.plist
       properties:
-        CFBundleDisplayName: NutriPulse
+        CFBundleDisplayName: Footing
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Only standard HTTPS/TLS is used — exempt encryption. Declaring this here answers
@@ -47,11 +52,11 @@ targets:
           UIColorName: ""
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSHealthShareUsageDescription: "NutriPulse reads weight, body fat, BMI, lean body mass, water, active energy, HRV, resting HR, and sleep from Apple Health."
-        NSHealthUpdateUsageDescription: "NutriPulse writes weight, body fat, BMI, lean body mass, and water logs to Apple Health."
-        NSCameraUsageDescription: "NutriPulse uses the camera to scan food barcodes."
-        NSMicrophoneUsageDescription: "NutriPulse uses the microphone so you can speak your food log instead of typing it."
-        NSSpeechRecognitionUsageDescription: "NutriPulse transcribes your spoken food log into text so Pulse can parse it."
+        NSHealthShareUsageDescription: "Footing reads weight, body fat, BMI, lean body mass, water, active energy, HRV, resting HR, and sleep from Apple Health."
+        NSHealthUpdateUsageDescription: "Footing writes weight, body fat, BMI, lean body mass, and water logs to Apple Health."
+        NSCameraUsageDescription: "Footing uses the camera to scan food barcodes."
+        NSMicrophoneUsageDescription: "Footing uses the microphone so you can speak your food log instead of typing it."
+        NSSpeechRecognitionUsageDescription: "Footing transcribes your spoken food log into text so Pulse can parse it."
         # These land in Info.plist so Config.swift can read them at runtime.
         # Values are set in Configurations/Secrets.xcconfig (gitignored).
         SUPABASE_URL: "$(SUPABASE_URL)"
@@ -86,7 +91,7 @@ targets:
         product: Supabase
       - package: TelemetryDeck
         product: TelemetryDeck
-      - target: NutriPulseWidgets
+      - target: FootingWidgets
     # Build number = git commit count, stamped at build time. Always increasing and unique,
     # and immune to `xcodegen generate` (which would otherwise reset a static value and cause
     # duplicate-build rejections on upload). MARKETING_VERSION stays the human "1.0.0".
@@ -99,7 +104,7 @@ targets:
 
   # Home Screen + Lock Screen widgets for the protein floor. Shares data with the app through
   # the App Group container (see Shared/ProteinFloorShared.swift).
-  NutriPulseWidgets:
+  FootingWidgets:
     type: app-extension
     platform: iOS
     deploymentTarget: "17.0"
@@ -109,7 +114,7 @@ targets:
     info:
       path: NutriPulseWidgets/Info.plist
       properties:
-        CFBundleDisplayName: NutriPulse
+        CFBundleDisplayName: Footing
         # Must match the parent app's, or upload validation complains (and the drift grows
         # the moment MARKETING_VERSION moves off 1.0.0). CFBundleVersion is already kept in
         # lockstep by the post-build script below.
@@ -139,14 +144,14 @@ targets:
           n=$(cd "$SRCROOT" && git rev-list --count HEAD 2>/dev/null || echo 1)
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $n" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
 
-  NutriPulseTests:
+  FootingTests:
     type: bundle.unit-test
     platform: iOS
     deploymentTarget: "17.0"
     sources:
       - path: NutriPulseTests
     dependencies:
-      - target: NutriPulse
+      - target: Footing
     settings:
       base:
         SWIFT_VERSION: "5.9"

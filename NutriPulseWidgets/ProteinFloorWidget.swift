@@ -153,7 +153,7 @@ struct ProteinFloorWidget: Widget {
 }
 
 @main
-struct NutriPulseWidgetBundle: WidgetBundle {
+struct FootingWidgetBundle: WidgetBundle {
     var body: some Widget {
         ProteinFloorWidget()
     }

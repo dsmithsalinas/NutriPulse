@@ -100,6 +100,6 @@ struct HealthKitStepView: View {
         .init(icon: "flame.fill",     color: .orange, label: "Active calories",     detail: "Counts toward your net calorie goal"),
         .init(icon: "moon.zzz.fill",  color: .indigo, label: "Sleep",               detail: "Recovery data Pulse uses in coaching"),
         .init(icon: "heart.fill",     color: .red,    label: "Resting HR & HRV",    detail: "Signals for recovery and stress"),
-        .init(icon: "scalemass.fill", color: .blue,   label: "Weight",              detail: "Syncs weigh-ins you log in NutriPulse"),
+        .init(icon: "scalemass.fill", color: .blue,   label: "Weight",              detail: "Syncs weigh-ins you log in Footing"),
     ]
 }

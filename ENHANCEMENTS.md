@@ -1,10 +1,10 @@
-# NutriPulse — Pre-TestFlight Enhancements (Build Spec)
+# Footing — Pre-TestFlight Enhancements (Build Spec)
 
 Outcome of a product brainstorm. This is the plan for the next build phase before
-handing NutriPulse to beta testers. Read alongside `PLAN.md` (original architecture).
+handing Footing to beta testers. Read alongside `PLAN.md` (original architecture).
 
 ## The spine
-NutriPulse is **one product idea expressed through Pulse**: a coach who's paying
+Footing is **one product idea expressed through Pulse**: a coach who's paying
 attention. Three acts:
 1. **Effortless in** — you talk, Pulse logs. Kill the mundane search-tap-tap friction.
 2. **Honest but actionable** — never show a gap without a path. "You're 40g short on
@@ -19,7 +19,7 @@ trophy case, no points, no badges — that cruft would cheapen the honest-coach 
 ## What the TestFlight beta must prove
 1. Is logging fast enough to *sustain* the habit? (retention of the core loop)
 2. Is Pulse valuable enough to justify its per-use cost? (value vs unit economics)
-3. Does NutriPulse deliver value users aren't getting elsewhere? (differentiation —
+3. Does Footing deliver value users aren't getting elsewhere? (differentiation —
    the wedge is **GLP-1–native** coaching: protein floors not calorie ceilings, a
    coach that understands the injection/appetite cycle)
 

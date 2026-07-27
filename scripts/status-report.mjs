@@ -150,8 +150,8 @@ function buildReport(stats, statsError) {
 
   const lines = []
   lines.push(allGreen
-    ? `# ✅ NutriPulse daily status — all systems go (${dayLabel})`
-    : `# ⚠️ NutriPulse daily status — ${failures.length || 'stats'} check${failures.length === 1 ? '' : 's'} failing (${dayLabel})`)
+    ? `# ✅ Footing daily status — all systems go (${dayLabel})`
+    : `# ⚠️ Footing daily status — ${failures.length || 'stats'} check${failures.length === 1 ? '' : 's'} failing (${dayLabel})`)
   lines.push('')
   lines.push('## Health checks')
   for (const c of checks) {

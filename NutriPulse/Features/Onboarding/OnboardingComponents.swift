@@ -6,7 +6,7 @@ import SwiftUI
 
 // MARK: - Drawable ring mark
 
-/// The NutriPulse ring mark (indigo → violet arc to a terminal dot), with an animatable draw.
+/// The Footing ring mark (indigo → violet arc to a terminal dot), with an animatable draw.
 /// `drawProgress` 0→1 sweeps the arc in; `dotOpacity` fades the terminal dot. Both default to a
 /// fully-drawn mark, so callers that don't animate get the static logo. Geometry mirrors
 /// `PulseMark` (arc trims 0…0.694 from the top, dot sits at 160°).

@@ -13,7 +13,7 @@ struct GLP1SetupStepView: View {
             eyebrow: "Built for this",
             eyebrowGlow: true,
             question: "Are you currently using a GLP-1 medication?",
-            subtitle: "It's what NutriPulse was made for — but it works just as well if you're not.",
+            subtitle: "It's what Footing was made for — but it works just as well if you're not.",
             onAdvance: onContinue
         ) {
             VStack(alignment: .leading, spacing: 14) {

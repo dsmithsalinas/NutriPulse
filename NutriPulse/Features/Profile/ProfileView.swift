@@ -86,7 +86,7 @@ struct ProfileView: View {
                 }
                 Button("Not now", role: .cancel) { }
             } message: {
-                Text("Turn on notifications for NutriPulse in Settings to get shot-day reminders.")
+                Text("Turn on notifications for Footing in Settings to get shot-day reminders.")
             }
             .sheet(isPresented: $vm.showSendFeedback) {
                 SendFeedbackSheet(vm: vm)
@@ -239,7 +239,7 @@ struct ProfileView: View {
         } header: {
             Text("Measurements")
         } footer: {
-            Text("Sets the units used everywhere in NutriPulse — weight, height, body composition, and water.")
+            Text("Sets the units used everywhere in Footing — weight, height, body composition, and water.")
         }
     }
 
@@ -413,7 +413,7 @@ struct ProfileView: View {
         } header: {
             Text("Support")
         } footer: {
-            Text("NutriPulse is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing in the app is medical advice — always consult your doctor about medication and health decisions.")
+            Text("Footing is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing in the app is medical advice — always consult your doctor about medication and health decisions.")
         }
     }
 

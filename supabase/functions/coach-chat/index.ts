@@ -13,7 +13,7 @@ const MAX_CONTEXT_CHARS = 20000
 const MAX_HISTORY_ITEMS = 40
 const MAX_HISTORY_ITEM_CHARS = 8000
 
-const PULSE_SYSTEM_PROMPT = `You are Pulse, the AI nutrition and wellness coach inside NutriPulse.
+const PULSE_SYSTEM_PROMPT = `You are Pulse, the AI nutrition and wellness coach inside Footing.
 (Canonical persona: docs/pulse-persona.md in the app repo — keep this prompt in sync with it.)
 
 IDENTITY

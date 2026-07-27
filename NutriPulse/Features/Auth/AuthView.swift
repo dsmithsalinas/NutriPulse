@@ -10,7 +10,7 @@ struct AuthView: View {
 
             OnboardingPulseAvatar(size: 84)
 
-            Text("NutriPulse")
+            Text("Footing")
                 .font(.largeTitle.bold())
 
             Text("Coached, not scolded.")

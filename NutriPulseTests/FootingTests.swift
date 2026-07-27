@@ -1,8 +1,8 @@
 import XCTest
 import SwiftData
-@testable import NutriPulse
+@testable import Footing
 
-final class NutriPulseTests: XCTestCase {
+final class FootingTests: XCTestCase {
     func testMealSortOrder() {
         let meals = Meal.allCases.sorted { $0.sortOrder < $1.sortOrder }
         XCTAssertEqual(meals, [.breakfast, .lunch, .dinner, .snack])

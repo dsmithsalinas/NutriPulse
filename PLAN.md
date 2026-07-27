@@ -1,6 +1,6 @@
-# NutriPulse — Architecture Plan (DRAFT, pending confirmation)
+# Footing — Architecture Plan (DRAFT, pending confirmation)
 
-Native iOS rebuild of NutriPulse, a personal nutrition & health tracking app.
+Native iOS rebuild of Footing, a personal nutrition & health tracking app.
 Migration from a Base44 prototype. Owner is an experienced PM/web dev
 (React/TS/Supabase) new to Swift — explain Swift/SwiftUI concepts along the way.
 
@@ -27,8 +27,9 @@ Migration from a Base44 prototype. Owner is an experienced PM/web dev
 
 ## Proposed folder structure
 ```
-NutriPulse/                     # Xcode project root
-├── NutriPulseApp.swift         # @main entry point
+NutriPulse/                  # Xcode project root — folder kept its pre-rename name
+│                            #   on purpose; the Xcode target is `Footing`.
+├── FootingApp.swift         # @main entry point
 ├── App/
 │   ├── AppState.swift          # global session/auth state (@Observable)
 │   └── RootView.swift          # routes: auth flow vs main tab bar
@@ -96,7 +97,7 @@ user's Supabase auth token.
    Do NOT hand-edit the `.xcodeproj` — edit `project.yml` and regenerate.
 
 ## Still open (resolve in the build session)
-- **New Supabase project** for NutriPulse (separate from existing work)? Assumed yes.
+- **New Supabase project** for Footing (separate from existing work)? Assumed yes.
 - **Confirm the 4 macro rings** — calories, protein, carbs, fiber assumed; does
   fat get a ring or is it tracked without one?
 - **Denormalized macro snapshot on food_logs** — recommended; confirm.

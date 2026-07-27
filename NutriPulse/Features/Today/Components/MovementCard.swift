@@ -80,13 +80,13 @@ struct MovementCard: View {
                 .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
         }
         .contextMenu {
-            // An imported row only leaves NutriPulse — the workout stays in Apple
+            // An imported row only leaves Footing — the workout stays in Apple
             // Health, and the tombstone stops the next import from resurrecting it.
             Button(role: .destructive) {
                 onDelete(workout)
             } label: {
                 Label(
-                    workout.source == .healthkit ? "Remove from NutriPulse" : "Delete workout",
+                    workout.source == .healthkit ? "Remove from Footing" : "Delete workout",
                     systemImage: "trash"
                 )
             }

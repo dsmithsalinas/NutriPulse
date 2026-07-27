@@ -7,7 +7,7 @@ import Foundation
 // migration, which can only handle a narrow set of changes (e.g. adding an *optional*
 // property, or one with a schema-level default). A change it can't handle — like adding
 // the non-optional `SDFoodLog.revision` — makes the store fail to open, which sent the
-// container init in NutriPulseApp to its destructive fallback: it deleted the on-disk
+// container init in FootingApp to its destructive fallback: it deleted the on-disk
 // store and rebuilt it empty. That silently discarded the local cache, including any rows
 // that hadn't synced to Supabase yet (pendingCreate), which are unrecoverable.
 //
@@ -29,7 +29,7 @@ import Foundation
 //        • `.lightweight(...)` for purely additive/optional changes.
 //        • `.custom(...)` when you must backfill or transform data (this is the tool that
 //          would have made the `revision` addition safe).
-//   4. Point `Schema(versionedSchema:)` in NutriPulseApp at the newest version.
+//   4. Point `Schema(versionedSchema:)` in FootingApp at the newest version.
 //
 // The baseline below (V1) is the schema as it stands today. We start versioning from here;
 // stores already on this shape open with no migration.
@@ -53,7 +53,7 @@ enum NutriPulseSchemaV2: VersionedSchema {
     }
 }
 
-// The newest versioned schema. Referenced by NutriPulseApp when building the container;
+// The newest versioned schema. Referenced by FootingApp when building the container;
 // bump this alias when you add a new version so there's a single place that names "latest".
 typealias NutriPulseSchemaLatest = NutriPulseSchemaV2
 
