@@ -7,13 +7,17 @@ the acquisition beachhead. Copy and strategy come from the pre-TestFlight brains
 (see `../ENHANCEMENTS.md` for the product spine it's built on).
 
 - Single file, no build step, no external requests. Open it directly in a browser.
-- The animated logo (`../orbit-exports/NutriPulse Logo Animation.mp4`) and its poster
-  are **embedded as base64 data URIs**, so the file is fully portable (~376 KB).
-  **Still stale since the rename.** The splash uses the *light* variant (the splash
-  background is `#F3F3F9`), and only the dark variant has been re-rendered for Footing
-  so far — see `Footing Logo AnimationDark.mp4`, which the site does not use. Once the
-  light variant lands, re-embed it and regenerate the poster from its final frame
-  (760×427 JPEG, matching the current one).
+- The animated logo (`../orbit-exports/Footing Logo Animation.mp4`) and its poster
+  are **embedded as base64 data URIs**, so the file is fully portable (~354 KB).
+  The poster is the animation's final frame — the resolved lockup — exported at
+  760×427 JPEG so there's no flash of empty space before playback starts.
+  To swap the animation later: re-encode, re-run base64 on the mp4 and on a fresh
+  final-frame export, and replace both data URIs in the `#splash` block.
+- The splash background uses `var(--ground)` to match the animation's own canvas
+  (`#F6F5FD`). If a future re-render changes that canvas colour, update the token
+  to match or the rounded video card will show its edge against the page.
+- `Footing Logo AnimationDark.mp4` is the dark-background variant. The site is
+  light-only and does not reference it; it's kept for other surfaces.
 - Behavior: logo splash intro → docks to top → hero → gated section-by-section reveal
   triggered by "See how it works" / "For GLP-1" / nav links. Respects reduced-motion.
 - Bespoke CSS, system font stack, brand palette (indigo `#6366F1` → violet `#8B5CF6`,
