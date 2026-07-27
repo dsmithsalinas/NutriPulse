@@ -1,16 +1,14 @@
-// Daily status report — health checks + aggregate usage stats, emailed each morning.
-// Run by .github/workflows/status-report.yml (cron) or manually:
+// Daily status report — health checks + aggregate usage stats, printed as markdown.
+// Run each morning by a scheduled Claude Code routine that posts the output into
+// the session conversation (see docs/status-report.md), or manually:
 //
 //   cd scripts && npm install && \
 //   SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... \
-//   HEALTHCHECK_EMAIL=... HEALTHCHECK_PASSWORD=... RESEND_API_KEY=... \
+//   HEALTHCHECK_EMAIL=... HEALTHCHECK_PASSWORD=... \
 //   node status-report.mjs
 //
-// Setup, secrets, and design notes: docs/status-report.md
-//
-// Exit code is non-zero when any health check fails (or the email can't send),
-// so the GitHub Actions run fails and GitHub's own notification becomes a
-// second alert channel even if the report email never goes out.
+// Exit code is non-zero when any health check fails, so whatever runs this can
+// tell a broken morning from a green one without parsing the output.
 
 import { createClient } from '@supabase/supabase-js'
 
@@ -29,9 +27,6 @@ const ANON_KEY         = env('SUPABASE_ANON_KEY')
 const SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY')
 const HC_EMAIL         = env('HEALTHCHECK_EMAIL')
 const HC_PASSWORD      = env('HEALTHCHECK_PASSWORD')
-const RESEND_API_KEY   = process.env.RESEND_API_KEY // optional: no key -> stdout only
-const REPORT_TO        = env('REPORT_TO', 'dusteallen@me.com')
-const REPORT_FROM      = env('REPORT_FROM', 'NutriPulse Status <onboarding@resend.dev>')
 const REPORT_TZ        = env('REPORT_TZ', 'America/Los_Angeles')
 
 // ── Health checks ───────────────────────────────────────────────────────────
@@ -140,128 +135,67 @@ async function fetchStats(service) {
   return data
 }
 
-// ── Formatting ──────────────────────────────────────────────────────────────
-const escapeHtml = (s) =>
-  String(s).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-
+// ── Formatting (markdown) ───────────────────────────────────────────────────
 const fmtDay = (iso) =>
   new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
   })
 
-function buildEmail(stats, statsError) {
+function buildReport(stats, statsError) {
   const failures = checks.filter((c) => !c.ok)
   const allGreen = failures.length === 0 && !statsError
   const dayLabel = stats ? fmtDay(stats.report_date) : new Date().toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: REPORT_TZ,
   })
 
-  const subject = allGreen
-    ? `NutriPulse ✅ all systems go — ${dayLabel}`
-    : `NutriPulse ⚠️ ${failures.length || 'stats'} check${failures.length === 1 ? '' : 's'} failing — ${dayLabel}`
-
-  const row = (label, value) =>
-    `<tr><td style="padding:4px 12px 4px 0;color:#555">${label}</td>` +
-    `<td style="padding:4px 0;font-weight:600">${value}</td></tr>`
-
-  const checkRows = checks.map((c) =>
-    `<tr><td style="padding:4px 8px 4px 0">${c.ok ? '✅' : '❌'}</td>` +
-    `<td style="padding:4px 12px 4px 0">${escapeHtml(c.name)}</td>` +
-    `<td style="padding:4px 12px 4px 0;color:#555">${escapeHtml(c.detail)}</td>` +
-    `<td style="padding:4px 0;color:#999;text-align:right">${c.ms}ms</td></tr>`
-  ).join('')
-
-  let statsHtml
-  if (statsError) {
-    statsHtml = `<p style="color:#b91c1c"><strong>Stats unavailable:</strong> ${escapeHtml(statsError)}</p>`
-  } else {
-    const { users, activity, coach } = stats
-    const trend = (stats.trend_7d ?? []).map((d) =>
-      `<tr><td style="padding:2px 12px 2px 0;color:#555">${fmtDay(d.date)}</td>` +
-      `<td style="padding:2px 12px 2px 0;text-align:right">${d.active_users}</td>` +
-      `<td style="padding:2px 0;text-align:right">${d.food_logs}</td></tr>`
-    ).join('')
-
-    const rateLimitHot = (stats.rate_limit_hot ?? [])
-    const rateLimitHtml = rateLimitHot.length === 0 ? '' :
-      `<p style="color:#b45309">⚠️ Running hot since yesterday: ${
-        rateLimitHot.map((r) => `<strong>${escapeHtml(r.bucket)}</strong> (${r.count} calls in window)`).join(', ')
-      }</p>`
-
-    const feedback = (stats.feedback_new ?? [])
-    const feedbackHtml = feedback.length === 0
-      ? '<p style="color:#555">No new feedback.</p>'
-      : feedback.map((f) =>
-          `<div style="border-left:3px solid #8B5CF6;padding:6px 12px;margin:8px 0;background:#faf8ff">` +
-          `<div style="font-size:12px;color:#777;margin-bottom:2px">` +
-          `${escapeHtml(f.category)}${f.app_version ? ` · v${escapeHtml(f.app_version)}` : ''} · ${escapeHtml(new Date(f.created_at).toLocaleString('en-US', { timeZone: REPORT_TZ }))}` +
-          `</div><div>${escapeHtml(f.message)}</div></div>`
-        ).join('')
-
-    statsHtml = `
-      <h3 style="margin:20px 0 6px">Users</h3>
-      <table style="border-collapse:collapse">
-        ${row('Total users', users.total)}
-        ${row('New yesterday', users.new_yesterday)}
-        ${row('New last 7 days', users.new_last_7d)}
-      </table>
-
-      <h3 style="margin:20px 0 6px">Activity — ${fmtDay(stats.report_date)}</h3>
-      <table style="border-collapse:collapse">
-        ${row('Active users (logged food)', activity.active_users_yesterday)}
-        ${row('Food logs', activity.food_logs_yesterday)}
-        ${row('Water logs', activity.water_logs_yesterday)}
-        ${row('Weight logs', activity.weight_logs_yesterday)}
-        ${row('Workouts', activity.workout_logs_yesterday)}
-        ${row('GLP-1 shots', activity.glp1_shots_yesterday)}
-        ${row('Body measurements', activity.body_measurements_yesterday)}
-        ${row('Pulse messages (user turns)', coach.messages_yesterday)}
-        ${row('Users chatting with Pulse', coach.users_chatting_yesterday)}
-      </table>
-      ${rateLimitHtml}
-
-      <h3 style="margin:20px 0 6px">7-day trend</h3>
-      <table style="border-collapse:collapse">
-        <tr><td style="padding:2px 12px 2px 0;color:#999">day</td>
-            <td style="padding:2px 12px 2px 0;color:#999;text-align:right">active</td>
-            <td style="padding:2px 0;color:#999;text-align:right">food logs</td></tr>
-        ${trend}
-      </table>
-
-      <h3 style="margin:20px 0 6px">Feedback since yesterday</h3>
-      ${feedbackHtml}`
+  const lines = []
+  lines.push(allGreen
+    ? `# ✅ NutriPulse daily status — all systems go (${dayLabel})`
+    : `# ⚠️ NutriPulse daily status — ${failures.length || 'stats'} check${failures.length === 1 ? '' : 's'} failing (${dayLabel})`)
+  lines.push('')
+  lines.push('## Health checks')
+  for (const c of checks) {
+    lines.push(`- ${c.ok ? '✅' : '❌'} **${c.name}** — ${c.detail} (${c.ms}ms)`)
   }
 
-  const html = `
-    <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:640px;color:#1a1a1a">
-      <h2 style="margin:0 0 4px">${allGreen ? '✅' : '⚠️'} NutriPulse daily status</h2>
-      <p style="margin:0 0 16px;color:#777">${dayLabel} · ${escapeHtml(REPORT_TZ)}</p>
-      <h3 style="margin:20px 0 6px">Health checks</h3>
-      <table style="border-collapse:collapse">${checkRows}</table>
-      ${statsHtml}
-    </div>`
+  if (statsError) {
+    lines.push('', `## Stats`, `Unavailable: ${statsError}`)
+    return { allGreen, text: lines.join('\n') }
+  }
 
-  const text = [
-    `NutriPulse daily status — ${dayLabel}`,
-    '',
-    'Health checks:',
-    ...checks.map((c) => `  ${c.ok ? 'OK  ' : 'FAIL'} ${c.name} — ${c.detail} (${c.ms}ms)`),
-    '',
-    statsError ? `Stats unavailable: ${statsError}` : JSON.stringify(stats, null, 2),
-  ].join('\n')
+  const { users, activity, coach } = stats
+  lines.push('', `## Users`)
+  lines.push(`- Total: **${users.total}** (+${users.new_yesterday} yesterday, +${users.new_last_7d} last 7 days)`)
 
-  return { subject, html, text }
-}
+  lines.push('', `## Activity — ${fmtDay(stats.report_date)}`)
+  lines.push(`- Active users (logged food): **${activity.active_users_yesterday}**`)
+  lines.push(`- Food logs: ${activity.food_logs_yesterday} · Water: ${activity.water_logs_yesterday} · Weight: ${activity.weight_logs_yesterday} · Workouts: ${activity.workout_logs_yesterday}`)
+  lines.push(`- GLP-1 shots: ${activity.glp1_shots_yesterday} · Body measurements: ${activity.body_measurements_yesterday}`)
+  lines.push(`- Pulse: ${coach.messages_yesterday} messages from ${coach.users_chatting_yesterday} user${coach.users_chatting_yesterday === 1 ? '' : 's'}`)
 
-// ── Send ────────────────────────────────────────────────────────────────────
-async function sendEmail({ subject, html, text }) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: REPORT_FROM, to: [REPORT_TO], subject, html, text }),
-  })
-  if (!res.ok) throw new Error(`Resend HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`)
+  const hot = stats.rate_limit_hot ?? []
+  if (hot.length > 0) {
+    lines.push('', `⚠️ **Rate limits running hot since yesterday:** ${hot.map((r) => `${r.bucket} (${r.count} calls)`).join(', ')}`)
+  }
+
+  lines.push('', '## 7-day trend (active users / food logs)')
+  lines.push('| day | active | food logs |', '|---|---|---|')
+  for (const d of stats.trend_7d ?? []) {
+    lines.push(`| ${fmtDay(d.date)} | ${d.active_users} | ${d.food_logs} |`)
+  }
+
+  const feedback = stats.feedback_new ?? []
+  lines.push('', '## Feedback since yesterday')
+  if (feedback.length === 0) {
+    lines.push('None.')
+  } else {
+    for (const f of feedback) {
+      const when = new Date(f.created_at).toLocaleString('en-US', { timeZone: REPORT_TZ })
+      lines.push(`- **[${f.category}]**${f.app_version ? ` v${f.app_version}` : ''} (${when}): ${f.message}`)
+    }
+  }
+
+  return { allGreen, text: lines.join('\n') }
 }
 
 // ── Main ────────────────────────────────────────────────────────────────────
@@ -275,21 +209,8 @@ try {
   statsError = err.message ?? String(err)
 }
 
-const email = buildEmail(stats, statsError)
-console.log(email.text)
+const report = buildReport(stats, statsError)
+console.log(report.text)
 
-let sendFailed = false
-if (RESEND_API_KEY) {
-  try {
-    await sendEmail(email)
-    console.log(`\nReport emailed to ${REPORT_TO}`)
-  } catch (err) {
-    sendFailed = true
-    console.error(`\nFailed to send report email: ${err.message}`)
-  }
-} else {
-  console.log('\nRESEND_API_KEY not set — printed report only, no email sent.')
-}
-
-const failed = checks.some((c) => !c.ok) || statsError !== null || sendFailed
+const failed = checks.some((c) => !c.ok) || statsError !== null
 process.exit(failed ? 1 : 0)

@@ -1,7 +1,8 @@
 # Daily status report
 
-Every morning a GitHub Actions cron (`.github/workflows/status-report.yml`) runs
-`scripts/status-report.mjs`, which:
+Every morning a scheduled Claude Code routine wakes the owner's Claude session,
+runs `scripts/status-report.mjs`, and posts the results directly in the
+conversation. The script:
 
 1. **Health-checks production end to end** — Auth service, database via PostgREST,
    a real sign-in with a dedicated healthcheck account, then one round-trip through
@@ -12,14 +13,13 @@ Every morning a GitHub Actions cron (`.github/workflows/status-report.yml`) runs
    (migration `20260722000000_daily_status_report.sql`): user counts, yesterday's
    activity per log type, Pulse chat volume, hot rate-limit buckets, new feedback
    (with message text), and a 7-day food-log trend.
-3. **Emails the report** via Resend, then exits non-zero if anything failed — so a
-   broken morning also triggers GitHub's workflow-failure email as a second alert
-   channel, even when the report email itself can't go out.
+3. **Prints the report as markdown** and exits non-zero if anything failed, so the
+   runner can tell a broken morning from a green one without parsing output.
 
 ## Privacy model
 
 The report never contains end-user names, emails, or individual logs. That's
-structural, not conventional: the stats email can only contain what
+structural, not conventional: the stats can only contain what
 `get_daily_status()` returns, and that function returns counts and per-day totals
 only — plus the text of `feedback` rows, which users deliberately submitted to the
 team. The function is `SECURITY DEFINER`, executable **only by `service_role`**
@@ -46,38 +46,26 @@ synthetic traffic never inflates the stats.
 
    The `@example.com` suffix is what keeps it out of the stats (see above).
 
-3. **Create a Resend account** (free tier is plenty: one email/day) and grab an
-   API key. Without a verified domain, Resend only delivers from
-   `onboarding@resend.dev` **to the email address that owns the Resend account** —
-   so create the account with the report recipient address, or verify a domain
-   and set `REPORT_FROM` in the workflow.
+3. **Add environment variables to the Claude Code environment** (claude.ai →
+   Code → the NutriPulse environment → settings → environment variables), so
+   every session — including the scheduled morning firing — can run the script:
 
-4. **Add GitHub Actions secrets** (repo → Settings → Secrets and variables →
-   Actions):
-
-   | Secret | Value |
+   | Variable | Value |
    |---|---|
    | `SUPABASE_URL` | Project URL (`https://<ref>.supabase.co`) |
    | `SUPABASE_ANON_KEY` | Public anon key |
-   | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-side only — this is why it lives in Actions secrets, never in the app) |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-side only — this is why it lives in environment config, never in the app or repo) |
    | `HEALTHCHECK_EMAIL` | The healthcheck account email |
    | `HEALTHCHECK_PASSWORD` | Its password |
-   | `RESEND_API_KEY` | From the Resend dashboard |
 
-   Recipient and timezone are plain env vars in the workflow file
-   (`REPORT_TO`, `REPORT_TZ`) — edit there to change them.
+   Optional: `REPORT_TZ` (defaults to `America/Los_Angeles`).
 
-5. **Test it** — Actions tab → "Daily status report" → *Run workflow*. The full
-   report also prints to the job log, so you can verify content without waiting
-   on email delivery.
+The morning routine itself is created from a Claude session (it lives in the
+Claude account, not in this repo). If it's ever lost, ask Claude to recreate it:
+a daily trigger at ~6am Pacific whose prompt is to run this script and post the
+report in the conversation.
 
-## Schedule
-
-`0 13 * * *` UTC ≈ 6:00 AM Pacific during PDT (5:00 AM during PST). GitHub cron
-has no timezone support, so the local time shifts an hour across DST — adjust the
-expression if that matters.
-
-## Running locally
+## Running manually
 
 ```sh
 cd scripts && npm install
@@ -86,13 +74,15 @@ HEALTHCHECK_EMAIL=... HEALTHCHECK_PASSWORD=... \
 node status-report.mjs
 ```
 
-Leave `RESEND_API_KEY` unset to print the report to stdout without emailing.
+Or, in a Claude session with the env vars configured: "run the status report".
 
 ## Later
 
 - **TelemetryDeck section** — once Phase 1C instrumentation ships (see
   `ENHANCEMENTS.md`), pull time-to-log / edit-rate / retention aggregates from
-  the TelemetryDeck Query API into the same email. That's the "is the product
+  the TelemetryDeck Query API into the same report. That's the "is the product
   working" layer on top of this "is the service working" layer.
-- Tighten to twice daily (or add an hourly checks-only run) if TestFlight beta
-  traffic warrants it.
+- **Independent alerting** — the in-session routine is one delivery channel; if
+  the report ever needs to page harder (push notification, email), a GitHub
+  Actions cron running the same script with repo secrets is the
+  fallback design (a failed run triggers GitHub's workflow-failure email).
