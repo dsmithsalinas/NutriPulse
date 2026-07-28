@@ -6,3 +6,6 @@ DerivedData/
 .env
 # Supabase credentials — copy Secrets.xcconfig.template → Secrets.xcconfig locally
 Configurations/Secrets.xcconfig
+# Build number derived from the git commit count — a build input, not source.
+# Regenerate with scripts/set-build-number.sh.
+Configurations/BuildNumber.xcconfig
