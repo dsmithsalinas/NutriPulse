@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // Cloudflare Workers with static assets — not Pages.
+  //
+  // For a purely static build the two are equivalent, and Cloudflare's own docs
+  // are neutral between them (the "Pages is deprecated" claim circulating in
+  // 2026 blog posts is not something Cloudflare says). Workers is chosen here
+  // for what comes next: blueprint Phase 6 wires "Join the beta" to a Supabase
+  // table, which needs a server endpoint. On Workers that's a `main` entry in
+  // this same project. On Pages it's Pages Functions — the same runtime under a
+  // different name, and a migration later.
+  //
+  // Until that endpoint exists there is no Worker script at all: `assets` with
+  // no `main` serves the build straight off Cloudflare's edge, and static asset
+  // requests are free rather than billed as Worker invocations.
+  "name": "footing-site",
+  "compatibility_date": "2026-07-28",
+
+  "assets": {
+    "directory": "./dist",
+    // Multi-page static site (index, terms, privacy), so "404-page" is right —
+    // it serves /404.html for unknown paths. Do NOT use
+    // "single-page-application": that rewrites every miss to index.html, which
+    // would silently serve the marketing page in place of a mistyped legal URL
+    // and return 200 for it.
+    "not_found_handling": "404-page"
+  },
+
+  // Apex only. www is handled by a Cloudflare Redirect Rule rather than a
+  // second custom domain here — see DEPLOY.md. A redirect rule runs before the
+  // Worker and costs nothing; binding www to the Worker instead would serve the
+  // site on both hostnames and split canonical URLs.
+  "routes": [
+    {
+      "pattern": "tryfooting.app",
+      "custom_domain": true
+    }
+  ]
+}

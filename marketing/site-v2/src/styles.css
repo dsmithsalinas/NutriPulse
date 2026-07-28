@@ -1,0 +1,655 @@
+/* ── Tokens ──────────────────────────────────────────────────────────────
+   Mirrors src/hero/tokens.ts. The canvas and the DOM read the same palette so
+   the two halves of the page fuse into one object.                          */
+:root {
+  --subgrade:  #07070F;
+  --substrate: #12122A;
+  --strata:    #1C1E3D;
+  --indigo:    #6366F1;
+  --violet:    #8B5CF6;
+  --warm:      #FF8A5B;
+  --ground:    #F6F5FC;
+
+  --on-dark:      #F6F5FC;
+  --on-dark-soft: rgba(246, 245, 252, 0.62);
+  --on-dark-mute: rgba(246, 245, 252, 0.40);
+
+  --font: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* Motion grammar — everything settles under weight. Nothing bounces. */
+  --ease-out:    cubic-bezier(.2, .7, .2, 1);
+  --ease-in-out: cubic-bezier(.6, 0, .2, 1);
+  --dur-micro:   200ms;
+
+  /* Written every frame by src/scroll.ts */
+  --hero-p: 0;   /* 0 → 1 across the hero pin */
+  --scene-p: 0;  /* 0 → 1 across the whole choreographed range */
+
+  --gutter: clamp(20px, 5vw, 64px);
+  --maxw: 1180px;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+body {
+  margin: 0;
+  background: var(--subgrade);
+  color: var(--on-dark);
+  font-family: var(--font);
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.55;
+  letter-spacing: -0.011em;
+}
+
+a { color: inherit; text-decoration: none; }
+
+:focus-visible {
+  outline: 2.5px solid var(--indigo);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+::selection { background: color-mix(in srgb, var(--violet) 34%, transparent); }
+
+.wrap {
+  max-width: var(--maxw);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+  width: 100%;
+}
+
+/* ── Background layers ───────────────────────────────────────────────────
+   The page rises out of the dark as you scroll. On the flat tier this IS the
+   scene; on the full tier the canvas sits on top of it.                     */
+.bg-lerp {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: var(--substrate);
+  /* Tracks the whole choreographed range, not just the hero pin — this is the
+     subgrade → daylight arc, and it has to keep climbing past section 01. */
+  opacity: var(--scene-p);
+  pointer-events: none;
+}
+
+/* The footing's bleed — the violet at the bottom edge that nothing explains
+   until Act III. Deliberately a CSS layer rather than 3D geometry: the source
+   is off-frame in Act I, so it would never reach the bloom pass, and this way
+   the full and flat tiers show the identical thing. */
+/* Two elements on purpose: the wrapper owns the scroll response, the child owns
+   the entrance animation. One element can't do both — the animation's `forwards`
+   fill would permanently win the opacity property. */
+.bleed {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  transform: translateY(calc(var(--hero-p) * 18vh));
+  /* Full through the hero (act 0→1), gone by the time the camera is pressed
+     against the cut face in section 01 (act 2). Values outside 0–1 clamp on
+     their own, so no clamp() needed. */
+  opacity: calc(1 - (var(--act) - 1));
+}
+
+.bleed-glow {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(140% 28% at 50% 130%,
+      color-mix(in srgb, var(--violet) 34%, transparent) 0%,
+      color-mix(in srgb, var(--indigo) 10%, transparent) 44%,
+      transparent 72%);
+  opacity: 0;
+  animation: fadeIn 900ms var(--ease-out) 1200ms forwards;
+}
+
+/* Flat-tier scene: the bleed carries the mood; two hairlines stand in for the
+   cut edge and the strata behind it. */
+.flat-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(90% 50% at 50% 96%,
+      color-mix(in srgb, var(--strata) 90%, transparent) 0%,
+      transparent 68%);
+  opacity: 0;
+  animation: fadeIn 900ms var(--ease-out) 900ms forwards;
+}
+.flat-scene::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 8vh;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.16) 22%, rgba(255,255,255,.16) 78%, transparent);
+  box-shadow: 0 6px 0 -1px rgba(255,138,91,.14), 0 12px 0 -1px rgba(127,180,232,.12);
+}
+
+/* A plain sized div that <Canvas> fills — never put this class on <Canvas>
+   itself, or R3F measures a zero-height wrapper and never boots. */
+.hero-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  /* Last in, deliberately: the words paint first (H1 is the LCP element) and
+     the world materialises behind them. Reversed, this reads as a loader. */
+  animation: fadeIn 600ms var(--ease-out) 1200ms forwards;
+}
+
+@keyframes fadeIn { to { opacity: 1; } }
+
+/* ── Nav ─────────────────────────────────────────────────────────────── */
+nav {
+  /* The nav is fixed and crosses the daylight boundary, so its own colours have
+     to interpolate — everything else on the page can flip at a section edge,
+     this can't. */
+  --nav-fg: color-mix(in srgb, #14163A calc(var(--light-p, 0) * 100%), #F6F5FC);
+  --nav-bg: color-mix(in srgb, #F6F5FC calc(var(--light-p, 0) * 100%), #07070F);
+  color: var(--nav-fg);
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px var(--gutter);
+  opacity: 0;
+  animation: fadeDown 600ms var(--ease-out) 200ms forwards;
+}
+
+/* Scrim, faded in as the hero leaves. Without it, section copy scrolls under a
+   transparent nav and collides with the links. Masked so it dissolves rather
+   than ending on a hard edge. */
+nav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--nav-bg) 94%, transparent),
+    color-mix(in srgb, var(--nav-bg) 60%, transparent) 62%,
+    transparent
+  );
+  backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(180deg, #000 58%, transparent);
+  mask-image: linear-gradient(180deg, #000 58%, transparent);
+  opacity: var(--hero-p);
+  pointer-events: none;
+}
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.brand { display: inline-flex; align-items: center; gap: 11px; }
+.brand svg { display: block; }
+.brand span { font-size: 19px; font-weight: 600; letter-spacing: -0.03em; color: var(--nav-fg); }
+
+.nav-links { display: flex; align-items: center; gap: 28px; }
+.nav-links a {
+  color: color-mix(in srgb, var(--nav-fg) 64%, transparent);
+  text-decoration: none;
+  font-size: 14.5px;
+  font-weight: 500;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+.nav-links a:hover { color: var(--nav-fg); }
+
+/* The hero CTA doesn't fade on scroll — it detaches and docks here. */
+.nav-cta {
+  opacity: calc((var(--hero-p) - 0.55) * 2.9);
+  transform: scale(calc(0.94 + var(--hero-p) * 0.06));
+  pointer-events: none;
+}
+
+/* ── Hero ────────────────────────────────────────────────────────────── */
+.hero-pin { height: 140vh; position: relative; z-index: 10; }
+/* Directional scrim behind copy. The set runs edge to edge, so without this the
+   body text lands on whatever the dial happens to be doing there. Shading only
+   the copy side keeps the scene at full strength where nothing is being read.
+   Sits above .hero-canvas (z 1) and below each section's own content. */
+.hero::before,
+.s01::before,
+/* Light sections are opaque and have no canvas behind them — the scrim would
+   just smear dark across cream. */
+.sec:not(.on-light)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    102deg,
+    color-mix(in srgb, var(--subgrade) 94%, transparent) 0%,
+    color-mix(in srgb, var(--subgrade) 78%, transparent) 32%,
+    color-mix(in srgb, var(--subgrade) 34%, transparent) 56%,
+    transparent 74%
+  );
+  pointer-events: none;
+}
+
+.hero {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: grid;
+  align-content: center;
+  /* Centring alone lets a tall copy block grow up under the fixed nav on short
+     viewports. Padding bounds the centring box so the eyebrow can't collide. */
+  padding-block: 112px 44px;
+  box-sizing: border-box;
+}
+
+.hero-copy {
+  /* The set needs the right-hand third of the frame; at 780px the subhead ran
+     straight through the dial. */
+  max-width: 31rem;
+  /* Scroll drift lives on the wrapper so it never fights the entrance
+     animations on the children. */
+  transform: translateY(calc(var(--hero-p) * -60px));
+  opacity: calc(1 - var(--hero-p) * 1.15);
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--on-dark-mute);
+  letter-spacing: 0.01em;
+  margin: 0 0 26px;
+  opacity: 0;
+  animation: upIn 700ms var(--ease-out) 300ms forwards;
+}
+.eyebrow .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green, #34D399);
+  box-shadow: 0 0 12px 1px rgba(52,211,153,.7);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(44px, 7vw, 104px);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  font-variation-settings: 'opsz' 32;
+}
+.line { display: block; overflow: hidden; padding-bottom: 0.06em; }
+.line > span {
+  display: block;
+  transform: translateY(110%);
+  animation: rise 900ms var(--ease-out) forwards;
+}
+.line:nth-child(1) > span { animation-delay: 350ms; }
+.line:nth-child(2) > span { animation-delay: 410ms; }
+@keyframes rise { to { transform: none; } }
+
+.sub {
+  margin: 26px 0 0;
+  /* Bounded by .hero-copy, not by its own measure — the copy column has to
+     clear the dial, and 620px runs straight through it. */
+  max-width: 100%;
+  font-size: clamp(16.5px, 1.35vw, 19px);
+  color: var(--on-dark-soft);
+  opacity: 0;
+  animation: upIn 700ms var(--ease-out) 700ms forwards;
+}
+.sub em {
+  font-style: italic;
+  color: var(--on-dark);
+  font-weight: 500;
+}
+
+@keyframes upIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.cta-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 38px;
+  opacity: 0;
+  animation: ctaIn 500ms var(--ease-out) 950ms forwards;
+}
+@keyframes ctaIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 15px 27px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(112deg, var(--indigo), var(--violet));
+  color: #fff;
+  font: inherit;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.22) inset,
+    0 12px 40px -10px rgba(99,102,241,.75);
+  transition: transform var(--dur-micro) var(--ease-out),
+              box-shadow var(--dur-micro) var(--ease-out);
+}
+.btn:hover {
+  transform: translateY(-1.5px);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.28) inset,
+    0 16px 48px -10px rgba(139,92,246,.85);
+}
+.btn.sm { padding: 10px 19px; font-size: 14px; }
+
+.btn-text {
+  color: var(--on-dark-soft);
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+.btn-text:hover { color: var(--on-dark); }
+
+.micro {
+  margin: 20px 0 0;
+  font-size: 13.5px;
+  color: var(--on-dark-mute);
+  opacity: 0;
+  animation: upIn 600ms var(--ease-out) 1100ms forwards;
+}
+
+/* ── Ring readout (centre of the protein dial) ───────────────────────── */
+.ring-readout {
+  text-align: center;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+  /* Rendered by drei <Html>, so it inherits nothing from the page. */
+  font-family: var(--font);
+  color: var(--on-dark);
+}
+.ring-readout-n {
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variation-settings: 'opsz' 32;
+}
+.ring-readout-l {
+  margin-top: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--on-dark-mute);
+  white-space: nowrap;
+}
+
+/* ── Pulse message — the coach demonstrating itself ──────────────────── */
+.pulse-chip {
+  margin: 24px 0 0;
+  max-width: 44ch;
+  padding: 15px 18px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+  border-top-left-radius: 5px;
+  background: color-mix(in srgb, var(--substrate) 62%, transparent);
+  backdrop-filter: blur(14px);
+}
+.pulse-chip figcaption {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-dark-mute);
+}
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--indigo), var(--violet));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 18%, transparent);
+}
+.pulse-chip blockquote {
+  margin: 9px 0 0;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--on-dark-soft);
+  letter-spacing: -0.006em;
+}
+
+/* ── Reveal system ───────────────────────────────────────────────────── */
+[data-reveal] > * {
+  opacity: 0;
+  transform: translateY(24px);
+}
+[data-reveal][data-revealed='true'] > * {
+  animation: upIn 800ms var(--ease-out) both;
+}
+/* 60ms stagger, capped at five in a chain — longer reads as a loading screen. */
+[data-reveal][data-revealed='true'] > *:nth-child(1) { animation-delay: 0ms; }
+[data-reveal][data-revealed='true'] > *:nth-child(2) { animation-delay: 60ms; }
+[data-reveal][data-revealed='true'] > *:nth-child(3) { animation-delay: 120ms; }
+[data-reveal][data-revealed='true'] > *:nth-child(4) { animation-delay: 180ms; }
+[data-reveal][data-revealed='true'] > *:nth-child(n+5) { animation-delay: 240ms; }
+
+/* ── Section 01 — Recognition ────────────────────────────────────────── */
+/* No background: the canvas shows through, which is the whole reason there's
+   one persistent scene rather than a canvas per section. */
+.s01 {
+  position: relative;
+  z-index: 10;
+  padding-block: 15vh 12vh;
+}
+
+.s01-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.85fr);
+  gap: clamp(32px, 6vw, 96px);
+  align-items: start;
+}
+
+.eyebrow-sm {
+  margin: 0 0 20px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--warm) 82%, white);
+}
+
+.s01 h2 {
+  margin: 0;
+  max-width: 15ch;
+  font-size: clamp(31px, 4.4vw, 62px);
+  line-height: 1.02;
+  letter-spacing: -0.033em;
+  font-weight: 600;
+  font-variation-settings: 'opsz' 32;
+}
+
+.s01-body {
+  margin: 26px 0 0;
+  max-width: 46ch;
+  font-size: clamp(16.5px, 1.3vw, 18.5px);
+  color: var(--on-dark-soft);
+}
+
+/* ── The scorecard every other app shows ─────────────────────────────── */
+.scorecard {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--subgrade) 78%, transparent);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+
+.scorecard-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 15px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-dark-soft);
+}
+.scorecard-date { font-weight: 500; color: var(--on-dark-mute); }
+
+.scorecard-rows { list-style: none; margin: 0; padding: 4px 0; }
+.scorecard-rows li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 14px;
+  padding: 13px 20px;
+}
+.sc-label { font-size: 14.5px; color: var(--on-dark-soft); }
+.sc-value { font-size: 16px; font-weight: 600; color: var(--on-dark); }
+.sc-delta {
+  font-size: 12.5px;
+  font-weight: 600;
+  min-width: 8ch;
+  text-align: right;
+  /* The one place red appears on the entire site. It belongs to the competitor
+     card and nowhere else — Footing's own UI never marks a day as failed. */
+  color: #FF6B6B;
+}
+
+.scorecard-foot {
+  padding: 14px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 107, 107, 0.06);
+  font-size: 13px;
+  font-weight: 600;
+  color: #FF8B8B;
+}
+
+.scorecard-caption {
+  margin: 18px 2px 0;
+  font-size: 13.5px;
+  color: var(--on-dark-mute);
+}
+
+/* ── The pull-quote — emotional low point of the page ────────────────── */
+.s01-quote-wrap { margin-top: clamp(56px, 9vh, 100px); }
+
+.s01-quote {
+  margin: 0;
+  max-width: 20ch;
+  font-family: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 400;
+  /* Larger than the section H2 but never louder than the H1 — a serif italic
+     at this size reads quiet, which is exactly why it can be this big. */
+  font-size: clamp(34px, 5.6vw, 78px);
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  color: var(--on-dark-soft);
+}
+.s01-quote em {
+  font-style: italic;
+  color: var(--on-dark);
+}
+
+/* ── The turn ────────────────────────────────────────────────────────── */
+.s01-turn { margin-top: clamp(44px, 7vh, 76px); max-width: 60ch; }
+
+.s01-turn-lede {
+  margin: 0;
+  font-size: clamp(17px, 1.5vw, 21px);
+  color: var(--on-dark-soft);
+}
+.s01-turn-flip {
+  margin: 22px 0 0;
+  font-size: clamp(18px, 1.7vw, 24px);
+  color: var(--on-dark);
+  font-weight: 500;
+  letter-spacing: -0.018em;
+}
+.s01-turn-flip strong {
+  font-weight: 600;
+  background: linear-gradient(96deg, var(--indigo), var(--violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Reduced motion: everything resolves, nothing travels ────────────── */
+@media (prefers-reduced-motion: reduce) {
+  nav, .eyebrow, .sub, .cta-row, .micro, .flat-scene, .hero-canvas {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .line > span { animation: none !important; transform: none !important; }
+  .hero-copy { transform: none !important; opacity: 1 !important; }
+  .bg-lerp { opacity: 0.5; }
+
+  /* Reveals resolve to their final state immediately — the page must be fully
+     comprehensible with zero motion. */
+  [data-reveal] > *,
+  [data-reveal][data-revealed='true'] > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .nav-links a:not(.nav-cta-link) { display: none; }
+  .hero-copy { opacity: 1; transform: none; }
+  .cta-row { gap: 18px; }
+  .btn { width: 100%; justify-content: center; }
+
+  /* Phones get no canvas, so the light arc has to carry the whole mood — it
+     needs to sit higher and read stronger than the desktop bleed, which is
+     only ever a supporting glow under a lit 3D floor. */
+  .bleed-glow {
+    /* Screen blending buys nothing without a lit canvas underneath, and it
+       eats most of the glow against flat near-black. Composite normally. */
+    mix-blend-mode: normal;
+    background:
+      radial-gradient(165% 30% at 50% 106%,
+        var(--violet) 0%,
+        color-mix(in srgb, var(--indigo) 52%, transparent) 38%,
+        transparent 76%);
+  }
+  .flat-scene {
+    background:
+      radial-gradient(120% 34% at 50% 100%,
+        color-mix(in srgb, var(--strata) 100%, transparent) 0%,
+        transparent 70%);
+  }
+  .s01 { padding-block: 10vh 9vh; }
+  .s01-top { grid-template-columns: 1fr; gap: 44px; }
+  .s01 h2 br { display: none; }
+  .s01-quote { max-width: none; }
+  .s01-quote-wrap { margin-top: 64px; }
+
+  .flat-scene::after {
+    bottom: 15vh;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.24) 18%, rgba(255,255,255,.24) 82%, transparent);
+    box-shadow: 0 7px 0 -1px rgba(255,138,91,.2), 0 14px 0 -1px rgba(127,180,232,.16);
+  }
+}

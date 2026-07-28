@@ -1,0 +1,554 @@
+/* ══ Sections 02–09 ═══════════════════════════════════════════════════════
+   styles.css owns tokens, the hero, and section 01. This file owns the rest of
+   the page. Split purely for size — the token contract is identical.          */
+
+/* ── Daylight ────────────────────────────────────────────────────────────
+   The page rises out of the dark into light as you scroll, and the light
+   sections own that themselves: each paints an opaque background rather than
+   relying on a fixed layer fading in underneath. A fixed fading layer was tried
+   first and is the wrong shape — the section's text colour flips at a hard
+   boundary while the layer's opacity is continuous, so there is always a stretch
+   of scroll where dark text sits on a half-lit background and turns to mud.
+
+   Overriding the three text tokens flips every rule that already reads them, so
+   there's no parallel light-mode stylesheet.                                  */
+.on-light {
+  background: var(--ground);
+  /* Re-resolve `color` here, not just the token. `body` computes
+     `color: var(--on-dark)` against :root's white and children inherit that
+     *computed* value — redefining the variable alone leaves anything without an
+     explicit colour rule (the footer wordmark) white on cream. */
+  color: var(--on-dark);
+  --on-dark: #14163A;
+  --on-dark-soft: rgba(20, 22, 58, 0.66);
+  --on-dark-mute: rgba(20, 22, 58, 0.46);
+  --hairline: rgba(20, 22, 58, 0.12);
+  --panel: rgba(255, 255, 255, 0.72);
+}
+
+:root {
+  --hairline: rgba(255, 255, 255, 0.1);
+  --panel: rgba(18, 18, 42, 0.62);
+}
+
+/* ── Shared section furniture ────────────────────────────────────────────── */
+.sec {
+  position: relative;
+  z-index: 10;
+  padding-block: clamp(68px, 10vh, 118px);
+}
+
+.sec-head { max-width: 46rem; }
+
+.sec h2 {
+  margin: 0;
+  max-width: 17ch;
+  font-size: clamp(30px, 4.1vw, 58px);
+  line-height: 1.03;
+  letter-spacing: -0.033em;
+  font-weight: 600;
+  font-variation-settings: 'opsz' 32;
+  color: var(--on-dark);
+}
+
+.sec h3 {
+  margin: 0;
+  font-size: clamp(21px, 2.1vw, 29px);
+  line-height: 1.15;
+  letter-spacing: -0.028em;
+  font-weight: 600;
+  color: var(--on-dark);
+}
+
+.sec .body {
+  margin: 22px 0 0;
+  max-width: 48ch;
+  font-size: clamp(16px, 1.25vw, 18px);
+  color: var(--on-dark-soft);
+}
+.sec .body em { font-style: italic; color: var(--on-dark); font-weight: 500; }
+.sec .body strong { font-weight: 600; color: var(--on-dark); }
+
+/* Two-column: copy left, artifact right. Collapses at 900px. */
+.sec-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: clamp(36px, 6vw, 92px);
+  align-items: center;
+}
+
+/* Gradient emphasis. Used once per section at most — it stops reading as
+   emphasis the second time it appears on a screen. */
+.grad,
+.lede-flip strong,
+.name-flip strong,
+.s01-turn-flip strong {
+  font-weight: 600;
+  background: linear-gradient(96deg, var(--indigo), var(--violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── 02 · Meet Pulse ─────────────────────────────────────────────────────── */
+.thread {
+  margin-top: clamp(32px, 4.5vh, 52px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 44rem;
+}
+
+.msg p {
+  margin: 0;
+  font-size: clamp(15.5px, 1.2vw, 17.5px);
+  line-height: 1.52;
+}
+
+.msg-you {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: 13px 18px;
+  border-radius: 18px;
+  border-bottom-right-radius: 6px;
+  background: linear-gradient(135deg, var(--indigo), var(--violet));
+  color: #fff;
+  font-weight: 500;
+}
+
+.msg-pulse {
+  align-self: flex-start;
+  max-width: 88%;
+  padding: 15px 19px 17px;
+  border-radius: 18px;
+  border-bottom-left-radius: 6px;
+  border: 1px solid var(--hairline);
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  color: var(--on-dark-soft);
+}
+
+.msg-who {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-dark-mute);
+}
+
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--indigo), var(--violet));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 18%, transparent);
+}
+
+.sec-tail { margin-top: clamp(38px, 5.5vh, 60px); max-width: 52rem; }
+.lede {
+  margin: 0;
+  font-size: clamp(17px, 1.5vw, 21px);
+  color: var(--on-dark-soft);
+}
+.lede-flip {
+  margin: 20px 0 0;
+  font-size: clamp(18px, 1.7vw, 24px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--on-dark);
+}
+
+/* ── 03 · The protein floor ──────────────────────────────────────────────── */
+.floor-card {
+  padding: 22px 24px 24px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  font-variant-numeric: tabular-nums;
+}
+.floor-card-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-dark-soft);
+}
+.floor-card-day { color: var(--on-dark-mute); font-weight: 500; }
+
+.floor-bar {
+  position: relative;
+  margin: 26px 0 14px;
+  height: 12px;
+  border-radius: 99px;
+  background: rgba(127, 127, 170, 0.18);
+}
+.floor-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 78%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--indigo), var(--violet) 62%, var(--warm));
+}
+/* The mark is the whole point of the graphic — it's a minimum, not a target. */
+.floor-mark {
+  position: absolute;
+  top: -7px;
+  bottom: -7px;
+  left: 65%;
+  width: 2px;
+  background: var(--on-dark);
+}
+.floor-mark span {
+  position: absolute;
+  top: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--on-dark);
+}
+
+.floor-nums { display: flex; align-items: baseline; gap: 12px; }
+.floor-nums strong {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  color: var(--on-dark);
+}
+.floor-nums span { font-size: 13px; color: #34D399; font-weight: 600; }
+
+.viz-caption {
+  margin: 18px 2px 0;
+  font-size: 13.5px;
+  color: var(--on-dark-mute);
+}
+
+/* ── 04 · How it works ───────────────────────────────────────────────────── */
+.steps {
+  margin-top: clamp(38px, 5.5vh, 64px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(46px, 7vh, 84px);
+}
+
+.step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 76px);
+  align-items: center;
+}
+/* Alternate sides so three stacked blocks don't read as a list. */
+.step:nth-child(even) .step-copy { order: 2; }
+
+.step-n {
+  margin: 0 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--warm) 82%, white);
+}
+
+.demo {
+  padding: 18px 20px 20px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  font-variant-numeric: tabular-nums;
+}
+.demo-said {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--on-dark);
+}
+.demo ul { list-style: none; margin: 0; padding: 0; }
+.demo li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 14px;
+  color: var(--on-dark-soft);
+}
+.demo-q {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--on-dark);
+}
+.demo-a {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--on-dark-soft);
+}
+.win-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 14px;
+  color: var(--on-dark-soft);
+}
+.win-row strong {
+  margin-left: auto;
+  font-size: 20px;
+  color: var(--on-dark);
+  letter-spacing: -0.03em;
+}
+.win-ok { color: #34D399; font-weight: 600; font-size: 12.5px; }
+
+/* ── 05 · Built for the cycle ────────────────────────────────────────────── */
+.ticks { list-style: none; margin: 26px 0 0; padding: 0; }
+.ticks li {
+  position: relative;
+  padding: 8px 0 8px 26px;
+  font-size: 16px;
+  color: var(--on-dark-soft);
+}
+.ticks li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 17px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--indigo), var(--violet));
+}
+
+.fineprint {
+  margin: 22px 0 0;
+  font-size: 13.5px;
+  color: var(--on-dark-mute);
+  max-width: 42ch;
+}
+
+.cycle-card {
+  padding: 22px 24px 24px;
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  font-variant-numeric: tabular-nums;
+}
+.cycle-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-dark-soft);
+}
+.cycle-dose { color: var(--on-dark); }
+.cycle-next { margin: 6px 0 20px; font-size: 13px; color: var(--on-dark-mute); }
+.cycle-rows { display: flex; flex-direction: column; gap: 12px; }
+.cycle-rows div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 11px 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 14.5px;
+  color: var(--on-dark-soft);
+}
+.cycle-rows strong { font-size: 16px; color: var(--on-dark); }
+.cycle-rows .ok { color: #34D399; }
+.cycle-note {
+  display: flex;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--hairline);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--on-dark-soft);
+}
+.cycle-note .pulse-dot { margin-top: 7px; }
+
+/* ── 06 · Why Footing ────────────────────────────────────────────────────── */
+.sec-name { text-align: center; }
+/* Belt and braces for the one section whose copy sits inside a fully lit dial:
+   a soft radial pool keeps the centre readable even if the ring's scale drifts. */
+.sec-name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(
+    46% 42% at 50% 50%,
+    color-mix(in srgb, var(--subgrade) 88%, transparent) 0%,
+    color-mix(in srgb, var(--subgrade) 62%, transparent) 52%,
+    transparent 78%
+  );
+  pointer-events: none;
+}
+.name-block { max-width: 44rem; margin-inline: auto; }
+.sec-name h2 { max-width: none; margin-inline: auto; }
+.sec-name .body { margin-inline: auto; }
+
+.name-lede {
+  margin: 26px auto 0;
+  max-width: 22ch;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: clamp(26px, 3.4vw, 44px);
+  line-height: 1.14;
+  letter-spacing: -0.012em;
+  color: var(--on-dark-soft);
+}
+.name-flip {
+  margin: 30px auto 0;
+  max-width: 34ch;
+  font-size: clamp(17px, 1.6vw, 22px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--on-dark);
+}
+
+/* ── 07 · The offer ──────────────────────────────────────────────────────── */
+.offer { margin-top: clamp(40px, 6vh, 60px); max-width: 44rem; }
+.offer-list { list-style: none; margin: 0 0 34px; padding: 0; }
+.offer-list li {
+  padding: 18px 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 16px;
+  color: var(--on-dark-soft);
+}
+.offer-list li:last-child { border-bottom: 1px solid var(--hairline); }
+.offer-list strong { color: var(--on-dark); font-weight: 600; }
+
+.btn-lg { font-size: 16px; padding: 16px 30px; }
+
+.offer-steps {
+  margin: 26px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--on-dark-mute);
+}
+.offer-steps strong { color: var(--on-dark-soft); }
+.offer-steps a,
+.close-micro a,
+.foot-links a { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── 08 · Questions ──────────────────────────────────────────────────────── */
+/* Carries the dark→daylight dissolve at its top edge, so the transition happens
+   inside one element instead of across a section boundary. */
+.sec-faq {
+  background: linear-gradient(180deg, var(--subgrade) 0%, var(--ground) 15%);
+}
+
+.faq { margin-top: clamp(36px, 5vh, 56px); max-width: 46rem; }
+.faq details { border-top: 1px solid var(--hairline); }
+.faq details:last-child { border-bottom: 1px solid var(--hairline); }
+
+.faq summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: clamp(16px, 1.4vw, 18.5px);
+  font-weight: 500;
+  letter-spacing: -0.018em;
+  color: var(--on-dark);
+}
+.faq summary::-webkit-details-marker { display: none; }
+
+.faq-chev {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-right: 2px solid var(--on-dark-mute);
+  border-bottom: 2px solid var(--on-dark-mute);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform var(--dur-micro) var(--ease-out);
+}
+.faq details[open] .faq-chev { transform: rotate(225deg) translate(-2px, -2px); }
+
+.faq-a {
+  padding: 0 0 24px;
+  max-width: 58ch;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--on-dark-soft);
+}
+/* Unmissable on purpose — an unverified privacy claim must never slip out. */
+.faq-a mark {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #FFE8A3;
+  color: #4A3B00;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* ── 09 · Closing CTA ────────────────────────────────────────────────────── */
+.sec-close { text-align: center; padding-block: clamp(84px, 13vh, 148px); }
+.close-block { max-width: 40rem; margin-inline: auto; }
+.sec-close h2 { max-width: none; margin-inline: auto; }
+.close-lede {
+  margin: 26px auto 34px;
+  max-width: 34ch;
+  font-size: clamp(17px, 1.5vw, 20px);
+  color: var(--on-dark-soft);
+}
+.close-micro {
+  margin: 22px 0 0;
+  font-size: 13px;
+  color: var(--on-dark-mute);
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+footer {
+  position: relative;
+  z-index: 10;
+  padding-block: 48px 64px;
+  border-top: 1px solid var(--hairline);
+}
+.foot-top {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.foot-brand { display: inline-flex; align-items: center; gap: 10px; }
+.foot-brand span { font-size: 17px; font-weight: 600; letter-spacing: -0.03em; }
+.foot-tag { margin: 0; font-size: 14px; color: var(--on-dark-mute); }
+.foot-legal {
+  margin: 26px 0 0;
+  max-width: 62ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--on-dark-mute);
+}
+.foot-links { margin: 20px 0 0; display: flex; gap: 22px; font-size: 13px; color: var(--on-dark-mute); }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .sec-split,
+  .step { grid-template-columns: 1fr; gap: 32px; }
+  .step:nth-child(even) .step-copy { order: 0; }
+  .sec h2 { max-width: 20ch; }
+  .msg-you, .msg-pulse { max-width: 96%; }
+  .sec-close h2 br { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-chev { transition: none; }
+}

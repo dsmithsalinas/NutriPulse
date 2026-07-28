@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Footing</title>
+<meta name="description" content="What information Footing collects, how it's used, and who it's shared with.">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#F6F5FC">
+<link rel="stylesheet" href="/legal.css">
+</head>
+<!--
+  Ported from marketing/privacy.html (the v1 site) into the v2 legal shell.
+  The wording is VERBATIM — this was a presentation port, not a rewrite. When the
+  v2 site goes live on tryfooting.app, retire the old copy so there is only one
+  privacy policy to keep current.
+
+  This document is also the source of truth for the site's "Is my health data
+  private?" FAQ answer in src/sections/Close.tsx. If the practices here change,
+  change that answer in the same commit.
+-->
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true">
+        <defs>
+          <linearGradient id="bm" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#8B5CF6"/>
+          </linearGradient>
+          <radialGradient id="bmg" cx="0.28" cy="0.12" r="0.9">
+            <stop offset="0%" stop-color="#fff" stop-opacity="0.3"/>
+            <stop offset="58%" stop-color="#fff" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect width="64" height="64" rx="14.32" fill="url(#bm)"/>
+        <rect width="64" height="64" rx="14.32" fill="url(#bmg)"/>
+        <g transform="translate(12.80, 12.80) scale(0.38)">
+          <circle cx="50" cy="50" r="33" stroke="#fff" stroke-width="6" fill="none" opacity="0.24"/>
+          <path d="M 50 17 A 33 33 0 1 1 18.99 61.29" stroke="#fff" stroke-width="6" stroke-linecap="round" fill="none"/>
+          <circle cx="18.99" cy="61.29" r="7.5" fill="#fff"/>
+        </g>
+      </svg>
+      <span>Footing</span>
+    </a>
+    <a class="top-back" href="/">← Back to footing</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: July 10, 2026</p>
+
+  <p>
+    This policy explains what information Footing collects, how it's used, and who it's shared
+    with. Footing is a nutrition and wellness tracking app; some of what it handles — food
+    logs, weight, GLP-1 medication schedules, and optional Apple Health data — is health
+    information, so we've tried to be specific rather than generic here.
+  </p>
+
+  <h2><span class="n">1.</span> Information we collect</h2>
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Category</th><th>What</th></tr></thead>
+      <tbody>
+        <tr>
+          <th>Account</th>
+          <td>Email address, and name/sex/date of birth/activity level if you complete onboarding.</td>
+        </tr>
+        <tr>
+          <th>Nutrition &amp; activity logs</th>
+          <td>Food and water entries (manual, searched, scanned, or described in your own words
+            to Pulse — typed or spoken), daily macro/calorie goals, and body weight you log.</td>
+        </tr>
+        <tr>
+          <th>Voice input (optional)</th>
+          <td>When you use the microphone to speak a food log, your speech is transcribed to
+            text using Apple's Speech Recognition. We don't record or store the audio — only the
+            resulting text becomes a log. Requires your microphone and speech-recognition
+            permission.</td>
+        </tr>
+        <tr>
+          <th>GLP-1 tracking</th>
+          <td>Medication, dose, injection site and timing — only if you choose to use this feature.</td>
+        </tr>
+        <tr>
+          <th>Apple Health (optional)</th>
+          <td>Sleep, resting heart rate, heart rate variability, and active energy burned — only
+            if you connect Apple Health, and only to show it to you and give Pulse context.</td>
+        </tr>
+        <tr>
+          <th>Pulse chat</th>
+          <td>Messages you send to the in-app AI coach, and the responses it gives.</td>
+        </tr>
+        <tr>
+          <th>Feedback</th>
+          <td>Anything you submit via the in-app &ldquo;Send Feedback&rdquo; form.</td>
+        </tr>
+        <tr>
+          <th>Usage analytics</th>
+          <td>Anonymous product-usage signals (e.g. a log was saved, a chat message was sent) —
+            never the content of what you logged or said.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2><span class="n">2.</span> How we use it</h2>
+  <ul>
+    <li>To run the core features: tracking your nutrition, showing your trends, and powering
+      Pulse's coaching.</li>
+    <li>To give Pulse the context it needs to answer well — when you message Pulse, a snapshot
+      of your relevant data (today's log, recent history, goals, weight trend, connected Health
+      data, and GLP-1 schedule if applicable) is sent along with your message so it can respond
+      specifically to you, not generically.</li>
+    <li>To understand product usage in aggregate, so we know what's working — never at the level
+      of reading your individual logs or conversations.</li>
+    <li>To respond to feedback and support requests.</li>
+  </ul>
+
+  <h2><span class="n">3.</span> Who we share it with</h2>
+  <p>
+    We don't sell your data. It's shared only with the service providers that make the app work,
+    each limited to what they need to do their job:
+  </p>
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th>Provider</th><th>Purpose</th><th>What they receive</th></tr></thead>
+      <tbody>
+        <tr>
+          <th>Supabase</th>
+          <td>Database, authentication, file/edge-function hosting</td>
+          <td>All account and log data described above — this is where it's stored.</td>
+        </tr>
+        <tr>
+          <th>Anthropic (Claude)</th>
+          <td>Powers the Pulse AI coach and natural-language food logging</td>
+          <td>Your message plus the data-context snapshot described above, and the food
+            description you type or speak when using talk-to-log.</td>
+        </tr>
+        <tr>
+          <th>FatSecret</th>
+          <td>Nutrition database for food search and barcode lookup</td>
+          <td>The food name or barcode you search for. Not your account identity.</td>
+        </tr>
+        <tr>
+          <th>TelemetryDeck</th>
+          <td>Anonymous product analytics</td>
+          <td>Anonymous usage signals only — no log content, no messages, no personal
+            identifiers.</td>
+        </tr>
+        <tr>
+          <th>Apple</th>
+          <td>Sign in with Apple, HealthKit, push notifications, Speech Recognition (voice food
+            logging)</td>
+          <td>Standard to those Apple frameworks; governed by Apple's own privacy terms. Spoken
+            food logs are transcribed by Apple's Speech Recognition.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2><span class="n">4.</span> Data retention &amp; deletion</h2>
+  <p>
+    Your data is kept for as long as your account exists. You can permanently delete your
+    account and all associated data at any time from <strong>Profile → Delete Account</strong>
+    in the app. This is immediate and irreversible — it removes your logs, goals, weight
+    history, GLP-1 records, chat history, and feedback.
+  </p>
+
+  <h2><span class="n">5.</span> Security</h2>
+  <p>
+    Data is encrypted in transit (TLS) and at rest in our database provider. Access to your data
+    is scoped to your account via row-level security — no other user can read it, and our AI
+    coach only ever sees your own data when responding to you.
+  </p>
+
+  <h2><span class="n">6.</span> Children's privacy</h2>
+  <p>
+    Footing is not directed at children under 13, and we don't knowingly collect data from them.
+  </p>
+
+  <h2><span class="n">7.</span> Your rights</h2>
+  <p>
+    You can access, correct, or export your data through the app itself (it's designed to always
+    show you exactly what's been logged), and delete your account and all data at any time as
+    described above. If you have a request we haven't made self-service yet, contact us using
+    the details below.
+  </p>
+
+  <h2><span class="n">8.</span> Changes to this policy</h2>
+  <p>
+    If this policy changes in a material way, we'll update the date at the top of this page.
+  </p>
+
+  <h2><span class="n">9.</span> Contact</h2>
+  <p>
+    Questions about this policy or your data:
+    <a href="mailto:support@tryfooting.app">support@tryfooting.app</a>
+  </p>
+
+  <footer>
+    <p>
+      Footing — this document is a factual description of current data practices, not legal
+      advice. Have it reviewed by counsel before relying on it for App Store submission or
+      regulatory compliance.
+    </p>
+    <p class="links">
+      <a href="/">Home</a>
+      <a href="/terms.html">Terms of Service</a>
+      <a href="mailto:support@tryfooting.app">Contact</a>
+    </p>
+  </footer>
+
+</main>
+</body>
+</html>

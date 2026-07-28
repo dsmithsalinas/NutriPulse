@@ -1,0 +1,181 @@
+/* Shared shell for the legal pages (terms.html, privacy.html).
+
+   These live in public/ rather than as Vite entries on purpose: a legal document
+   should render with no JavaScript, no font fetch, and no 3D chunk, and it needs
+   to stay readable if the app bundle ever fails. That means a system font stack
+   instead of the Inter files the app bundles — the one place on the site where
+   that trade is worth it.
+
+   Palette mirrors src/styles.css. Keep them in step. */
+:root {
+  --ink: #14163A;
+  --ink-soft: rgba(20, 22, 58, 0.72);
+  --ink-mute: rgba(20, 22, 58, 0.5);
+  --indigo: #6366F1;
+  --violet: #8B5CF6;
+  --warm: #FF8A5B;
+  --ground: #F6F5FC;
+  --hairline: rgba(20, 22, 58, 0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --gutter: clamp(20px, 5vw, 48px);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16.5px;
+  line-height: 1.65;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 760px;
+  margin-inline: auto;
+  padding: 0 var(--gutter) 96px;
+}
+
+/* ── Masthead ─────────────────────────────────────────────────────────── */
+header.top {
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 48px;
+}
+header.top .wrap {
+  padding-block: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; }
+.brand svg { display: block; }
+.brand span { font-size: 19px; font-weight: 600; letter-spacing: -0.03em; }
+.top-back { font-size: 14.5px; font-weight: 500; color: var(--ink-mute); text-decoration: none; }
+.top-back:hover { color: var(--ink); }
+
+/* ── Document ─────────────────────────────────────────────────────────── */
+h1 {
+  margin: 0;
+  font-size: clamp(32px, 5vw, 48px);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+}
+.updated {
+  margin: 14px 0 0;
+  font-size: 14px;
+  color: var(--ink-mute);
+}
+
+h2 {
+  margin: 52px 0 0;
+  font-size: clamp(20px, 2.4vw, 25px);
+  line-height: 1.2;
+  letter-spacing: -0.028em;
+  font-weight: 600;
+  scroll-margin-top: 24px;
+}
+h2 .n {
+  display: inline-block;
+  min-width: 1.9em;
+  color: var(--ink-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+h3 {
+  margin: 30px 0 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+p { margin: 16px 0 0; color: var(--ink-soft); }
+p strong, li strong { color: var(--ink); font-weight: 600; }
+
+ul, ol { margin: 16px 0 0; padding-left: 22px; color: var(--ink-soft); }
+li { margin: 9px 0; }
+
+a { color: var(--indigo); text-decoration: underline; text-underline-offset: 3px; }
+a:hover { color: var(--violet); }
+
+/* ── The summary card ─────────────────────────────────────────────────── */
+.summary {
+  margin: 36px 0 0;
+  padding: 22px 26px 26px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: #fff;
+}
+.summary h2 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--warm) 74%, #000);
+}
+.summary ul { padding-left: 20px; }
+.summary p:last-child { margin-bottom: 0; }
+.summary .caveat { font-size: 14.5px; color: var(--ink-mute); }
+
+/* ── Callouts ─────────────────────────────────────────────────────────── */
+/* Non-negotiable health language. Given the audience is on prescription
+   medication, these are the clauses that must survive a skim. */
+.callout {
+  margin: 22px 0 0;
+  padding: 18px 22px 20px;
+  border-left: 3px solid var(--warm);
+  border-radius: 0 12px 12px 0;
+  background: color-mix(in srgb, var(--warm) 9%, #fff);
+}
+.callout p:first-child { margin-top: 0; }
+
+/* Unresolved drafting decisions. Deliberately garish — these must not ship
+   unnoticed, and a subtle style is how that happens. */
+mark.todo {
+  background: #FFE08A;
+  color: #4A3700;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-weight: 600;
+  font-size: 0.94em;
+}
+
+.notice {
+  margin: 36px 0 0;
+  padding: 16px 20px;
+  border: 1px dashed rgba(20, 22, 58, 0.28);
+  border-radius: 12px;
+  background: rgba(255, 224, 138, 0.22);
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+
+/* ── Definition tables ────────────────────────────────────────────────── */
+.tbl-scroll { overflow-x: auto; margin: 20px 0 0; }
+table { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 15px; }
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 12px 14px 12px 0;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink-soft);
+}
+th { color: var(--ink); font-weight: 600; white-space: nowrap; }
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+footer {
+  margin-top: 72px;
+  padding-top: 26px;
+  border-top: 1px solid var(--hairline);
+  font-size: 13.5px;
+  color: var(--ink-mute);
+}
+footer a { color: var(--ink-mute); }
+footer .links { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 12px; }
+
+:focus-visible { outline: 2.5px solid var(--indigo); outline-offset: 3px; border-radius: 6px; }
