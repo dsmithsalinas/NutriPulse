@@ -13,8 +13,10 @@ conversation. The script:
    (migration `20260722000000_daily_status_report.sql`): user counts, yesterday's
    activity per log type, Pulse chat volume, hot rate-limit buckets, new feedback
    (with message text), and a 7-day food-log trend.
-3. **Prints the report as markdown** and exits non-zero if anything failed, so the
-   runner can tell a broken morning from a green one without parsing output.
+3. **Prints the report as markdown** and exits with a meaningful code: `0` all
+   green, `1` one or more checks/stats failed, `2` the checks couldn't run at all
+   (runner's network policy blocked the Supabase host — production status
+   unknown, not an outage).
 
 ## Privacy model
 
@@ -59,6 +61,13 @@ synthetic traffic never inflates the stats.
    | `HEALTHCHECK_PASSWORD` | Its password |
 
    Optional: `REPORT_TZ` (defaults to `America/Los_Angeles`).
+
+4. **Allow the Supabase host in the environment's network policy** — in the same
+   environment settings dialog, add your project host (e.g.
+   `<ref>.supabase.co`, or `*.supabase.co`) to the allowed domains. Sandboxed
+   runners block unlisted hosts, and the script reports that as "checks could
+   not run — production status unknown" (exit code 2) rather than as failing
+   health checks. Like env vars, this takes effect on the next fresh container.
 
 The morning routine itself is created from a Claude session (it lives in the
 Claude account, not in this repo). If it's ever lost, ask Claude to recreate it:
