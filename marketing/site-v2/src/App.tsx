@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { startScrollTracking } from './scroll'
 import { useCapability } from './hero/useCapability'
+import { TESTFLIGHT_URL } from './links'
 import { Section01 } from './sections/Section01'
 import { Section02, Section03, Section04, Section05, Section06 } from './sections/Story'
 import { Section07, Section08, Section09, Footer } from './sections/Close'
@@ -63,7 +64,7 @@ export default function App() {
         <div className="nav-links">
           <a href="#s01">How it works</a>
           <a href="#s01">For GLP-1</a>
-          <a className="btn sm nav-cta nav-cta-link" href="#s01">
+          <a className="btn sm nav-cta nav-cta-link" href={TESTFLIGHT_URL}>
             Join the beta
           </a>
         </div>
@@ -91,7 +92,7 @@ export default function App() {
               </p>
 
               <div className="cta-row">
-                <a className="btn" href="#s01">Join the beta →</a>
+                <a className="btn" href={TESTFLIGHT_URL}>Join the beta →</a>
                 <a className="btn-text" href="#s01">See how it works ↓</a>
               </div>
 

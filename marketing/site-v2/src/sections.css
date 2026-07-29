@@ -497,6 +497,41 @@
   font-size: clamp(17px, 1.5vw, 20px);
   color: var(--on-dark-soft);
 }
+/* Desktop escape hatch: TestFlight installs on a phone, so a laptop visitor who
+   clicks the CTA lands somewhere they can't act. Hidden below 900px, where the
+   button itself already does the right thing and a QR would be nonsense. */
+.qr { display: none; }
+
+@media (min-width: 900px) {
+  .qr {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: max-content;
+    margin: 30px auto 0;
+    padding: 12px 20px 12px 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.7);
+  }
+  .qr img {
+    display: block;
+    width: 76px;
+    height: 76px;
+    /* The SVG carries a white quiet zone; rounding it keeps the card tidy
+       without cropping into the finder patterns, which would break scanning. */
+    border-radius: 8px;
+  }
+  .qr p {
+    margin: 0;
+    max-width: 19ch;
+    text-align: left;
+    font-size: 13.5px;
+    line-height: 1.45;
+    color: var(--on-dark-mute);
+  }
+}
+
 .close-micro {
   margin: 22px 0 0;
   font-size: 13px;
@@ -535,7 +570,10 @@ footer {
   .step:nth-child(even) .step-copy { order: 0; }
   .sec h2 { max-width: 20ch; }
   .msg-you, .msg-pulse { max-width: 96%; }
-  .sec-close h2 br { display: none; }
+  /* The <br> stays on mobile. Hiding it concatenated the two sentences into
+     "graded.Start getting coached." — there is no whitespace between the text
+     nodes for it to fall back to, and the two-line break is the intended
+     typography at every width anyway. */
 }
 
 @media (prefers-reduced-motion: reduce) {

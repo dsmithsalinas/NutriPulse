@@ -1,4 +1,5 @@
 import { useReveal } from '../useReveal'
+import { TESTFLIGHT_URL, TESTFLIGHT_APP_URL, TESTFLIGHT_QR } from '../links'
 
 /**
  * Sections 07–09 plus the footer — the close.
@@ -40,15 +41,13 @@ export function Section07() {
             </li>
           </ul>
 
-          <a className="btn btn-lg" href="#s09">
+          <a className="btn btn-lg" href={TESTFLIGHT_URL}>
             Join the beta →
           </a>
 
           <p className="offer-steps">
             <strong>Two steps, in this order.</strong> Install{' '}
-            <a href="https://apps.apple.com/app/testflight/id899247664">
-              Apple&rsquo;s free TestFlight app
-            </a>
+            <a href={TESTFLIGHT_APP_URL}>Apple&rsquo;s free TestFlight app</a>
             , then tap the button above in Safari on your iPhone. Opening TestFlight on its
             own &mdash; or tapping the link inside another app&rsquo;s browser &mdash; lands
             you on an empty screen asking for a code you don&rsquo;t need.
@@ -142,8 +141,8 @@ const QA: { q: string; a: React.ReactNode }[] = [
     q: 'Android?',
     a: (
       <>
-        Not yet. Join the beta anyway and you&rsquo;ll be the first to know when there is
-        one.
+        Not yet. Footing is iPhone-only while it&rsquo;s small enough for one person to
+        build properly. Android is on the list &mdash; worth checking back here.
       </>
     ),
   },
@@ -197,12 +196,23 @@ export function Section09() {
             The beta is open. Track like you&rsquo;ve got someone in your corner, because
             you will.
           </p>
-          <a className="btn btn-lg" href="https://testflight.apple.com/">
+          <a className="btn btn-lg" href={TESTFLIGHT_URL}>
             Join the beta on TestFlight →
           </a>
+
+          {/*
+            Desktop only. TestFlight installs on an iPhone, so a laptop visitor
+            who clicks the button lands somewhere they can't act — this is the
+            way out of that dead end. Hidden on small screens, where tapping the
+            button already does the right thing.
+          */}
+          <div className="qr">
+            <img src={TESTFLIGHT_QR} alt="QR code linking to the Footing TestFlight beta" width="132" height="132" />
+            <p>On a laptop? Scan to open the beta on your phone.</p>
+          </div>
           <p className="close-micro">
             Install{' '}
-            <a href="https://apps.apple.com/app/testflight/id899247664">TestFlight</a> first,
+            <a href={TESTFLIGHT_APP_URL}>TestFlight</a> first,
             then tap this in Safari on your iPhone.
           </p>
         </div>
