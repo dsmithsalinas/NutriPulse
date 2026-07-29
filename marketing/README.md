@@ -1,5 +1,21 @@
 # Footing — marketing
 
+> **The live site is `site-v2/`, hosted on Cloudflare Workers at
+> [tryfooting.app](https://tryfooting.app).** See
+> [`site-v2/DEPLOY.md`](site-v2/DEPLOY.md) for hosting, the domain, and the cutover order.
+>
+> | Path | What it is |
+> |---|---|
+> | `site-v2/` | The current site — Vite + React + R3F. Deployed to Cloudflare. |
+> | `redirect/` | Stubs published to the old GitHub Pages URL, forwarding to the new domain. **Load-bearing** — `Config.swift:37` points shipped app builds at the old privacy URL. |
+> | `index.html`, `privacy.html` | The v1 single-file site. **No longer deployed**, kept for reference. Its content now lives in `site-v2/`. |
+> | `site-v2-blueprint.md` (in `../`) | Creative direction, page architecture, and the direction-change addendum. |
+> | `site-v2-voice.md`, `site-v2-webgl.md` (in `../`) | Copy voice guide and the 3D spec. |
+>
+> Everything below documents the **v1** site and is retained as history.
+
+---
+
 ## `index.html`
 A self-contained marketing landing page mockup for Footing. Positioning:
 **"Coached, not scolded."** — the anti-scorecard nutrition coach, with GLP-1 as

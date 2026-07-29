@@ -1,14 +1,22 @@
-name: Deploy marketing site to Pages
+name: Deploy legacy redirect to Pages
 
-# Publishes the marketing/ landing page to GitHub Pages whenever it changes on main.
-# Replaces the old manual `git subtree split --prefix marketing main` → force-push to
-# gh-pages dance. The served URL stays https://dsmithsalinas.github.io/NutriPulse/
-# (tied to the repo name), so the privacy link baked into shipped builds keeps working.
+# The marketing site now lives at https://tryfooting.app (Cloudflare Workers — see
+# marketing/site-v2/DEPLOY.md). This workflow no longer publishes a site: it publishes
+# marketing/redirect/, a handful of stubs that forward the old Pages URLs to the new
+# domain.
+#
+# Why keep it alive at all: Config.swift:37 hardcodes
+# https://dsmithsalinas.github.io/NutriPulse/privacy.html, App Review fetches that URL,
+# and every build already in TestFlight still points there. It must keep resolving until
+# a release ships with the new URL — and even then, for as long as old builds are in use.
+#
+# Do NOT point `path` back at marketing/ — that directory now contains the full site-v2
+# source tree, which would be uploaded wholesale.
 on:
   push:
     branches: [main]
     paths:
-      - 'marketing/**'
+      - 'marketing/redirect/**'
       - '.github/workflows/deploy-marketing.yml'
   workflow_dispatch: {}
 
@@ -34,10 +42,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure Pages
         uses: actions/configure-pages@v5
-      - name: Upload marketing/ as the Pages artifact
+      - name: Upload marketing/redirect/ as the Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: marketing
+          path: marketing/redirect
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
