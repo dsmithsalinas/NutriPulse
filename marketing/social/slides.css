@@ -1,0 +1,348 @@
+/* ── Instagram slide styles ───────────────────────────────────────────────
+   Tokens copied from marketing/site-v2/src/styles.css and src/hero/tokens.ts.
+   If a value changes there, change it here — these posts have to sit next to
+   tryfooting.app and read as the same object.
+
+   Canvas is 1080×1350 (Instagram 4:5 portrait). Rendered at device scale 2 and
+   downsampled, so type is supersampled rather than hinted at final size.      */
+
+:root {
+  --subgrade:  #07070F;
+  --substrate: #12122A;
+  --strata:    #1C1E3D;
+  --ink:       #14163A;
+  --indigo:    #6366F1;
+  --violet:    #8B5CF6;
+  --warm:      #FF8A5B;
+  --green:     #34D399;
+  --ground:    #F6F5FC;
+
+  --on-dark:      #F6F5FC;
+  --on-dark-soft: rgba(246, 245, 252, 0.62);
+  --on-dark-mute: rgba(246, 245, 252, 0.40);
+
+  --on-light:      #14163A;
+  --on-light-soft: rgba(20, 22, 58, 0.66);
+  --on-light-mute: rgba(20, 22, 58, 0.45);
+
+  --hairline: rgba(255, 255, 255, 0.10);
+  --panel: rgba(18, 18, 42, 0.62);
+
+  --font: 'Inter Variable', -apple-system, system-ui, sans-serif;
+  --serif: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+
+  --pad: 92px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { width: 1080px; height: 1350px; overflow: hidden; }
+
+body {
+  background: var(--subgrade);
+  color: var(--on-dark);
+  font-family: var(--font);
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.55;
+  letter-spacing: -0.011em;
+}
+
+/* ── The slide shell ────────────────────────────────────────────────────
+   Three stacked layers reproduce the site's mobile background: the strata
+   glow off the bottom edge, then the violet bleed over it. Same geometry as
+   the @media (max-width: 767px) block in styles.css.                       */
+.slide {
+  position: relative;
+  width: 1080px;
+  height: 1350px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: var(--pad);
+  isolation: isolate;
+}
+
+.slide::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: radial-gradient(120% 34% at 50% 100%, var(--strata) 0%, transparent 70%);
+}
+
+.slide::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(165% 30% at 50% 106%,
+    var(--violet) 0%,
+    color-mix(in srgb, var(--indigo) 52%, transparent) 38%,
+    transparent 76%);
+  opacity: 0.85;
+}
+
+/* Daylight variant — the far end of the site's dark→ground arc. */
+.slide.on-light { background: var(--ground); color: var(--on-light); }
+.slide.on-light::before {
+  background: radial-gradient(120% 40% at 50% 104%,
+    color-mix(in srgb, var(--violet) 16%, transparent) 0%, transparent 72%);
+}
+.slide.on-light::after { display: none; }
+
+/* ── Chrome: brand lockup and the URL footer ─────────────────────────── */
+.brand { display: flex; align-items: center; gap: 18px; }
+.brand svg { display: block; }
+.brand span {
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.stage { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.stage.bottom { justify-content: flex-end; padding-bottom: 8px; }
+
+.foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--on-dark-mute);
+  letter-spacing: -0.005em;
+}
+.on-light .foot { color: var(--on-light-mute); }
+.foot .url { color: var(--on-dark-soft); }
+.on-light .foot .url { color: var(--on-light-soft); }
+
+/* ── Type scale ──────────────────────────────────────────────────────── */
+.eyebrow {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--warm) 82%, white);
+  margin-bottom: 34px;
+}
+.on-light .eyebrow { color: color-mix(in srgb, var(--warm) 88%, black); }
+
+.eyebrow.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 13px;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-weight: 500;
+  font-size: 24px;
+  color: var(--on-dark-mute);
+}
+.eyebrow.live .dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 20px 2px rgba(52, 211, 153, 0.7);
+}
+
+h1 {
+  font-size: 104px;
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  font-variation-settings: 'opsz' 32;
+}
+h1.md { font-size: 82px; line-height: 1.0; letter-spacing: -0.033em; }
+h1.sm { font-size: 64px; line-height: 1.04; letter-spacing: -0.03em; }
+
+.body {
+  margin-top: 40px;
+  font-size: 32px;
+  line-height: 1.5;
+  color: var(--on-dark-soft);
+  max-width: 24ch;
+}
+.on-light .body { color: var(--on-light-soft); }
+.body.wide { max-width: 30ch; }
+.body em { font-style: italic; color: var(--on-dark); font-weight: 500; }
+
+/* Gradient emphasis — once per slide at most, same rule as the site. */
+.grad {
+  font-weight: 600;
+  background: linear-gradient(96deg, var(--indigo), var(--violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.on-light .grad {
+  background: linear-gradient(96deg, #4F46E5, #7C3AED);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Struck-through former name. Never larger than the new one. */
+.was {
+  font-size: 46px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--on-dark-mute);
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0;
+  margin-bottom: 22px;
+  display: block;
+}
+
+/* ── Serif pull-quote (post 2) ───────────────────────────────────────── */
+.quote {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 78px;
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  color: var(--on-dark-soft);
+  max-width: 19ch;
+}
+.quote em { font-style: italic; color: var(--on-dark); }
+
+.rule {
+  width: 132px;
+  height: 3px;
+  margin-bottom: 46px;
+  background: linear-gradient(90deg, var(--warm), rgba(255, 138, 91, 0));
+}
+
+/* ── The scorecard every other app shows (post 4, slide 1) ───────────── */
+.scorecard {
+  border: 1.5px solid rgba(255, 255, 255, 0.09);
+  border-radius: 28px;
+  background: rgba(7, 7, 15, 0.78);
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+.scorecard-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 28px 36px;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.07);
+  font-size: 25px;
+  font-weight: 600;
+  color: var(--on-dark-soft);
+}
+.scorecard-date { font-weight: 500; color: var(--on-dark-mute); }
+.scorecard-rows { list-style: none; padding: 8px 0; }
+.scorecard-rows li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 26px;
+  padding: 20px 36px;
+}
+.sc-label { font-size: 28px; color: var(--on-dark-soft); }
+.sc-value { font-size: 31px; font-weight: 600; color: var(--on-dark); }
+/* The one place red appears in the whole system. It belongs to the competitor
+   card and nowhere else — Footing's own UI never marks a day as failed. */
+.sc-delta {
+  font-size: 24px;
+  font-weight: 600;
+  min-width: 9ch;
+  text-align: right;
+  color: #FF6B6B;
+}
+.scorecard-foot {
+  padding: 26px 36px;
+  border-top: 1.5px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 107, 107, 0.06);
+  font-size: 25px;
+  font-weight: 600;
+  color: #FF8B8B;
+}
+.caption {
+  margin-top: 34px;
+  font-size: 26px;
+  color: var(--on-dark-mute);
+}
+
+/* ── Pulse thread (post 4, slide 2) ──────────────────────────────────── */
+.thread { display: flex; flex-direction: column; gap: 26px; }
+.msg p { font-size: 30px; line-height: 1.52; }
+.msg-you {
+  align-self: flex-end;
+  max-width: 78%;
+  padding: 24px 32px;
+  border-radius: 34px;
+  border-bottom-right-radius: 11px;
+  background: linear-gradient(135deg, var(--indigo), var(--violet));
+  color: #fff;
+  font-weight: 500;
+}
+.msg-pulse {
+  align-self: flex-start;
+  max-width: 92%;
+  padding: 28px 34px 31px;
+  border-radius: 34px;
+  border-bottom-left-radius: 11px;
+  border: 1.5px solid var(--hairline);
+  background: var(--panel);
+  color: var(--on-dark-soft);
+}
+.msg-who {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 15px;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-dark-mute);
+}
+.pulse-dot {
+  width: 13px; height: 13px; border-radius: 50%;
+  background: linear-gradient(140deg, var(--indigo), var(--violet));
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--violet) 18%, transparent);
+}
+
+/* ── Beta / QR (post 3) ──────────────────────────────────────────────── */
+.qr-row { display: flex; align-items: center; gap: 52px; margin-top: 56px; }
+.qr {
+  width: 258px;
+  height: 258px;
+  padding: 22px;
+  border-radius: 26px;
+  background: #fff;
+  flex: none;
+}
+.qr img { width: 100%; height: 100%; display: block; }
+.qr-note { font-size: 27px; line-height: 1.45; color: var(--on-dark-soft); max-width: 15ch; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  padding: 26px 46px;
+  border-radius: 999px;
+  background: linear-gradient(112deg, var(--indigo), var(--violet));
+  color: #fff;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  box-shadow: 0 2px 0 rgba(255,255,255,.22) inset,
+              0 26px 70px -18px rgba(99,102,241,.8);
+}
+.pill-row { margin-top: 52px; display: flex; }
+
+/* Free-tag row under the beta CTA. */
+.meta-row {
+  margin-top: 40px;
+  display: flex;
+  gap: 40px;
+  font-size: 25px;
+  color: var(--on-dark-mute);
+}
+.on-light .meta-row { color: var(--on-light-soft); }
+.meta-row span { display: flex; align-items: center; gap: 12px; }
+/* The token green is tuned for near-black; on cream it drops under 3:1. */
+.tick { color: var(--green); font-weight: 700; }
+.on-light .tick { color: #0E9A6C; }
