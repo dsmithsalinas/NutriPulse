@@ -12,6 +12,12 @@
 
 import { createClient } from '@supabase/supabase-js'
 
+// Unattended job: every network call gets a hard timeout so a hung connection
+// fails the check cleanly instead of stalling the whole run.
+const FETCH_TIMEOUT_MS = 30_000
+const tfetch = (url, opts = {}) =>
+  fetch(url, { ...opts, signal: opts.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+
 // ── Config ──────────────────────────────────────────────────────────────────
 const env = (name, fallback) => {
   const v = process.env[name] ?? fallback
@@ -36,7 +42,7 @@ const REPORT_TZ        = env('REPORT_TZ', 'America/Los_Angeles')
 // so detect it up front and report it as its own thing instead of six red ❌s.
 async function detectEgressBlock() {
   try {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: ANON_KEY } })
+    const res = await tfetch(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: ANON_KEY } })
     if (res.status === 403) {
       const text = await res.text()
       if (/not in allowlist|network egress/i.test(text)) return text.trim().slice(0, 300)
@@ -61,7 +67,7 @@ async function check(name, fn) {
 }
 
 async function invokeFunction(name, token, body) {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+  const res = await tfetch(`${SUPABASE_URL}/functions/v1/${name}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -82,13 +88,13 @@ async function invokeFunction(name, token, body) {
 async function runHealthChecks() {
   // 1. Auth service up at all?
   await check('Auth service', async () => {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: ANON_KEY } })
+    const res = await tfetch(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: ANON_KEY } })
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
     return 'reachable'
   })
 
   // 2. Database reachable through PostgREST?
-  const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false }, global: { fetch: tfetch } })
   await check('Database (REST)', async () => {
     const { count, error } = await service
       .from('profiles')
@@ -101,7 +107,7 @@ async function runHealthChecks() {
   //    regressions that anonymous pings can't. Token feeds the function checks.
   let token = null
   await check('Sign-in (healthcheck account)', async () => {
-    const anon = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } })
+    const anon = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false }, global: { fetch: tfetch } })
     const { data, error } = await anon.auth.signInWithPassword({
       email: HC_EMAIL,
       password: HC_PASSWORD,
