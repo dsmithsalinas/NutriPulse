@@ -1,16 +1,14 @@
 // Daily status report — health checks + aggregate usage stats, printed as markdown.
-// Run each morning by a scheduled Claude Code routine that posts the output into
-// the session conversation (see docs/status-report.md), or manually:
+// Run each morning by a scheduled Codex task that posts the output into its task
+// (see docs/status-report.md), or manually:
 //
-//   cd scripts && npm install && \
-//   SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... \
-//   HEALTHCHECK_EMAIL=... HEALTHCHECK_PASSWORD=... \
-//   node status-report.mjs
+//   set -a && source .env.status-report && set +a
+//   node scripts/status-report.mjs
 //
-// Exit code is non-zero when any health check fails, so whatever runs this can
-// tell a broken morning from a green one without parsing the output.
-
-import { createClient } from '@supabase/supabase-js'
+// Exit codes:
+//   0 = healthy
+//   1 = Footing is reachable, but one or more production checks failed
+//   2 = the report runner itself was not configured or could not reach Footing
 
 // Unattended job: every network call gets a hard timeout so a hung connection
 // fails the check cleanly instead of stalling the whole run.
@@ -19,25 +17,49 @@ const tfetch = (url, opts = {}) =>
   fetch(url, { ...opts, signal: opts.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 
 // ── Config ──────────────────────────────────────────────────────────────────
-const env = (name, fallback) => {
-  const v = process.env[name] ?? fallback
-  if (v === undefined) {
-    console.error(`Missing required env var: ${name}`)
-    process.exit(1)
-  }
-  return v
+const REQUIRED_ENV = [
+  'SUPABASE_URL',
+  'SUPABASE_ANON_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'HEALTHCHECK_EMAIL',
+  'HEALTHCHECK_PASSWORD',
+]
+
+const missingEnv = REQUIRED_ENV.filter((name) => !process.env[name]?.trim())
+if (missingEnv.length > 0) {
+  console.log([
+    '# ⚪ Footing daily status — couldn’t run',
+    '',
+    'The report runner is missing required private settings. This does not mean Footing is down.',
+    '',
+    `Missing: ${missingEnv.map((name) => `\`${name}\``).join(', ')}`,
+    '',
+    'Add them to the runner’s private environment, then run the report again.',
+  ].join('\n'))
+  process.exit(2)
 }
 
-const SUPABASE_URL     = env('SUPABASE_URL').replace(/\/$/, '')
-const ANON_KEY         = env('SUPABASE_ANON_KEY')
-const SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY')
-const HC_EMAIL         = env('HEALTHCHECK_EMAIL')
-const HC_PASSWORD      = env('HEALTHCHECK_PASSWORD')
-const REPORT_TZ        = env('REPORT_TZ', 'America/Los_Angeles')
+const SUPABASE_URL     = process.env.SUPABASE_URL.replace(/\/$/, '')
+const ANON_KEY         = process.env.SUPABASE_ANON_KEY
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const HC_EMAIL         = process.env.HEALTHCHECK_EMAIL
+const HC_PASSWORD      = process.env.HEALTHCHECK_PASSWORD
+const REPORT_TZ        = process.env.REPORT_TZ || 'America/Los_Angeles'
+
+try {
+  new URL(SUPABASE_URL)
+} catch {
+  console.log([
+    '# ⚪ Footing daily status — couldn’t run',
+    '',
+    '`SUPABASE_URL` is not a valid URL. This is a runner setup problem, not a Footing outage.',
+  ].join('\n'))
+  process.exit(2)
+}
 
 // ── Egress preflight ────────────────────────────────────────────────────────
-// Sandboxed runners (e.g. Claude Code cloud sessions) route traffic through a
-// proxy that 403s hosts missing from the environment's network allowlist. That
+// Sandboxed runners route traffic through a proxy that 403s hosts missing from
+// the environment's network allowlist. That
 // failure mode means "the checks could not run" — NOT "production is down" —
 // so detect it up front and report it as its own thing instead of six red ❌s.
 async function detectEgressBlock() {
@@ -85,6 +107,16 @@ async function invokeFunction(name, token, body) {
   }
 }
 
+async function parseJsonResponse(res) {
+  const text = await res.text()
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`)
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error(`non-JSON response: ${text.slice(0, 300)}`)
+  }
+}
+
 async function runHealthChecks() {
   // 1. Auth service up at all?
   await check('Auth service', async () => {
@@ -94,26 +126,35 @@ async function runHealthChecks() {
   })
 
   // 2. Database reachable through PostgREST?
-  const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false }, global: { fetch: tfetch } })
   await check('Database (REST)', async () => {
-    const { count, error } = await service
-      .from('profiles')
-      .select('id', { count: 'exact', head: true })
-    if (error) throw new Error(error.message)
-    return `profiles reachable (${count} rows)`
+    const res = await tfetch(`${SUPABASE_URL}/rest/v1/profiles?select=id`, {
+      method: 'HEAD',
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        Prefer: 'count=exact',
+      },
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`)
+    const count = res.headers.get('content-range')?.split('/').at(-1)
+    return count && count !== '*' ? `profiles reachable (${count} rows)` : 'profiles reachable'
   })
 
   // 3. Real sign-in with the dedicated healthcheck account — catches JWT/RLS
   //    regressions that anonymous pings can't. Token feeds the function checks.
   let token = null
   await check('Sign-in (healthcheck account)', async () => {
-    const anon = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false }, global: { fetch: tfetch } })
-    const { data, error } = await anon.auth.signInWithPassword({
-      email: HC_EMAIL,
-      password: HC_PASSWORD,
+    const res = await tfetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        apikey: ANON_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: HC_EMAIL, password: HC_PASSWORD }),
     })
-    if (error) throw new Error(error.message)
-    token = data.session.access_token
+    const data = await parseJsonResponse(res)
+    token = data.access_token
+    if (!token) throw new Error('sign-in returned no access token')
     return 'authenticated'
   })
 
@@ -149,14 +190,20 @@ async function runHealthChecks() {
     return 'Pulse replied'
   })
 
-  return service
 }
 
 // ── Stats ───────────────────────────────────────────────────────────────────
-async function fetchStats(service) {
-  const { data, error } = await service.rpc('get_daily_status', { p_tz: REPORT_TZ })
-  if (error) throw new Error(error.message)
-  return data
+async function fetchStats() {
+  const res = await tfetch(`${SUPABASE_URL}/rest/v1/rpc/get_daily_status`, {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_tz: REPORT_TZ }),
+  })
+  return parseJsonResponse(res)
 }
 
 // ── Formatting (markdown) ───────────────────────────────────────────────────
@@ -165,17 +212,22 @@ const fmtDay = (iso) =>
     weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
   })
 
-function buildReport(stats, statsError) {
+function buildReport(stats, statsError, runnerUnable) {
   const failures = checks.filter((c) => !c.ok)
-  const allGreen = failures.length === 0 && !statsError
+  const allGreen = failures.length === 0 && !statsError && !runnerUnable
   const dayLabel = stats ? fmtDay(stats.report_date) : new Date().toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: REPORT_TZ,
   })
 
   const lines = []
-  lines.push(allGreen
-    ? `# ✅ Footing daily status — all systems go (${dayLabel})`
-    : `# ⚠️ Footing daily status — ${failures.length || 'stats'} check${failures.length === 1 ? '' : 's'} failing (${dayLabel})`)
+  lines.push(runnerUnable
+    ? `# ⚪ Footing daily status — couldn’t run (${dayLabel})`
+    : allGreen
+      ? `# ✅ Footing daily status — Healthy (${dayLabel})`
+      : `# ⚠️ Footing daily status — Action needed (${dayLabel})`)
+  if (runnerUnable) {
+    lines.push('', 'The runner could not reach Footing reliably, so this is not evidence that production is down.')
+  }
   lines.push('')
   lines.push('## Health checks')
   for (const c of checks) {
@@ -214,8 +266,7 @@ function buildReport(stats, statsError) {
     lines.push('None.')
   } else {
     for (const f of feedback) {
-      const when = new Date(f.created_at).toLocaleString('en-US', { timeZone: REPORT_TZ })
-      lines.push(`- **[${f.category}]**${f.app_version ? ` v${f.app_version}` : ''} (${when}): ${f.message}`)
+      lines.push(`- **${f.category}**: ${f.count ?? 1}`)
     }
   }
 
@@ -227,11 +278,11 @@ const egressBlock = await detectEgressBlock()
 if (egressBlock) {
   const host = new URL(SUPABASE_URL).host
   console.log([
-    '# 🚧 NutriPulse daily status — checks could not run',
+    '# 🚧 Footing daily status — checks could not run',
     '',
     `The runner's network policy blocked access to \`${host}\`, so nothing was`,
     'actually tested. **Production status is unknown** — this is a runner',
-    'configuration problem, not a NutriPulse outage.',
+    'configuration problem, not a Footing outage.',
     '',
     `> ${egressBlock}`,
     '',
@@ -241,18 +292,25 @@ if (egressBlock) {
   process.exit(2)
 }
 
-const service = await runHealthChecks()
+await runHealthChecks()
 
 let stats = null
 let statsError = null
 try {
-  stats = await fetchStats(service)
+  stats = await fetchStats()
 } catch (err) {
   statsError = err.message ?? String(err)
 }
 
-const report = buildReport(stats, statsError)
+const runnerErrorPattern = /blocked host|not allowlisted|fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|network/i
+const foundationChecks = checks.slice(0, 3)
+const runnerUnable =
+  foundationChecks.length === 3 &&
+  foundationChecks.every((c) => !c.ok) &&
+  foundationChecks.some((c) => runnerErrorPattern.test(c.detail))
+
+const report = buildReport(stats, statsError, runnerUnable)
 console.log(report.text)
 
 const failed = checks.some((c) => !c.ok) || statsError !== null
-process.exit(failed ? 1 : 0)
+process.exit(runnerUnable ? 2 : failed ? 1 : 0)
