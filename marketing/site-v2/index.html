@@ -2,14 +2,46 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#07070F" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
     <title>Footing — Coached, not scolded.</title>
     <meta
       name="description"
       content="On a GLP-1 the goal flips: it's not about eating less, it's about eating enough. Footing tracks the protein floor that protects your results — and puts a coach in your corner."
     />
+    <link rel="canonical" href="https://tryfooting.app/" />
+
+    <!--
+      Share card. og:image MUST be an absolute URL — every platform fetches it
+      from its own servers, where a relative path has nothing to resolve
+      against, and the preview silently falls back to a bare text card.
+      1200×630 is the ratio they all crop to. Regenerate with
+      `node scripts/make-brand-assets.mjs`.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Footing" />
+    <meta property="og:url" content="https://tryfooting.app/" />
+    <meta property="og:title" content="Footing — Coached, not scolded." />
+    <meta
+      property="og:description"
+      content="On a GLP-1 the goal flips: it's not about eating less, it's about eating enough. Footing tracks the protein floor that protects your results — and puts a coach in your corner."
+    />
+    <meta property="og:image" content="https://tryfooting.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Footing — coached, not scolded. A protein dial at 63 of 185g, with the protein floor marked." />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Footing — Coached, not scolded." />
+    <meta
+      name="twitter:description"
+      content="Protein-first GLP-1 coaching. Footing tracks the floor that protects your results — and puts a coach in your corner."
+    />
+    <meta name="twitter:image" content="https://tryfooting.app/og.png" />
   </head>
   <body>
     <div id="root"></div>

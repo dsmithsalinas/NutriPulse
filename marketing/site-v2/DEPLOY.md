@@ -50,8 +50,32 @@ Two things that break builds if you get them wrong:
 Root directory is what makes this work in a monorepo — it's the directory the build
 command runs in.
 
+### Build watch paths — do not skip this
+
+Same screen, **Build watch paths**:
+
+| Field | Value |
+|---|---|
+| Include | `marketing/site-v2/*` |
+| Exclude | *(empty)* |
+
+`NutriPulse` is an iOS app that happens to contain a marketing site. Without watch paths,
+**every Swift commit triggers a full site build and redeploy** — minutes of build time and
+a new deployment for a change that can't possibly affect the site.
+
+Paths are evaluated excludes-first, then includes; a build runs only if something still
+matches. Cloudflare bypasses the filter entirely for pushes with 0 changes, 3,000+ changed
+files, or 20+ commits, so a large merge will still build.
+
 The repo can stay **private**. That's the main practical win over GitHub Pages, where the
 custom-domain setup only worked while `NutriPulse` was public.
+
+### After connecting: one source of truth
+
+Once git builds are on, `npm run deploy` from a laptop still works — and that's the trap.
+Deploying locally from a dirty tree puts something live that isn't in the repo, and the
+next git build silently reverts it. Pick one: push to deploy, and keep `npm run deploy` for
+emergencies only.
 
 ## 2. Attach the apex domain (once)
 
