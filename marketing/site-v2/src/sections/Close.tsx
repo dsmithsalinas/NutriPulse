@@ -122,7 +122,7 @@ const QA: { q: string; a: React.ReactNode }[] = [
         generically &mdash; and Pulse only ever sees your own. If you connect Apple Health,
         that data is only ever used to show you and to give Pulse context, never for
         advertising. You can delete everything, permanently, from inside the app. The{' '}
-        <a href="/privacy.html">Privacy Policy</a> names every provider and exactly what each
+        <a href="/privacy">Privacy Policy</a> names every provider and exactly what each
         one receives.
       </>
     ),
@@ -230,8 +230,8 @@ export function Footer({ mark }: { mark: React.ReactNode }) {
           your doctor about medication and health decisions.
         </p>
         <p className="foot-links">
-          <a href="/terms.html">Terms</a>
-          <a href="/privacy.html">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="/privacy">Privacy</a>
           <a href="mailto:support@tryfooting.app">Contact</a>
         </p>
       </div>

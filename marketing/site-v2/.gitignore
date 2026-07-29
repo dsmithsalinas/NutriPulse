@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Wrangler local state — build cache and dev-server scratch, machine-specific
+.wrangler
+# Local secrets for `wrangler dev`; never commit
+.dev.vars
+.dev.vars.*

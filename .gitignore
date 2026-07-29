@@ -9,3 +9,7 @@ Configurations/Secrets.xcconfig
 # Build number derived from the git commit count — a build input, not source.
 # Regenerate with scripts/set-build-number.sh.
 Configurations/BuildNumber.xcconfig
+
+# Node — marketing/site-v2 prototype
+node_modules/
+dist/

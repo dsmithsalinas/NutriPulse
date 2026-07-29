@@ -487,17 +487,6 @@
   line-height: 1.6;
   color: var(--on-dark-soft);
 }
-/* Unmissable on purpose — an unverified privacy claim must never slip out. */
-.faq-a mark {
-  display: block;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: #FFE8A3;
-  color: #4A3B00;
-  font-size: 14px;
-  font-weight: 500;
-}
-
 /* ── 09 · Closing CTA ────────────────────────────────────────────────────── */
 .sec-close { text-align: center; padding-block: clamp(84px, 13vh, 148px); }
 .close-block { max-width: 40rem; margin-inline: auto; }

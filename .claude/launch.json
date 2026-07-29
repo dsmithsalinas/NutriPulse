@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8765", "--directory", "marketing"],
       "port": 8765
+    },
+    {
+      "name": "site-v2",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "marketing/site-v2", "--", "--port", "5173", "--strictPort"],
+      "port": 5173
     }
   ]
 }
