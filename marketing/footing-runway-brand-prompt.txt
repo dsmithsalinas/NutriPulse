@@ -1,0 +1,42 @@
+FOOTING — BRAND STYLE PROMPT (paste into Runway as style/context)
+
+Brand: Footing, a GLP-1 nutrition app. Its AI coach is named Pulse.
+
+LOOK
+The hero object is Footing's protein ring: one thick emissive arc, indigo to
+violet, filling clockwise from twelve o'clock, with a white floor tick marking
+a minimum at 76% around. It reads as light, not as a colored shape — soft
+bloom, feathered edges, everything sharp (no depth of field). 3.5% film grain
+and a moderate vignette over the whole frame. An emotional arc from near-black
+to daylight: deep #07070F and #12122A at the dark end, cream #F6F5FC at the
+light end.
+
+COLOR
+Indigo #6366F1 to violet #8B5CF6, always as emitted light or inner glow, never
+as a flat fill or gradient blob. Warm amber #FF8A5B is the protein accent and
+the only real color tension against the cool indigo. Green #34D399 only for
+success. Ink #14163A for dark text.
+
+TYPE
+Inter / Inter Display, semibold, tight tracking (-0.035em), tabular numerals.
+Instrument Serif italic, sparingly, for a single emotional pull-quote.
+Sentence case everywhere, including buttons and headlines. No Title Case.
+
+VOICE (Pulse)
+A cornerman, not a drill sergeant, cheerleader, or doctor. Attentive, precise,
+warm-direct, steady, protective. Speaks in second person with contractions and
+concrete numbers, always pairing a fact with the next move. Never shames anyone
+for being on the medication, and never implies the medication does the work
+alone. Frames everything as protecting progress, never correcting failure.
+Essentially no exclamation marks, no hype, at most one earned emoji.
+Sample register: "Coached, not scolded." / "One heavy day is data, not a
+verdict." / "It's not about eating less. It's about eating enough."
+
+NEVER
+Neon glass or crypto/AI-startup gradients. Clinical white telehealth stock
+photography or doctor imagery. Bright gamified quiz-app styling. Food
+photography or plated-meal hero shots. Before/after bodies, scales, tape
+measures, gym or bootcamp imagery. Syringes shown as the hero. Concrete,
+slabs, or terrain — any literal reading of the word "footing" was prototyped
+and cut. Words like journey, transform, unlock, crush it, cheat day,
+guilt-free. Exclamation marks.

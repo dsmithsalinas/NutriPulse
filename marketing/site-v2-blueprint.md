@@ -1,8 +1,14 @@
 # Footing — Site v2 Blueprint
 
-**Status:** Design exploration. Nothing built, nothing pushed.
-**Supersedes:** nothing yet — `marketing/index.html` stays live until v2 ships.
-**Source material:** `docs/pulse-persona.md` (voice), `orbit-exports/export/*.svg` (mark), current `index.html` (copy that already works).
+**Status:** Built and live at `tryfooting.app` (Cloudflare Workers — see `site-v2/DEPLOY.md`).
+**Supersedes:** the old `marketing/index.html`, which now serves redirect stubs only.
+**Source material:** `docs/pulse-persona.md` (voice), `marketing/site-v2-voice.md` (copy), `orbit-exports/export/*.svg` (mark).
+
+> **Read this first.** The hero object described here is **the protein ring**, not the
+> concrete slab this document originally specified. The slab and a contour terrain were
+> both prototyped and cut on 2026-07-27; §1.6 records why, because the reasoning applies
+> to any future candidate. The shipped implementation is `site-v2/src/hero/Rings.tsx` and
+> `HeroScene.tsx` — where this document and that code disagree, the code is right.
 
 ---
 
@@ -54,7 +60,7 @@ Positioning analysis from category knowledge, not a fresh audit — worth verify
 1. **Nobody is named after the work.** The entire category names itself after the medication or the outcome. "Footing" names the thing that makes it hold. That is a genuine differentiator and the site should make the visitor *feel* it before it explains it.
 2. **No site in this category has a material world.** They are all white-and-clinical or bright-and-gamified. There is no *architectural* nutrition brand. That is the lane.
 
-**The trap to avoid:** dark + 3D + gradient is the default costume of every AI/crypto startup, and wearing it would make a warm product read cold. The antidote is material choice — concrete, poured resin, and daylight, not neon glass. See §1.5.
+**The trap to avoid:** dark + 3D + gradient is the default costume of every AI/crypto startup, and wearing it would make a warm product read cold. The antidote is a set built from the product's own vocabulary — one legible instrument and daylight, not neon glass and abstract form. See §1.5.
 
 ## 1.4 The emotional arc
 
@@ -115,57 +121,106 @@ Sentence case everywhere, including buttons and nav — per `docs/pulse-persona.
 
 ### Material world
 
-The set is **honed concrete, poured resin, and one volumetric light.**
+The set is **emitted light, not material.** There is one luminous instrument in a soft dark
+void, and nothing else in the frame competes with it.
 
-- **Concrete:** roughness ~0.62, faint normal-map noise, matte. Carries the "structural" reading.
-- **Strata:** translucent resin cores — light passes *through* them, so each layer glows from within when the light source is beneath it.
-- **The footing:** emissive, indigo→violet, the only light source in the scene.
+- **The arc:** emissive, indigo→violet, the only light source in the scene. Both edges feathered so it reads as light rather than as a cut-out annulus.
+- **Bloom:** what makes the arc read as light instead of a coloured shape. Intensity ~0.7, luminance threshold 0.5. Non-negotiable for the premium read.
 - **Grain:** a 3–4% film grain overlay across the whole page, canvas and DOM alike. This is what fuses the WebGL layer to the HTML layer so the site reads as one object instead of a video embedded in a page.
-- **Depth of field:** shallow, focus on the current strata, everything else soft. Non-negotiable for the premium read.
+- **Vignette:** moderate — offset ~0.28, darkness ~0.72. Holds the eye at centre.
+- **No depth of field.** Reversed from the original spec: the dial *is* the subject, and softening the one thing the frame is about is self-defeating. Everything stays sharp.
 
 ### Icon and mark usage
 
-The mark (ring + gap + dot, `orbit-exports/export/footing-mark.svg`) is **inlaid into the top surface of the slab** in the 3D scene — catching the rim light, not floating. Never rendered as a spinning 3D logo. The stacked lockup appears exactly twice: nav and footer.
+The mark (ring + gap + dot, `orbit-exports/export/footing-mark.svg`) is a small, flat DOM
+element in the nav and footer — never rebuilt in the 3D scene, and never rendered as a
+spinning 3D logo. The scene already contains a ring; putting the mark in there too would
+say the same thing twice and weaken both. The stacked lockup appears exactly twice: nav
+and footer.
 
 ## 1.6 The 3D scene
 
-### The object: a cross-sectioned slab of ground
+### The object: Footing's protein ring
 
-One hero object for the entire site. A rectangular slab of earth, cut open like an architectural site model or a soil core, floating in a soft dark void.
+One hero object for the entire site. A single thick emissive arc, indigo→violet, filling
+clockwise from twelve o'clock, with a marked minimum on the track. Implementation:
+`site-v2/src/hero/Rings.tsx`.
 
 ```
-         ╔═══════════════════════════════════╗
-  0%     ║  TOP SURFACE — honed concrete     ║   "the floor you stand on"
-         ║  Footing mark inlaid, rim-lit     ║
-         ╠═══════════════════════════════════╣
- 25%     ║  STRATUM 01 — warm amber, resin   ║   protein
-         ╠═══════════════════════════════════╣
- 45%     ║  STRATUM 02 — pale blue, resin    ║   hydration
-         ╠═══════════════════════════════════╣
- 65%     ║  STRATUM 03 — soft green, resin   ║   movement / sleep
-         ╠═══════════════════════════════════╣
- 85%     ║  THE FOOTING — emissive           ║   ← the only light source
-         ║  indigo → violet, poured          ║      everything above rests on this
-         ╚═══════════════════════════════════╝
+                    ▁▁▁▁▁▁▁▁▁▁▁
+                ▗▄▛▀           ▀▜▄▖
+             ▗▄▛                   ▀▖        ← the track: unfilled remainder,
+           ▗▛                        ▝▖         indigo at ~22% brightness
+          ▟                            ▙
+         ▐            63               ▌     ← live readout, DOM text
+         ▐       of 185g protein       ▌
+          ▜                            ▛
+           ▝▖                        ▗▛
+             ▀▄▖                   ▗▄▘
+                ▀▜▄▖▁         ▁▗▄▛▀
+                     ▀▀▀╫▀▀▀▀▀
+                        ▲
+                   THE FLOOR TICK — a white mark at 76% around.
+                   The one detail no competitor has.
 ```
+
+| Part | Spec | What it says |
+|---|---|---|
+| **The arc** | Inner radius 2.35, outer 2.72 world units. Indigo at the sweep's start → violet at the head. | "This is a nutrition tracker" — instantly, before a word of copy |
+| **The floor tick** | White, at `FLOOR_AT = 0.76` of the circle, measured clockwise from twelve | The protein floor — the one idea no competitor has |
+| **The leading edge** | Brighter bloom at the head of the arc; brightens further on hover | Direction of travel even when static; the dial answers the cursor |
+| **The readout** | Live `63 / of 185g protein`, DOM text so it stays crisp | Makes the number concrete |
+| **Pulse's line** | A message card in the hero, written to the persona bible | The coach demonstrating itself |
+
+**One arc, not four.** Supporting macro rings were built and cut: two dim rings behind the
+subject read as decoration and cost the frame its clarity.
+
+**The Apple Activity rings risk** is real, and the floor is what handles it. Apple's rings
+are a score with no threshold; a dial carrying a marked minimum you rise *to* is a
+different idea wearing a similar shape. That is also why there is one prominent ring
+rather than four concentric ones — four would collapse the distinction instantly.
 
 **Why this and not the alternatives:**
 
 - *A rotating iPhone* — every app site. Zero brand meaning.
 - *Particles / blobs / mesh gradients* — the AI-startup uniform. Actively harmful here.
-- *A literal pour animation* — too literal, and construction imagery reads grim.
-- **The slab** — it is the name made spatial, it maps 1:1 onto the product's actual sections (protein floor, hydration, movement, the base), and the scroll gesture is genuinely unusual: most sites scroll *along* a story, this one scrolls *down through* a structure and then rises back out of it.
+- *A concrete slab, or a contour terrain* — **both built and rejected in prototype, 2026-07-27.** They illustrated the *name* instead of showing the *product*. "Footing" → poured concrete is a one-to-one translation of a word; the visitor has to decode the metaphor, and what it says once decoded is only "solid ground," which is true of any wellness brand. Neither set contained a single fact about nutrition, protein, or coaching. Concrete also fought the voice: the material reads cold and industrial under a warm, non-shaming product.
+- **The ring** — built from the product's own vocabulary rather than from the name's metaphor. It is legible on arrival, it carries the differentiator in a single mark, and the fill gives the page a spine that maps onto a real day.
 
-### Camera choreography
+**The test any future candidate has to pass:** does it show what the app does, or does it
+illustrate the word "footing"? Only the first one ships.
 
-| Act | Scroll | Camera | Page state |
-|---|---|---|---|
-| **I — Surface** | 0–10% | Low, near the top face, grazing light | Hero. Dark. Slab is a horizon line. |
-| **II — Descent** | 10–70% | Descends past each stratum; DOF racks to the active layer | Each stratum's arrival triggers its DOM section |
-| **III — The base** | 70–82% | Reaches the footing. It's the brightest thing on the page. | "Why Footing?" — the metaphor pays off here and nowhere earlier |
-| **IV — Ascent** | 82–100% | Pulls back and rises; the whole slab resolves, a horizon appears, daylight | Offer, FAQ, closing CTA. Light. |
+### Scroll choreography
 
-The reveal that the footing was the light source the whole time is the site's one real *moment*. Everything above it was visible because of it. Do not explain this in copy — let it be structural. The "Why Footing?" section lands one beat later and the visitor connects it themselves. That gap of one beat is worth more than any headline.
+The fill is the page's spine. It walks from 34% toward the floor as the argument builds and
+clears it at "Why Footing?" — where the colour goes warm. **That colour shift is the
+celebration**: no badge, no confetti, which is the whole brand in one transition.
+
+One act per section, so a section's own height decides how long its beat lasts
+(`ACT_SECTIONS` in `src/scroll.ts`). Keyframes live in `TRACK` in `Rings.tsx`.
+
+| Act | Section | Fill | Dim | Page state |
+|---|---|---|---|---|
+| **0–1** | Hero, through the pin | 34% | 1.0 | Dark. Dial parked in the right-hand third. |
+| **2** | 01 — the problem | 34% | 0.19 | Dial slides to centre, grows, dims to backdrop |
+| **3–6** | 02 Pulse → 05 the cycle | 44% → 71% | ~0.2 | The dial is the room the copy sits in |
+| **7** | 06 — why Footing | **94%** | 1.0 | **The reward.** Clears the floor, warms to amber, brightens, and opens up so the copy is framed *inside* the completed ring. |
+| **8** | 07 — the offer | 100% | 0.42 | Daylight arrives |
+| **9–10** | 08 FAQ, 09 CTA | 100% | 0.0 | The dial has said everything it has to say |
+
+**The camera barely moves.** What changes across the page is the fill, not the framing — a
+dolly reads as a camera move, holding still reads as attention. The dial does the
+travelling, in world space.
+
+**Sections must yield to the dial.** In section 01 the ring slides to centre, grows, and
+dims to ~19%, becoming the room the copy sits in rather than an object competing with it.
+This is practical — the dial and the scorecard both want the right-hand column — but it is
+also the argument staged: section 01 belongs to the *old* way, so Footing's object steps
+back while the red scorecard takes over, and returns brighter when the copy turns.
+
+**Copy needs a directional scrim** (`.hero::before`, `.s01::before`). This applies to any
+set: a full-bleed background will otherwise put body text over whatever the scene happens
+to be doing there.
 
 ## 1.7 Animation system
 
@@ -196,7 +251,7 @@ The reveal that the footing was the light source the whole time is the site's on
 |---|---|---|
 | Framework | **Next.js 15, App Router, TypeScript** | You know React/TS. Static-exportable if you want to stay on Pages. |
 | 3D | **React Three Fiber + drei** | Three.js as React components — scene graph as JSX, which is the exact mental model you already have. |
-| Post-processing | **@react-three/postprocessing** | Bloom, DOF, vignette, grain. The DOF is what sells "premium." |
+| Post-processing | **@react-three/postprocessing** | Bloom, vignette, grain. The bloom is what sells "premium" — it's what makes the arc read as light. No DOF; see §1.5. |
 | Scroll | **Lenis** | Smooth scroll that ScrollTrigger can drive. The inertia is 40% of the luxury feel. |
 | Timeline | **GSAP + ScrollTrigger** | Pinned multi-beat scroll timelines are what ScrollTrigger is for. Now fully free including ScrollTrigger. |
 | Component motion | **Motion (Framer Motion)** | Entrances and layout. Don't use it for the scroll timeline — GSAP wins there. |
@@ -207,7 +262,7 @@ The reveal that the footing was the light source the whole time is the site's on
 
 **Architecture note that matters more than any of the above:** one `<Canvas>` for the entire page, fixed behind the DOM, `eventSource` pointed at the document root. Sections do not each get a canvas — they are camera positions on a single persistent scene. Multiple canvases will tank the frame rate and are the most common way this kind of site fails.
 
-**Geometry: procedural, not modeled.** The slab is a beveled box with a noise-displaced top face plus four instanced strata. Build it in R3F directly. No `.glb`, no Draco, no Blender round-trip, no model download. Payload stays near zero and you can tune the strata thicknesses in code.
+**Geometry: procedural, not modeled.** The dial is a single `RingGeometry` (220 segments) carrying a custom shader — the fill, the floor tick, the leading edge, and the edge feathering are all computed in the fragment shader from one `uProgress` uniform. Build it in R3F directly. No `.glb`, no Draco, no Blender round-trip, no model download. Payload stays near zero, and the whole scroll choreography is a handful of lerped uniforms.
 
 ### Performance budget
 
@@ -220,7 +275,7 @@ The reveal that the footing was the light source the whole time is the site's on
 
 **Degradation ladder** — each rung is fully shippable on its own:
 
-1. No WebGL, or `prefers-reduced-motion`, or `navigator.hardwareConcurrency < 4`, or Save-Data → CSS gradient + SVG strata. **No canvas at all.**
+1. No WebGL, or `prefers-reduced-motion`, or `navigator.hardwareConcurrency < 4`, or Save-Data → CSS gradient + an SVG ring. **No canvas at all.** Mobile takes this rung on purpose (`useCapability.ts`): most traffic is phones, and a thermally-throttled 45fps canvas is worse than a beautiful gradient. The subgrade→daylight arc is the emotional payload and it costs nothing in CSS.
 2. Mobile (< 768px) → same. Full 3D on a phone is a battery and thermal trap, and the background lerp already carries the emotional payload for free.
 3. Tablet → canvas, no post-processing.
 4. Desktop → everything.
@@ -235,9 +290,9 @@ Each phase is independently shippable. **Phase 1 must convert on its own before 
 |---|---|---|
 | **0 — Foundations** | Next.js + TS, tokens as CSS vars, Inter Display + Instrument Serif, Lenis, layout shell, nav, footer | Empty page scrolls smoothly, type scale is set |
 | **1 — The flat site** ⭐ | Every section from Part 3 with final copy, mobile-first, background lerp in pure CSS, all entrance animations | **Shippable. Put it live. Start collecting emails.** |
-| **2 — Canvas** | Single `<Canvas>`, procedural slab, lighting, Act I only, static camera | Hero has the slab; nothing scroll-linked yet |
-| **3 — Choreography** | GSAP ScrollTrigger drives camera through Acts I–IV; strata reveals sync to sections | Full scroll works end to end |
-| **4 — Polish** | DOF, bloom, grain, the celebration spring, number count-ups, micro-interactions | It looks expensive |
+| **2 — Canvas** | Single `<Canvas>`, procedural ring + shader, hero framing only, static camera | Hero has the dial; nothing scroll-linked yet |
+| **3 — Choreography** | Scroll drives `actProgress()`; the fill, dim, and scale tracks sync to sections | Full scroll works end to end |
+| **4 — Polish** | Bloom, grain, vignette, the floor-clearing colour shift, number count-ups, micro-interactions | It looks expensive |
 | **5 — Hardening** | Degradation ladder, `PerformanceMonitor`, a11y pass, keyboard nav, focus states, analytics | Passes on a mid-tier Android and with a screen reader |
 | **6 — Capture** | Supabase `beta_signups`, route handler, success state, confirmation email | Emails land in a table |
 
@@ -264,7 +319,7 @@ Three directions, ranked. All three share the same layout skeleton and the same 
 **Secondary, text-only** — `See how it works ↓`
 
 ### Background animation
-Act I. Camera low and near the slab's top face, so it reads as a **horizon** rather than an object — you are standing on it, not looking at it. A slow grazing light travels left-to-right across the concrete over 18s, looping, revealing surface texture. The Footing mark is inlaid in the surface, catching the light as it passes. Page background `--subgrade`. The footing's glow is present but far below and out of frame — visible only as a faint violet bloom at the bottom edge of the viewport, unexplained. Depth of field is shallow; the far edge of the slab dissolves into black.
+The dial sits at 34% fill, parked in the right-hand third of the frame (`x: 4.4`) so the copy owns the left. It is the brightest thing on a `--subgrade` page and the only light source in it. The floor tick is visible from the first frame — the unfilled gap between the arc's head and that mark is the hero's silent argument, and it is legible before a word of copy is read. The leading edge carries a brighter bloom, so the arc has a direction of travel even while static, and brightens further on hover so the dial answers the cursor. Everything stays sharp; there is no depth of field.
 
 ### Entrance sequence
 
@@ -284,12 +339,24 @@ The canvas arriving **last** is the whole trick. The words land first — LCP is
 **On the logo animation:** the current site opens with a full-screen splash of `Footing Logo Animation.mp4` that gates the page. Kill it. It costs ~1.2s before anyone reads a word, and a splash screen is a toll booth. Repurpose the animation as an inline 40px play-on-first-view in the nav, or drop it from the site entirely and keep it for the App Store and social. This is the single highest-impact conversion change in the whole redesign.
 
 ### Scroll trigger
-The hero pins for 40vh of scroll. During the pin: H1 and subhead drift up 60px and fade to 0 while the camera begins its descent and the background lerps `--subgrade → --substrate`. The CTA does **not** fade — it detaches and docks into the nav as a persistent pill, and stays there for the rest of the page. Unpin at 40vh, normal flow resumes.
+The hero pins for 40vh of scroll (`PIN_VH` in `src/scroll.ts`). During the pin: H1 and subhead drift up 60px and fade to 0 while the dial begins its travel toward centre and the background lerps `--subgrade → --substrate`. The CTA does **not** fade — it detaches and docks into the nav as a persistent pill, and stays there for the rest of the page. Unpin at 40vh, normal flow resumes.
 
 ### Mobile fallback
-No canvas. Background is a CSS radial gradient — `--subgrade` with a soft violet bloom at 120% bottom-center, which is exactly what the desktop scene shows in-frame anyway. Two SVG hairlines at the bottom edge suggest the strata. H1 drops to `clamp(38px, 11vw, 56px)`. Entrance sequence runs identically, minus the canvas step. The CTA is full-width and sticky-docks on scroll. The background lerp runs on mobile too — it's a CSS custom property animated by an `IntersectionObserver`, ~15 lines, and it's the emotional payload.
+No canvas — mobile takes the `flat` tier deliberately, not only as a capability fallback (`useCapability.ts`). H1 drops to `clamp(38px, 11vw, 56px)`.
+
+> ⚠️ **Open item — the flat tier was never updated for the ring.** `.flat-scene` in
+> `styles.css` still ships the slab-era fallback: a `--strata` radial bleed plus two
+> hairlines whose own comment says they "stand in for the cut edge and the strata behind
+> it." There is no dial on the flat tier at all. Since mobile is routed here on purpose
+> and is most of the traffic, the majority of visitors never see the hero's actual
+> argument — the gap between the arc's head and the floor tick. Fix: render the dial as a
+> static SVG ring with the same 34% fill and floor tick. The fill needn't animate; it
+> needs to be *present*. Entrance sequence runs identically, minus the canvas step. The CTA is full-width and sticky-docks on scroll. The background lerp runs on mobile too — it's a CSS custom property animated by an `IntersectionObserver`, ~15 lines, and it's the emotional payload.
 
 ### 2.2 Direction 2 — "Solid Ground"
+
+> *Not built. Kept as a record of the alternatives weighed against Direction 1. Its
+> background description predates the set change and still describes the slab.*
 
 **Eyebrow** — `Built for GLP-1 · Great for anyone tracking`
 
@@ -364,7 +431,7 @@ Ten sections. Each has one goal and drives exactly one action.
 **Goal** Prove we know their last failure better than they can describe it.
 **Content** *"Tracking shouldn't feel like getting graded."* The existing copy in `index.html` is very good — the pull-quote *"why am I doing this to myself?"* set in Instrument Serif italic is the emotional low point of the page and should be the largest non-headline type on the site. Beside it: the anti-card — red numbers, `+320 over`, `−38 under`, `Streak: Broken` — captioned *"Every other app, every single day."*
 **Action** Keep scrolling.
-**Light** `--subgrade → --substrate`. Camera enters the first stratum.
+**Light** `--subgrade → --substrate`. The dial slides to centre, grows, and dims to ~19% — this section belongs to the *old* way, so Footing's object steps back and lets the red scorecard take the frame.
 
 **Why here:** problem-agitation must precede solution or the solution has nothing to relieve. Critically, the failure is attributed to *the tools*, not the user — which is the non-shaming law applied to marketing, not just to Pulse. A visitor who reads Section 01 and thinks "that wasn't my fault" is now listening.
 
@@ -374,7 +441,7 @@ Ten sections. Each has one goal and drives exactly one action.
 **Goal** Deliver one genuinely new idea and convert it into authority.
 **Content** *"When your appetite disappears, the goal flips."* Not about eating less — about eating enough. Muscle is what's at risk. Protein is what protects it. Introduce "protein floor" **here**, where it's earned. One visual: a conventional deficit chart inverting into a floor-with-a-minimum.
 **Action** Keep scrolling.
-**Light** `--substrate`. The warm amber protein stratum passes the camera.
+**Light** `--substrate`. Fill steps to 44%. The dial is the room the copy sits in.
 
 **Why here — this is the most important placement decision on the page.** It is the only section delivering information the visitor doesn't already have. Information gaps are the strongest engine of continued attention there is, and closing one buys credibility that every subsequent claim borrows against. It must come *before* features, because after it, "Footing tracks protein floors" reads as an obvious solution to a problem they now understand rather than as a feature they have to evaluate.
 
@@ -387,7 +454,7 @@ Ten sections. Each has one goal and drives exactly one action.
 - **02 Honest, but useful** — Pulse reads the whole day and gives a specific move. Kills *"it just told me I was over."*
 - **03 Earned celebration** — the streak moment. Kills *"nothing good ever happened when I opened it."* **The only spring animation on the site lives here.**
 **Action** Keep scrolling.
-**Light** `--substrate → --strata`. Hydration and movement strata pass.
+**Light** `--substrate → --strata`. Fill 54% → 62%, still dimmed to backdrop.
 
 **Why here:** mechanism only lands after the problem is felt and the premise is accepted. Ordering the three beats by *effort → honesty → reward* mirrors the actual daily loop of using the app, which makes the product feel understood rather than listed.
 
@@ -397,7 +464,7 @@ Ten sections. Each has one goal and drives exactly one action.
 **Goal** Prove GLP-1 fluency at a depth a generic tracker cannot fake.
 **Content** The injection cycle. Protein density on low-appetite days. Hydration keeping pace. Dose reminders that never advise dosing. The existing GLP-1 card in `index.html` — *"Day 2 after your shot — appetite's usually lowest now"* — is the single most persuasive artifact in the current site. Give it a full section.
 **Action** Keep scrolling.
-**Light** `--strata`, approaching the glow.
+**Light** `--strata`. Fill 71% — one beat short of the floor, which is the point.
 
 **Why here:** this is the "they get *me*" beat, and it must come after generic capability. Reversed, GLP-1 specifics read as a niche limitation. In this order they read as depth.
 
@@ -407,9 +474,11 @@ Ten sections. Each has one goal and drives exactly one action.
 **Goal** Convert the name into a memory hook and pay off the entire visual metaphor.
 **Content** The existing copy is already right and needs almost no editing: a footing is the base poured beneath a floor so nothing above it sinks. Most apps here are named after the medication. This one is named after **the work.**
 **Action** Keep scrolling.
-**Light** **Act III.** The camera reaches the footing. It is the brightest object on the page, and the visitor realizes it has been the light source the whole way down.
+**Light** **The reward beat.** Fill jumps to 94% and clears the floor tick. The arc warms from indigo-violet to amber, brightens back to full, and scales up to 1.75 so the band sits *outside* the copy block — "Why Footing?" is framed inside the completed ring.
 
-**Why here — placement is load-bearing.** A brand-story section near the top is a riddle the visitor has no reason to solve. Placed here, after the value is proven, the metaphor arrives as a *reward*: the name suddenly means something, and named things are remembered. Note the deliberate one-beat gap — the light-source reveal happens visually in Section 05's scroll, and the copy explains the metaphor immediately after. Let them connect it themselves. That gap is worth more than any headline.
+**Why here — placement is load-bearing.** A brand-story section near the top is a riddle the visitor has no reason to solve. Placed here, after the value is proven, the metaphor arrives as a *reward*: the name suddenly means something, and named things are remembered. Note the deliberate one-beat gap — the ring visibly clears its floor, and the copy explains what a footing is immediately after. Let them connect it themselves. That gap is worth more than any headline.
+
+**The colour shift is the celebration.** No badge, no confetti, no trophy — the same non-shaming reward the app itself uses. This is the single most important moment in the choreography, and 1.75 is the ceiling on the scale: outer radius 2.72 × 1.75 ≈ 4.76 world units against a 4.9 half-frame, so any larger and the dial crops.
 
 ---
 
@@ -417,7 +486,7 @@ Ten sections. Each has one goal and drives exactly one action.
 **Goal** Remove commercial anxiety at the exact moment intent peaks.
 **Content** What you get. **Free during the beta** — say exactly that and nothing more; post-beta pricing is undecided (confirmed 2026-07-27), and inventing a number now is worse than silence. If FAQ #8 asks what it'll cost later, the honest answer is "not decided yet, and beta users will hear it from us before anything changes." iPhone-only, stated plainly. TestFlight install order spelled out — the existing site's two-step warning about opening TestFlight first is genuinely good UX writing, keep it verbatim. One CTA.
 **Action** `Join the beta` — **second highest-converting block on the page.**
-**Light** **Act IV begins.** Camera rises. `--strata → --ground`. Daylight.
+**Light** **Daylight begins.** `--strata → --ground`, driven by `--light-p`. Fill hits 100%; the dial dims to 42% and yields the page.
 
 **Why here:** intent peaks immediately after meaning. Ambiguity about price or platform at this exact moment is the most expensive ambiguity on the page. State it, don't bury it in the FAQ.
 
@@ -461,7 +530,7 @@ Revisit once TestFlight produces real quotes; add App Store rating at launch. Un
 **Goal** One action, no alternatives, no navigation.
 **Content** Restate the promise in the brand's own words: *"Stop getting graded. Start getting coached."* One button. The two-step TestFlight instruction repeated. Nothing else — no nav, no links, no footer above it.
 **Action** `Join the beta on TestFlight →`
-**Light** `--ground`, brightest point. Act IV completes: the full slab resolves, a horizon appears, the visitor is standing on it.
+**Light** `--ground`, brightest point. The dial has faded out entirely — it said everything it had to say at section 06, and the closing frame belongs to the copy and the CTA.
 
 **Why here:** the arc closes where it began — same promise, opposite light level. The visitor arrived in the dark and leaves on solid ground, and the page has spent 100vh × 9 physically demonstrating it.
 
@@ -482,7 +551,7 @@ The page runs **three nested arcs simultaneously**, which is why the order holds
 |---|---|---|
 | **Emotional** | dread → recognition → relief → steadiness | copy |
 | **Physical** | subgrade → daylight | background lerp |
-| **Spatial** | descent → the base → ascent | camera |
+| **Spatial** | dial travels to centre → clears the floor → fades out | fill, dim, scale |
 
 All three resolve at Section 09. When a visitor cannot articulate why a site felt good, this alignment is usually the reason.
 
@@ -506,53 +575,24 @@ All three resolve at Section 09. When a visitor cannot articulate why a site fel
 4. **Hero eyebrow** — `Now on TestFlight` vs `For anyone on a GLP-1`. Recommendation is the former; worth a real test.
 
 ---
+# Changelog
 
-# Addendum — Direction change (2026-07-27)
+**2026-07-27 — the set changed from the concrete slab to the protein ring.**
 
-**§1.6's slab is superseded. The set is now the protein ring.**
+This was originally recorded as an addendum contradicting §1.5–1.6. It has now been folded
+into those sections, so the document reads correctly top-down. Nothing is lost: §1.6 keeps
+the full record of why the slab and the contour terrain were rejected, because that
+reasoning is the test any future candidate has to pass.
 
-Two abstract sets were built and rejected in prototype: the concrete slab (§1.6)
-and a contour terrain. Both failed the same way, and it's worth writing down
-because it will apply to any future candidate.
+Two corrections the change forced, both easy to miss:
 
-**They illustrated the name instead of showing the product.** "Footing" → poured
-concrete is a one-to-one translation of a word, not an expression of what the app
-does. The visitor has to decode the metaphor, and what it says once decoded is
-only "solid ground" — true of any wellness brand. Neither set contained a single
-fact about nutrition, protein, or coaching. Concrete also fought the voice: the
-material read cold and industrial under a warm, non-shaming product.
+- **Depth of field is out**, not "non-negotiable" as originally written. The dial is the
+  subject; softening it is self-defeating. Bloom does the premium work instead.
+- **One arc, not four.** An intermediate version of this addendum specified two dim
+  supporting macro rings behind the subject. Those were built and cut — they read as
+  decoration and cost the frame its clarity. `Rings.tsx` is the authority.
 
-**The replacement is built from Footing's own vocabulary:**
-
-| Element | What it is | What it says |
-|---|---|---|
-| **The dial** | One thick emissive arc, indigo→violet, filling clockwise | "This is a nutrition tracker" — instantly, before any copy |
-| **The floor tick** | A marked minimum at 76% of the circle | The one idea no competitor has |
-| **Supporting arcs** | Two thinner, dimmer rings behind | Reads as macros, not as one abstract dial |
-| **The readout** | Live `63 / of 185g protein`, DOM text | Makes the number concrete |
-| **Pulse's line** | A message card in the hero, written to the persona bible | The coach demonstrating itself |
-
-**Scroll behaviour.** The fill is the page's spine: it walks from 34% toward the
-floor as the argument builds, and clears it at the reward beat. The colour going
-warm at that moment *is* the celebration — no badge, no confetti. Progress
-through the page equals progress through a day.
-
-**The Apple Activity rings risk** is real and is handled by the floor. Apple's
-rings are a score with no threshold; a single ring carrying a marked minimum you
-rise *to* is a different idea wearing a similar shape. That is also why there is
-one prominent ring rather than four concentric ones.
-
-**Sections must yield to the dial.** In section 01 the ring slides to centre,
-grows, and dims to ~28%, becoming the room the copy sits in rather than an object
-competing with it. This is practical — the dial and the scorecard both want the
-right-hand column — but it is also the argument staged: section 01 belongs to the
-*old* way, so Footing's object steps back while the red scorecard takes over, and
-returns brighter when the copy turns.
-
-**Also learned, and it applies to any set:** copy needs a directional scrim
-(`.hero::before`, `.s01::before`). A full-bleed background will otherwise put body
-text over whatever the scene happens to be doing there.
-
-The slab and terrain remain in-tree behind `?scene=slab` / `?scene=terrain` for
-comparison. Once the direction is confirmed, delete both along with
-`src/hero/variants.ts` and `src/SceneSwitch.tsx`.
+The slab and terrain were kept in-tree behind `?scene=slab` / `?scene=terrain` for
+comparison, along with `src/hero/variants.ts` and `src/SceneSwitch.tsx`. **All of that has
+since been deleted** — verified 2026-07-30, none of those files remain. `Rings.tsx` is the
+only set in the tree.
