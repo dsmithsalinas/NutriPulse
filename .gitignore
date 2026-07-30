@@ -14,3 +14,6 @@ Configurations/BuildNumber.xcconfig
 # Node — marketing/site-v2 prototype
 node_modules/
 dist/
+
+# Generated from footing-brand-guidelines.txt — not tracked
+marketing/footing-brand-guidelines.pdf
