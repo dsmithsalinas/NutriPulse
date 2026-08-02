@@ -56,6 +56,10 @@ enum TelemetrySignal: String {
     /// Pulse stays usable but its advice is generic; without this signal a "Pulse gave
     /// me a bad answer" report can't be told apart from "Pulse never had my profile".
     case coachProfileUnavailable = "coach.profileUnavailable"
+
+    /// A sync pass failed. Carries only the broad operation stage, never food,
+    /// health, account, or error-message content.
+    case syncFailed = "sync.failed"
 }
 
 // Parameter values for `TelemetrySignal.logIntentStarted` / `.logConfirmed`'s

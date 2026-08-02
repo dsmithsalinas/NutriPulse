@@ -39,6 +39,162 @@ final class FootingTests: XCTestCase {
     }
 }
 
+// MARK: - Trustworthy user-facing state
+
+final class TrustworthyStateTests: XCTestCase {
+    func testOfflinePendingChangesSayTheyAreOnlyOnThisPhone() {
+        let status = SyncEngine.statusMessage(
+            isOnline: false,
+            isSyncing: false,
+            pendingCount: 2,
+            failedStage: nil
+        )
+
+        XCTAssertEqual(status?.title, "Saved on this phone")
+        XCTAssertEqual(status?.canRetry, false)
+        XCTAssertTrue(status?.detail.contains("2 changes") == true)
+    }
+
+    func testFailedRefreshDoesNotClaimPendingDataWhenThereIsNone() {
+        let status = SyncEngine.statusMessage(
+            isOnline: true,
+            isSyncing: false,
+            pendingCount: 0,
+            failedStage: .goalRefresh
+        )
+
+        XCTAssertEqual(status?.title, "Couldn't refresh")
+        XCTAssertEqual(status?.canRetry, true)
+        XCTAssertTrue(status?.detail.contains("goal refresh") == true)
+    }
+
+    func testHealthySyncStateStaysOutOfTheWay() {
+        XCTAssertNil(SyncEngine.statusMessage(
+            isOnline: true,
+            isSyncing: false,
+            pendingCount: 0,
+            failedStage: nil
+        ))
+    }
+
+    func testAutomaticCoachMessagesCarryHistoricalContext() {
+        let message = CoachMessage(
+            id: UUID(),
+            userId: UUID(),
+            role: "assistant",
+            content: "A saved check-in",
+            messageType: "checkin",
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
+
+        XCTAssertTrue(message.isAutomatic)
+        XCTAssertTrue(message.automaticContextLabel?.hasPrefix("Check-in ·") == true)
+    }
+
+    func testChatMessagesDoNotGainAutomaticContextLabel() {
+        let message = CoachMessage(
+            id: UUID(),
+            userId: UUID(),
+            role: "assistant",
+            content: "A live reply",
+            messageType: "chat",
+            createdAt: Date()
+        )
+
+        XCTAssertNil(message.automaticContextLabel)
+    }
+
+    func testPasswordRecoveryRequiresEightMatchingCharacters() {
+        XCTAssertNotNil(PasswordRecoveryViewModel.passwordValidationError(
+            password: "short",
+            confirmation: "short"
+        ))
+        XCTAssertNotNil(PasswordRecoveryViewModel.passwordValidationError(
+            password: "long-enough",
+            confirmation: "different"
+        ))
+        XCTAssertNil(PasswordRecoveryViewModel.passwordValidationError(
+            password: "long-enough",
+            confirmation: "long-enough"
+        ))
+    }
+}
+
+// MARK: - Pulse suggestion pills
+
+final class CoachSuggestionTests: XCTestCase {
+    func testEmptyDayOffersPlanningInsteadOfPretendingThereIsProgress() {
+        let suggestions = CoachSuggestionBuilder.suggestions(
+            hasFoodLogs: false,
+            totalProteinG: 0,
+            proteinGoalG: 120,
+            hasWorkout: false,
+            hour: 9
+        )
+
+        XCTAssertEqual(suggestions, [
+            "Help me plan today",
+            "Give me an easy protein breakfast",
+            "Review my goals",
+        ])
+    }
+
+    func testProteinGapGetsSpecificNextMoves() {
+        let suggestions = CoachSuggestionBuilder.suggestions(
+            hasFoodLogs: true,
+            totalProteinG: 55,
+            proteinGoalG: 120,
+            hasWorkout: false,
+            hour: 18
+        )
+
+        XCTAssertEqual(suggestions, [
+            "Help me close my protein gap",
+            "Give me a dinner idea",
+            "Review my week",
+        ])
+    }
+
+    func testWorkoutMakesRecoveryTheFirstSuggestion() {
+        let suggestions = CoachSuggestionBuilder.suggestions(
+            hasFoodLogs: true,
+            totalProteinG: 70,
+            proteinGoalG: 120,
+            hasWorkout: true,
+            hour: 13
+        )
+
+        XCTAssertEqual(suggestions.first, "Plan my recovery meal")
+        XCTAssertEqual(suggestions.count, 3)
+    }
+
+    func testSelectedSuggestionRotatesOutAfterImmediateSend() {
+        let suggestions = CoachSuggestionBuilder.suggestions(
+            hasFoodLogs: true,
+            totalProteinG: 55,
+            proteinGoalG: 120,
+            hasWorkout: false,
+            hour: 18,
+            excluding: "Help me close my protein gap"
+        )
+
+        XCTAssertFalse(suggestions.contains("Help me close my protein gap"))
+        XCTAssertEqual(suggestions.count, 3)
+    }
+
+    func testSuggestionsAreCommandsNotEngagementQuestions() {
+        let suggestions = CoachSuggestionBuilder.suggestions(
+            hasFoodLogs: true,
+            totalProteinG: 120,
+            proteinGoalG: 120,
+            hasWorkout: false,
+            hour: 18
+        )
+
+        XCTAssertTrue(suggestions.allSatisfy { !$0.hasSuffix("?") })
+    }
+}
+
 // MARK: - GLP-1 dose formatting
 
 final class GLP1DoseFormattingTests: XCTestCase {

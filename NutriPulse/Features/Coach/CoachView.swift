@@ -60,6 +60,7 @@ struct CoachView: View {
             guard active else { return }
             Task {
                 await vm.loadIfNeeded()
+                await vm.refreshSuggestedPrompts()
                 await consumePendingPrompt()
             }
         }
@@ -159,13 +160,13 @@ struct CoachView: View {
     // MARK: - Quick actions
 
     private var showQuickActions: Bool {
-        !vm.messages.contains { $0.isUser } && !vm.isLoading
+        !vm.suggestedPrompts.isEmpty && !vm.isLoading
     }
 
     private var quickActionStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(quickActions, id: \.self) { action in
+                ForEach(vm.suggestedPrompts, id: \.self) { action in
                     Button {
                         Task { await vm.sendMessage(action) }
                     } label: {
@@ -179,21 +180,13 @@ struct CoachView: View {
                             .overlay(Capsule().strokeBorder(Theme.Colors.primary.opacity(0.28), lineWidth: 1))
                     }
                     .buttonStyle(.pressable)
+                    .accessibilityHint("Sends this message to Pulse")
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
     }
-
-    private let quickActions = [
-        "How did I do today?",
-        "Am I hitting my protein goal?",
-        "What should I eat for dinner?",
-        "How's my week looking?",
-        "I just worked out — what should I eat?",
-        "Why isn't my weight moving?"
-    ]
 
     // MARK: - Input bar
 
@@ -286,7 +279,14 @@ private struct MessageBubble: View {
     }
 
     private var bubbleText: some View {
-        Text(attributedContent)
+        VStack(alignment: .leading, spacing: 5) {
+            if let contextLabel = message.automaticContextLabel {
+                Text(contextLabel)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(message.isUser ? .white.opacity(0.8) : Theme.Colors.textFaint)
+            }
+            Text(attributedContent)
+        }
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
             .background {

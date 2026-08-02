@@ -1,0 +1,48 @@
+{
+  "source_type": "real Footing iOS Simulator screenshot",
+  "preservation": "The app screenshot is embedded without retouching or regenerated text.",
+  "exports": [
+    {
+      "path": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/out/app/jordan-today-feed.png",
+      "source": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/app-captures/jordan-today-2026-07-10.png",
+      "width": 1080,
+      "height": 1350,
+      "format": "PNG"
+    },
+    {
+      "path": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/out/app/jordan-today-story.png",
+      "source": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/app-captures/jordan-today-2026-07-10.png",
+      "width": 1080,
+      "height": 1920,
+      "format": "PNG"
+    },
+    {
+      "path": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/out/app/jordan-pulse-feed.png",
+      "source": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/app-captures/jordan-pulse-protein-gap.png",
+      "width": 1080,
+      "height": 1350,
+      "format": "PNG"
+    },
+    {
+      "path": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/out/app/jordan-pulse-story.png",
+      "source": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/app-captures/jordan-pulse-protein-gap.png",
+      "width": 1080,
+      "height": 1920,
+      "format": "PNG"
+    },
+    {
+      "path": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/out/app/jordan-analytics-feed.png",
+      "source": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/app-captures/jordan-analytics-30-days.png",
+      "width": 1080,
+      "height": 1350,
+      "format": "PNG"
+    },
+    {
+      "path": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/out/app/jordan-analytics-story.png",
+      "source": "/Users/dustinsmith-salinas/NutriPulse/marketing/social/app-captures/jordan-analytics-30-days.png",
+      "width": 1080,
+      "height": 1920,
+      "format": "PNG"
+    }
+  ]
+}

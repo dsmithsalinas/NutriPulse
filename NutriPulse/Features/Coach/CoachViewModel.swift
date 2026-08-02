@@ -8,6 +8,7 @@ final class CoachViewModel {
     var inputText: String = ""
     var isLoading: Bool = false
     var error: String? = nil
+    private(set) var suggestedPrompts: [String] = []
     private(set) var canLoadOlder = false
     private(set) var isLoadingOlder = false
     // History fetch failed (offline, 5xx). Drives the retry state — without it the tab is
@@ -47,6 +48,7 @@ final class CoachViewModel {
 
     private func loadAndInitialize() async {
         await loadProfile()
+        await refreshSuggestedPrompts()
         let historyLoaded = await loadHistory()
         // Same double-billing the reload() comment above describes, reached through a failed
         // fetch instead of a race: maybeGenerateCheckin's 8-hour cutoff reads `messages.last`,
@@ -89,6 +91,27 @@ final class CoachViewModel {
     private func ensureProfileLoaded() async {
         if profileLoadFailed { await loadProfile() }
         if profileLoadFailed { Telemetry.coachProfileUnavailable() }
+    }
+
+    // These are selected locally from the same current-day cache Today and Pulse use.
+    // No extra AI request is needed just to render chat furniture, and unsynced food or
+    // workouts can influence the suggestions immediately.
+    func refreshSuggestedPrompts(excluding excluded: String? = nil) async {
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+
+        let logs = (try? LocalStore.shared.fetchFoodLogs(for: .now, userId: userId)) ?? []
+        let goal = try? LocalStore.shared.fetchGoal(for: .now, userId: userId)
+        let workouts = (try? LocalStore.shared.fetchRecentWorkoutLogs(days: 1, userId: userId)) ?? []
+        let todaysWorkouts = workouts.filter { $0.logDate == Date.now.isoDateString }
+
+        suggestedPrompts = CoachSuggestionBuilder.suggestions(
+            hasFoodLogs: !logs.isEmpty,
+            totalProteinG: logs.reduce(0) { $0 + $1.totalProteinG },
+            proteinGoalG: goal?.proteinG,
+            hasWorkout: !todaysWorkouts.isEmpty,
+            hour: Calendar.current.component(.hour, from: .now),
+            excluding: excluded
+        )
     }
 
     private static let historyPageSize = 30
@@ -175,6 +198,7 @@ final class CoachViewModel {
     func sendMessage(_ overrideText: String? = nil) async {
         let text = (overrideText ?? inputText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isLoading else { return }
+        let selectedSuggestion = suggestedPrompts.contains(text) ? text : nil
 
         inputText = ""
         isLoading = true
@@ -239,6 +263,7 @@ final class CoachViewModel {
             }
         }
 
+        await refreshSuggestedPrompts(excluding: selectedSuggestion)
         isLoading = false
     }
 

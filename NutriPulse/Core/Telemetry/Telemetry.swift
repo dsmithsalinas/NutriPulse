@@ -88,4 +88,11 @@ enum Telemetry {
     static func coachProfileUnavailable() {
         TelemetryDeck.signal(TelemetrySignal.coachProfileUnavailable.rawValue)
     }
+
+    static func syncFailed(stage: String) {
+        TelemetryDeck.signal(
+            TelemetrySignal.syncFailed.rawValue,
+            parameters: ["stage": stage]
+        )
+    }
 }

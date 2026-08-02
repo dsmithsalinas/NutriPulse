@@ -68,6 +68,12 @@ struct TodayView: View {
                     )
                     .padding(.top, Theme.Spacing.sm)
 
+                    if let status = SyncEngine.shared.statusMessage {
+                        SyncStatusBanner(status: status) {
+                            Task { await SyncEngine.shared.syncNow() }
+                        }
+                    }
+
                     if vm.isLoading {
                         ProgressView()
                             .frame(maxWidth: .infinity, minHeight: 200)
@@ -290,6 +296,42 @@ struct TodayView: View {
                 vm.snapToTodayIfDayChanged()
             }
         }
+    }
+}
+
+private struct SyncStatusBanner: View {
+    let status: SyncStatusMessage
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Image(systemName: status.icon)
+                .foregroundStyle(Theme.Colors.primary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(status.title)
+                    .font(.subheadline.weight(.semibold))
+                Text(status.detail)
+                    .font(.caption)
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+
+            Spacer(minLength: Theme.Spacing.sm)
+
+            if status.canRetry {
+                Button("Try again", action: retry)
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(Theme.Spacing.sm)
+        .background(Theme.Colors.surfaceCard)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

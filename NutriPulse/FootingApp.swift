@@ -83,6 +83,9 @@ struct FootingApp: App {
             RootView()
                 .environment(appState)
                 .modelContainer(Self.modelContainer)
+                .onOpenURL { url in
+                    supabase.handle(url)
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {

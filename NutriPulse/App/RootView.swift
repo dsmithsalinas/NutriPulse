@@ -12,6 +12,8 @@ struct RootView: View {
             if appState.isLoading {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if appState.isPasswordRecoveryFlow {
+                ResetPasswordView()
             } else if !appState.isAuthenticated {
                 AuthView()
             } else if appState.profileLoadFailed {

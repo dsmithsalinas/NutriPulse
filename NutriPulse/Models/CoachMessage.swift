@@ -9,6 +9,22 @@ struct CoachMessage: Codable, Identifiable {
     let createdAt: Date
 
     var isUser: Bool { role == "user" }
+    var isAutomatic: Bool {
+        messageType == "checkin" || messageType == "weekly_summary"
+    }
+
+    var automaticContextLabel: String? {
+        guard isAutomatic else { return nil }
+        let title = messageType == "weekly_summary" ? "Weekly summary" : "Check-in"
+        let date = createdAt.formatted(
+            .dateTime
+                .month(.abbreviated)
+                .day()
+                .hour()
+                .minute()
+        )
+        return "\(title) · \(date)"
+    }
 
     enum CodingKeys: String, CodingKey {
         case id

@@ -27,6 +27,8 @@ Frame every nudge as protecting results, never as correcting failure: "protect y
 COMMUNICATION STYLE
 - Use the user's actual logged food names when referencing what they ate. Be observational, not surveillance-y.
 - Calibrate response length to the question. "Am I hitting protein?" gets a short answer with the number. "Why isn't my weight moving?" gets a fuller analysis.
+- Give a complete, self-contained answer by default. Do not add "Want me to…?", "Would you like…?", or any other closing question merely to keep the conversation going. Finish with the useful answer or the single strongest next move.
+- Ask at most one follow-up question, and only when missing information would materially change the advice. If a safe, reasonable assumption is available, state it and answer instead. Daily check-ins, weekly summaries, simple progress answers, and safety redirects never end with a question.
 - Do not start responses with "I" or "As Pulse" or "As your coach" or "Great question."
 - No markdown headers. Write naturally. Bullet points are fine for lists.
 - When pushing back on counterproductive behavior: state the consequence in concrete terms first, then offer a specific path forward. Never flag a problem without a solution.
@@ -119,7 +121,10 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
   const week = o(c.sevenDayHistory)
   const weight = o(c.weightTrend)
   const bodyGoals = o(c.bodyGoals)
-  const hk = o(c.healthKit)
+  // iOS historically sends `healthKit`; Android sends the vendor-neutral
+  // `healthConnect` block. Accept both so the coach never silently drops
+  // Android recovery data while older iOS builds remain compatible.
+  const hk = o(c.healthConnect ?? c.healthKit)
   const glp1 = o(c.glp1)
 
   return compact({
@@ -168,7 +173,12 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
       leanMassFloorKg: n(bodyGoals.leanMassFloorKg),
     }),
     healthKit: hk && compact({
-      sleepLastNight: s(hk.sleepLastNight, 20), restingHRBpm: i(hk.restingHRBpm), hrv: s(hk.hrv, 20),
+      sleepLastNight: s(hk.sleepLastNight, 20),
+      restingHRBpm: i(hk.restingHRBpm),
+      hrv: s(hk.hrv, 20),
+      steps: i(hk.steps),
+      exerciseMinutes: i(hk.exerciseMinutes),
+      distanceMeters: n(hk.distanceMeters),
     }),
     glp1: glp1 && compact({
       medication: s(glp1.medication, 40), doseMg: n(glp1.doseMg),
@@ -181,10 +191,10 @@ function buildSystemPrompt(context: Record<string, unknown> | undefined, message
   let instruction = ''
   if (messageType === 'checkin') {
     instruction = `\n\nMESSAGE TYPE: DAILY CHECK-IN
-Generate a brief, contextual greeting — 1 to 2 sentences maximum. Pick the single most notable data point from the user context and lead with it. Make it specific and actionable. Do not open with "Good morning/afternoon/evening." Do not ask multiple questions.`
+Generate a brief, contextual greeting — 1 to 2 sentences maximum. Pick the single most notable data point from the user context and lead with it. Make it specific and actionable. Do not open with "Good morning/afternoon/evening." Do not ask a question.`
   } else if (messageType === 'weekly_summary') {
     instruction = `\n\nMESSAGE TYPE: WEEKLY SUMMARY
-Generate a concise weekly recap covering: macro adherence vs goal, weight trend if available, and one specific focus area for the coming week. 3–4 short sentences or a brief bulleted list. Be honest and motivating.`
+Generate a concise weekly recap covering: macro adherence vs goal, weight trend if available, and one specific focus area for the coming week. 3–4 short sentences or a brief bulleted list. Be honest and motivating. Do not ask a question.`
   }
 
   return `${PULSE_SYSTEM_PROMPT}${instruction}

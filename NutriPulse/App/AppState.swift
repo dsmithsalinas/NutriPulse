@@ -19,6 +19,7 @@ final class AppState {
     // the two sent every authenticated user with a flaky connection back through
     // onboarding — where re-running the save duplicated their starting weight.
     var profileLoadFailed = false
+    var isPasswordRecoveryFlow = false
 
     var isAuthenticated: Bool { session != nil }
 
@@ -45,6 +46,10 @@ final class AppState {
         for await (event, session) in supabase.auth.authStateChanges {
             self.session = session
 
+            if event == .passwordRecovery {
+                isPasswordRecoveryFlow = true
+            }
+
             // Match on the event rather than `session == nil`: the stream also emits a
             // nil-session .initialSession on a signed-out cold launch, and wiping there
             // would be pointless work. .signedOut is the single funnel for both the
@@ -70,6 +75,7 @@ final class AppState {
     private func handleSignedOut() {
         profile = nil
         profileLoadFailed = false
+        isPasswordRecoveryFlow = false
 
         try? LocalStore.shared.wipeAll()
         FavoritesStore.shared.reset()
@@ -116,5 +122,9 @@ final class AppState {
     func setProfile(_ profile: UserProfile) {
         self.profile = profile
         self.profileLoadFailed = false
+    }
+
+    func finishPasswordRecovery() {
+        isPasswordRecoveryFlow = false
     }
 }

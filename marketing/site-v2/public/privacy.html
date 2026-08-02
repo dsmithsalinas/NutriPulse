@@ -62,13 +62,13 @@
 <main class="wrap">
 
   <h1>Privacy Policy</h1>
-  <p class="updated">Last updated: July 10, 2026</p>
+  <p class="updated">Last updated: August 1, 2026</p>
 
   <p>
     This policy explains what information Footing collects, how it's used, and who it's shared
     with. Footing is a nutrition and wellness tracking app; some of what it handles — food
-    logs, weight, GLP-1 medication schedules, and optional Apple Health data — is health
-    information, so we've tried to be specific rather than generic here.
+    logs, weight, GLP-1 medication schedules, and optional Apple Health or Android Health
+    Connect data — is health information, so we've tried to be specific rather than generic here.
   </p>
 
   <h2><span class="n">1.</span> Information we collect</h2>
@@ -87,19 +87,24 @@
         </tr>
         <tr>
           <th>Voice input (optional)</th>
-          <td>When you use the microphone to speak a food log, your speech is transcribed to
-            text using Apple's Speech Recognition. We don't record or store the audio — only the
-            resulting text becomes a log. Requires your microphone and speech-recognition
-            permission.</td>
+          <td>When you use voice input to speak a food log, your speech is transcribed by the
+            speech-recognition service on your device (Apple Speech Recognition on iOS or your
+            configured Android speech service). Footing doesn't record or store the audio — only
+            the resulting text becomes a log. This requires the permissions requested by that
+            service.</td>
         </tr>
         <tr>
           <th>GLP-1 tracking</th>
           <td>Medication, dose, injection site and timing — only if you choose to use this feature.</td>
         </tr>
         <tr>
-          <th>Apple Health (optional)</th>
-          <td>Sleep, resting heart rate, heart rate variability, and active energy burned — only
-            if you connect Apple Health, and only to show it to you and give Pulse context.</td>
+          <th>Apple Health / Health Connect (optional)</th>
+          <td>Depending on your device: steps, distance, exercise, sleep, heart rate, resting heart
+            rate, heart rate variability, active energy, weight, body-fat percentage, and lean
+            body mass. Footing reads only the categories you approve, to show them to you, import
+            selected records into your Footing account, and give Pulse context. When you approve
+            write access, Footing can also save workouts, weight, body fat, and lean mass that you
+            log in Footing back to Apple Health or Android Health Connect.</td>
         </tr>
         <tr>
           <th>Pulse chat</th>
@@ -169,6 +174,14 @@
           <td>Standard to those Apple frameworks; governed by Apple's own privacy terms. Spoken
             food logs are transcribed by Apple's Speech Recognition.</td>
         </tr>
+        <tr>
+          <th>Google / Android system services</th>
+          <td>Google sign-in, Health Connect, notifications, camera barcode scanning, and optional
+            Android speech recognition</td>
+          <td>Standard to the Android services you choose to use and the permissions you grant;
+            governed by the applicable provider's privacy terms. Footing does not send your
+            Health Connect data to Google on its own.</td>
+        </tr>
       </tbody>
     </table>
   </div>
@@ -178,7 +191,9 @@
     Your data is kept for as long as your account exists. You can permanently delete your
     account and all associated data at any time from <strong>Profile → Delete Account</strong>
     in the app. This is immediate and irreversible — it removes your logs, goals, weight
-    history, GLP-1 records, chat history, and feedback.
+    history, GLP-1 records, chat history, and feedback stored with your Footing account. Records
+    that you asked Footing to write into Apple Health or Health Connect remain in that connected
+    health store and can be reviewed or deleted using its own controls.
   </p>
 
   <h2><span class="n">5.</span> Security</h2>

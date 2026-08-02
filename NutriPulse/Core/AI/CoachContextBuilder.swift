@@ -110,7 +110,6 @@ struct CoachContextBundle: Encodable {
 // MARK: - Builder
 
 struct CoachContextBuilder {
-    private let foodLogRepo = FoodLogRepository()
     private let analyticsRepo = AnalyticsRepository()
     private let goalRepo = GoalRepository()
     private let glp1Repo = GLP1Repository()
@@ -119,11 +118,9 @@ struct CoachContextBuilder {
         // HealthKitManager.shared is @MainActor — capture it on main actor first
         let hk = await MainActor.run { HealthKitManager.shared }
 
-        async let logsTask = foodLogRepo.fetchLogs(for: .now)
         // 30 days so CelebrationEngine can see streaks longer than a week;
         // the "7-day history" narrative below just slices the tail of this.
         async let summariesTask = analyticsRepo.fetchDailySummaries(days: 30)
-        async let goalTask = goalRepo.fetchGoal(for: .now)
         async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
         async let weightTask = analyticsRepo.fetchWeightLogs(days: 7)
         async let bodyGoalsTask = BodyGoalsRepository().fetch()
@@ -132,9 +129,29 @@ struct CoachContextBuilder {
         async let hrTask = hk.fetchRestingHeartRate(for: .now)
         async let hrvTask = hk.fetchHRV(for: .now)
 
-        let logs = (try? await logsTask) ?? []
+        // Today is local-first so it can include a meal the user just logged while
+        // offline. Pulse must use that same snapshot or the two tabs can tell
+        // different stories about the same day.
+        let userId = try? await supabase.auth.session.user.id
+        var logs: [FoodLog] = []
+        var goal: DailyGoal?
+        if let userId {
+            (logs, goal) = await MainActor.run {
+                (
+                    (try? LocalStore.shared.fetchFoodLogs(for: .now, userId: userId)) ?? [],
+                    try? LocalStore.shared.fetchGoal(for: .now, userId: userId)
+                )
+            }
+        }
+
+        // Match Today's first-launch cache-miss behavior. Once fetched, cache the
+        // goal so both surfaces continue reading the same local source.
+        if goal == nil, let remoteGoal = try? await goalRepo.fetchGoal(for: .now) {
+            goal = remoteGoal
+            await MainActor.run { try? LocalStore.shared.upsertGoal(remoteGoal) }
+        }
+
         let summaries = (try? await summariesTask) ?? []
-        let goal: DailyGoal? = (try? await goalTask) ?? nil
         let glp1Logs = (try? await glp1Task) ?? []
         let weightLogs = (try? await weightTask) ?? []
         let bodyGoals = (try? await bodyGoalsTask) ?? nil
@@ -147,7 +164,7 @@ struct CoachContextBuilder {
         // ago is still pendingCreate locally, and the coach should know about the
         // session the user just finished. LocalStore is @MainActor, hence the hop.
         var workouts: [WorkoutLog] = []
-        if let userId = try? await supabase.auth.session.user.id {
+        if let userId {
             workouts = await MainActor.run {
                 (try? LocalStore.shared.fetchRecentWorkoutLogs(days: 7, userId: userId)) ?? []
             }

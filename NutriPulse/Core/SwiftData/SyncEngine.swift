@@ -2,6 +2,23 @@ import Foundation
 import Network
 import Observation
 
+enum SyncFailureStage: String {
+    case foodUpload = "food upload"
+    case waterUpload = "water upload"
+    case workoutUpload = "workout upload"
+    case goalRefresh = "goal refresh"
+    case foodRefresh = "food refresh"
+    case waterRefresh = "water refresh"
+    case workoutRefresh = "workout refresh"
+}
+
+struct SyncStatusMessage: Equatable {
+    let icon: String
+    let title: String
+    let detail: String
+    let canRetry: Bool
+}
+
 // Bridges LocalStore ↔ Supabase.
 // Push: flushes pendingCreate/pendingDelete records to Supabase.
 // Pull: fetches recent remote records and upserts them into LocalStore.
@@ -15,6 +32,60 @@ final class SyncEngine {
     var isSyncing    = false
     var isOnline     = true
     private(set) var lastSyncAt: Date? = nil
+    private(set) var lastSyncAttemptAt: Date? = nil
+    private(set) var failedStage: SyncFailureStage? = nil
+
+    var statusMessage: SyncStatusMessage? {
+        Self.statusMessage(
+            isOnline: isOnline,
+            isSyncing: isSyncing,
+            pendingCount: pendingCount,
+            failedStage: failedStage
+        )
+    }
+
+    nonisolated static func statusMessage(
+        isOnline: Bool,
+        isSyncing: Bool,
+        pendingCount: Int,
+        failedStage: SyncFailureStage?
+    ) -> SyncStatusMessage? {
+        if !isOnline, pendingCount > 0 {
+            return SyncStatusMessage(
+                icon: "iphone.gen3",
+                title: "Saved on this phone",
+                detail: "\(pendingCount) \(pendingCount == 1 ? "change is" : "changes are") waiting for a connection.",
+                canRetry: false
+            )
+        }
+        if let failedStage {
+            return SyncStatusMessage(
+                icon: "exclamationmark.arrow.triangle.2.circlepath",
+                title: pendingCount > 0 ? "Saved on this phone" : "Couldn't refresh",
+                detail: pendingCount > 0
+                    ? "\(pendingCount) \(pendingCount == 1 ? "change hasn't" : "changes haven't") synced yet."
+                    : "Footing couldn't finish its \(failedStage.rawValue).",
+                canRetry: isOnline
+            )
+        }
+        if isSyncing, pendingCount > 0 {
+            return SyncStatusMessage(
+                icon: "arrow.triangle.2.circlepath",
+                title: "Saving your changes",
+                detail: "\(pendingCount) \(pendingCount == 1 ? "change is" : "changes are") syncing now.",
+                canRetry: false
+            )
+        }
+        if pendingCount > 0 {
+            return SyncStatusMessage(
+                icon: "iphone.gen3",
+                title: "Saved on this phone",
+                detail: "\(pendingCount) \(pendingCount == 1 ? "change is" : "changes are") waiting to sync.",
+                canRetry: isOnline
+            )
+        }
+        return nil
+    }
 
     private let monitor      = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "com.nutripulse.network")
@@ -59,18 +130,27 @@ final class SyncEngine {
             return
         }
         isSyncing = true
+        failedStage = nil
+        lastSyncAttemptAt = .now
 
-        await pushPendingFoodLogs()
-        await pushPendingWaterLogs()
-        await pushPendingWorkoutLogs()
-        await pullGoal()
-        await pullRecentFoodLogs()
-        await pullTodayWater()
-        await pullRecentWorkoutLogs()
+        let results: [(SyncFailureStage, Bool)] = [
+            (.foodUpload, await pushPendingFoodLogs()),
+            (.waterUpload, await pushPendingWaterLogs()),
+            (.workoutUpload, await pushPendingWorkoutLogs()),
+            (.goalRefresh, await pullGoal()),
+            (.foodRefresh, await pullRecentFoodLogs()),
+            (.waterRefresh, await pullTodayWater()),
+            (.workoutRefresh, await pullRecentWorkoutLogs()),
+        ]
 
         isSyncing = false
         refreshPendingCount()
-        lastSyncAt = .now
+        if let failure = results.first(where: { !$0.1 }) {
+            failedStage = failure.0
+            Telemetry.syncFailed(stage: failure.0.rawValue)
+        } else {
+            lastSyncAt = .now
+        }
 
         await flushIfRequested()
     }
@@ -90,13 +170,23 @@ final class SyncEngine {
             return
         }
         isSyncing = true
+        failedStage = nil
+        lastSyncAttemptAt = .now
 
-        await pushPendingFoodLogs()
-        await pushPendingWaterLogs()
-        await pushPendingWorkoutLogs()
+        let results: [(SyncFailureStage, Bool)] = [
+            (.foodUpload, await pushPendingFoodLogs()),
+            (.waterUpload, await pushPendingWaterLogs()),
+            (.workoutUpload, await pushPendingWorkoutLogs()),
+        ]
 
         isSyncing = false
         refreshPendingCount()
+        if let failure = results.first(where: { !$0.1 }) {
+            failedStage = failure.0
+            Telemetry.syncFailed(stage: failure.0.rawValue)
+        } else {
+            lastSyncAt = .now
+        }
 
         await flushIfRequested()
     }
@@ -107,11 +197,20 @@ final class SyncEngine {
         while needsAnotherPush, isOnline, !isSyncing {
             needsAnotherPush = false
             isSyncing = true
-            await pushPendingFoodLogs()
-            await pushPendingWaterLogs()
-            await pushPendingWorkoutLogs()
+            let results: [(SyncFailureStage, Bool)] = [
+                (.foodUpload, await pushPendingFoodLogs()),
+                (.waterUpload, await pushPendingWaterLogs()),
+                (.workoutUpload, await pushPendingWorkoutLogs()),
+            ]
             isSyncing = false
             refreshPendingCount()
+            if let failure = results.first(where: { !$0.1 }) {
+                failedStage = failure.0
+                Telemetry.syncFailed(stage: failure.0.rawValue)
+            } else {
+                failedStage = nil
+                lastSyncAt = .now
+            }
         }
         needsAnotherPush = false
     }
@@ -122,8 +221,10 @@ final class SyncEngine {
     // any of the awaits below. Every value the request depends on — including the
     // revision the completion handler compares against — is therefore snapshotted
     // into locals *before* the await, never re-read from `log` afterwards.
-    private func pushPendingFoodLogs() async {
-        if let pending = try? LocalStore.shared.pendingFoodLogs() {
+    private func pushPendingFoodLogs() async -> Bool {
+        var succeeded = true
+        do {
+            let pending = try LocalStore.shared.pendingFoodLogs()
             for log in pending {
                 let id       = log.id
                 let revision = log.revision
@@ -132,13 +233,14 @@ final class SyncEngine {
                     try await supabase.from("food_logs")
                         .upsert(payload, onConflict: "id", ignoreDuplicates: true)
                         .execute()
-                    try? LocalStore.shared.markFoodLogCreated(id: id, pushedRevision: revision)
-                } catch { }
+                    try LocalStore.shared.markFoodLogCreated(id: id, pushedRevision: revision)
+                } catch { succeeded = false }
             }
-        }
+        } catch { succeeded = false }
         // Unlike creates, this is a real UPDATE — the row already exists
         // remotely, and upsert's ignoreDuplicates would otherwise skip it.
-        if let toUpdate = try? LocalStore.shared.pendingUpdateFoodLogs() {
+        do {
+            let toUpdate = try LocalStore.shared.pendingUpdateFoodLogs()
             for log in toUpdate {
                 let id       = log.id
                 let revision = log.revision
@@ -148,35 +250,47 @@ final class SyncEngine {
                         .update(payload)
                         .eq("id", value: id)
                         .execute()
-                    try? LocalStore.shared.markFoodLogUpdated(id: id, pushedRevision: revision)
-                } catch { }
+                    try LocalStore.shared.markFoodLogUpdated(id: id, pushedRevision: revision)
+                } catch { succeeded = false }
             }
-        }
+        } catch { succeeded = false }
         // A tombstone for a row that never reached the server deletes zero rows —
         // no error, and the local row is cleaned up either way.
-        if let toDelete = try? LocalStore.shared.deletedFoodLogs() {
+        do {
+            let toDelete = try LocalStore.shared.deletedFoodLogs()
             for log in toDelete {
                 let id = log.id
                 do {
                     try await supabase.from("food_logs").delete().eq("id", value: id).execute()
-                    try? LocalStore.shared.removeFoodLogAfterDelete(id: id)
-                } catch { }
+                    try LocalStore.shared.removeFoodLogAfterDelete(id: id)
+                } catch { succeeded = false }
             }
-        }
+        } catch { succeeded = false }
+        return succeeded
     }
 
     // MARK: - Push water logs
 
-    private func pushPendingWaterLogs() async {
-        guard let pending = try? LocalStore.shared.pendingWaterLogs() else { return }
+    private func pushPendingWaterLogs() async -> Bool {
+        let pending: [SDWaterLog]
+        do {
+            pending = try LocalStore.shared.pendingWaterLogs()
+        } catch {
+            return false
+        }
+
+        var succeeded = true
         for log in pending {
             do {
                 try await supabase.from("water_logs")
                     .upsert(WaterLogInsert(from: log), onConflict: "id", ignoreDuplicates: true)
                     .execute()
-                try? LocalStore.shared.markWaterLogSynced(id: log.id)
-            } catch { }
+                try LocalStore.shared.markWaterLogSynced(id: log.id)
+            } catch {
+                succeeded = false
+            }
         }
+        return succeeded
     }
 
     // MARK: - Push workout logs
@@ -186,42 +300,47 @@ final class SyncEngine {
     // possible mid-flight mutation (a delete). The upsert's onConflict "id" also makes
     // re-pushing after a half-failed batch safe, and the server's partial unique index
     // on (user_id, healthkit_uuid) independently rejects duplicate HealthKit imports.
-    private func pushPendingWorkoutLogs() async {
-        if let pending = try? LocalStore.shared.pendingWorkoutLogs() {
+    private func pushPendingWorkoutLogs() async -> Bool {
+        var succeeded = true
+        do {
+            let pending = try LocalStore.shared.pendingWorkoutLogs()
             for log in pending {
                 let id = log.id
                 do {
                     try await supabase.from("workout_logs")
                         .upsert(WorkoutLogInsert(from: log), onConflict: "id", ignoreDuplicates: true)
                         .execute()
-                    try? LocalStore.shared.markWorkoutLogSynced(id: id)
-                } catch { }
+                    try LocalStore.shared.markWorkoutLogSynced(id: id)
+                } catch { succeeded = false }
             }
-        }
-        if let toDelete = try? LocalStore.shared.deletedWorkoutLogs() {
+        } catch { succeeded = false }
+        do {
+            let toDelete = try LocalStore.shared.deletedWorkoutLogs()
             for log in toDelete {
                 let id = log.id
                 do {
                     try await supabase.from("workout_logs").delete().eq("id", value: id).execute()
-                    try? LocalStore.shared.removeWorkoutLogAfterDelete(id: id)
-                } catch { }
+                    try LocalStore.shared.removeWorkoutLogAfterDelete(id: id)
+                } catch { succeeded = false }
             }
-        }
+        } catch { succeeded = false }
+        return succeeded
     }
 
     // MARK: - Pull goal
 
-    private func pullGoal() async {
+    private func pullGoal() async -> Bool {
         do {
             if let goal = try await GoalRepository().fetchGoal(for: .now) {
-                try? LocalStore.shared.upsertGoal(goal)
+                try LocalStore.shared.upsertGoal(goal)
             }
-        } catch { }
+            return true
+        } catch { return false }
     }
 
     // MARK: - Pull food logs (last 7 days)
 
-    private func pullRecentFoodLogs() async {
+    private func pullRecentFoodLogs() async -> Bool {
         do {
             let userId = try await supabase.auth.session.user.id
             let cal = Calendar.current
@@ -233,23 +352,24 @@ final class SyncEngine {
                 .execute()
                 .value
             for log in logs {
-                try? LocalStore.shared.upsertFoodLog(from: log)
+                try LocalStore.shared.upsertFoodLog(from: log)
             }
             // Reconcile deletions. Anything synced in this window that the server didn't
             // return was deleted on another device. Only reachable because the fetch above
             // succeeded — on failure we throw and leave the cache alone rather than
             // interpreting "no rows" as "everything was deleted".
-            try? LocalStore.shared.pruneDeletedFoodLogs(
+            try LocalStore.shared.pruneDeletedFoodLogs(
                 userId: userId,
                 since: startDate.isoDateString,
                 remoteIds: Set(logs.map(\.id))
             )
-        } catch { }
+            return true
+        } catch { return false }
     }
 
     // MARK: - Pull workout logs (last 7 days)
 
-    private func pullRecentWorkoutLogs() async {
+    private func pullRecentWorkoutLogs() async -> Bool {
         do {
             let userId = try await supabase.auth.session.user.id
             let cal = Calendar.current
@@ -261,24 +381,25 @@ final class SyncEngine {
                 .execute()
                 .value
             for log in logs {
-                try? LocalStore.shared.upsertWorkoutLog(from: log)
+                try LocalStore.shared.upsertWorkoutLog(from: log)
             }
             // Same deletion-reconciliation contract as pullRecentFoodLogs: only
             // reachable after a successful fetch, so "no rows" is never misread
             // as "everything was deleted".
-            try? LocalStore.shared.pruneDeletedWorkoutLogs(
+            try LocalStore.shared.pruneDeletedWorkoutLogs(
                 userId: userId,
                 since: startDate.isoDateString,
                 remoteIds: Set(logs.map(\.id))
             )
-        } catch { }
+            return true
+        } catch { return false }
     }
 
     // MARK: - Pull today's water
 
-    private func pullTodayWater() async {
+    private func pullTodayWater() async -> Bool {
         do {
-            guard let userId = try? await supabase.auth.session.user.id else { return }
+            let userId = try await supabase.auth.session.user.id
             let rows: [WaterLog] = try await supabase
                 .from("water_logs")
                 .select()
@@ -286,12 +407,13 @@ final class SyncEngine {
                 .execute()
                 .value
             for row in rows {
-                try? LocalStore.shared.upsertWaterLog(
+                try LocalStore.shared.upsertWaterLog(
                     id: row.id, userId: userId,
                     logDate: row.logDate, amountMl: row.amountMl, loggedAt: row.loggedAt
                 )
             }
-        } catch { }
+            return true
+        } catch { return false }
     }
 }
 

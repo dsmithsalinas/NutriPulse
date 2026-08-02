@@ -3,6 +3,7 @@ import AuthenticationServices
 
 struct AuthView: View {
     @State private var vm = AuthViewModel()
+    @State private var showForgotPassword = false
 
     var body: some View {
         VStack(spacing: Theme.Spacing.lg) {
@@ -33,6 +34,14 @@ struct AuthView: View {
                     .padding()
                     .background(Color(.secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                if !vm.isSignUp {
+                    Button("Forgot password?") {
+                        showForgotPassword = true
+                    }
+                    .font(.footnote.weight(.medium))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             }
 
             if let error = vm.errorMessage {
@@ -78,5 +87,8 @@ struct AuthView: View {
             Spacer()
         }
         .padding(Theme.Spacing.lg)
+        .sheet(isPresented: $showForgotPassword) {
+            ForgotPasswordView(initialEmail: vm.email)
+        }
     }
 }
