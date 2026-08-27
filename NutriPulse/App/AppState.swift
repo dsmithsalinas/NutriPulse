@@ -27,6 +27,8 @@ final class AppState {
     // coach to pick up. MainTabView switches to the Pulse tab when it's set; CoachView sends
     // it and clears it. Keeps the deep-link one-directional and stateless.
     var pendingCoachPrompt: String? = nil
+    var pendingQuickAction: FootingQuickAction? = nil
+    var pendingSmartNotificationRoute: SmartNotificationRoute? = nil
 
     func askPulse(_ prompt: String) {
         pendingCoachPrompt = prompt
@@ -83,6 +85,8 @@ final class AppState {
         for key in Self.accountScopedDefaultsKeys {
             UserDefaults.standard.removeObject(forKey: key)
         }
+        NotificationManager.shared.cancelSmartNotifications()
+        SmartNotificationHistoryStore.clear()
     }
 
     // Display preferences (unitSystem) are deliberately excluded — a device preference,
@@ -92,25 +96,43 @@ final class AppState {
         "chatHistoryVersion",
         "glp1PlannedDoseMg",
         "doseCardDismissedDay",
+        NotificationManager.smartCoachingEnabledKey,
+        NotificationManager.smartSuppressedDayKey,
+        SmartNotificationPreferences.workoutKey,
+        SmartNotificationPreferences.proteinKey,
+        SmartNotificationPreferences.appetiteKey,
+        SmartNotificationPreferences.mealKey,
+        SmartNotificationPreferences.quietStartKey,
+        SmartNotificationPreferences.quietEndKey,
+        LowAppetitePreparationStore.completedKey,
         AuthViewModel.pendingAppleFullNameKey,
     ]
 
-    // Selects into an array rather than .single() on purpose: .single() throws when
-    // the row is absent, which is indistinguishable from a network failure. An empty
-    // array means "no profile row yet" (the sign-up trigger hasn't fired) → onboarding.
-    // A thrown error means "we don't know" → retry screen, never onboarding.
+    // Signup always creates a profile row in the database trigger. Therefore an
+    // authenticated user seeing zero rows is not a new-user signal: it means the JWT
+    // was not attached/refreshed yet, or access failed. Retry once, then fail closed
+    // into the retry screen. The session delivered by authStateChanges is authoritative:
+    // re-reading Auth's persisted session inside that callback races the SDK's storage
+    // update and can throw before the first profile request is even made.
     func fetchProfile() async {
         guard let userId = session?.user.id else { return }
         do {
-            let rows: [UserProfile] = try await supabase
-                .from("profiles")
-                .select()
-                .eq("id", value: userId)
-                .limit(1)
-                .execute()
-                .value
-            profile = rows.first
-            profileLoadFailed = false
+            for attempt in 0..<2 {
+                let rows: [UserProfile] = try await supabase
+                    .from("profiles")
+                    .select()
+                    .eq("id", value: userId)
+                    .limit(1)
+                    .execute()
+                    .value
+                if let loaded = rows.first {
+                    profile = loaded
+                    profileLoadFailed = false
+                    return
+                }
+                if attempt == 0 { try await Task.sleep(for: .milliseconds(300)) }
+            }
+            throw ProfileAccessError.profileNotVisible
         } catch {
             profile = nil
             profileLoadFailed = true
@@ -127,4 +149,8 @@ final class AppState {
     func finishPasswordRecovery() {
         isPasswordRecoveryFlow = false
     }
+}
+
+private enum ProfileAccessError: Error {
+    case profileNotVisible
 }

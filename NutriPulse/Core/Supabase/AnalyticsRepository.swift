@@ -96,6 +96,27 @@ struct AnalyticsRepository {
         try await GLP1Repository().fetchHistory()
     }
 
+    func fetchDailyHydration(days: Int) async throws -> [DailyHydration] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: .now)
+        let startDate = cal.date(byAdding: .day, value: -(days - 1), to: today)!
+        let rows: [WaterLog] = try await supabase
+            .from("water_logs")
+            .select()
+            .gte("log_date", value: startDate.isoDateString)
+            .lte("log_date", value: today.isoDateString)
+            .execute()
+            .value
+        let grouped = Dictionary(grouping: rows, by: \.logDate)
+        return (0..<days).map { offset in
+            let date = cal.date(byAdding: .day, value: offset, to: startDate)!
+            return DailyHydration(
+                date: date,
+                amountMl: (grouped[date.isoDateString] ?? []).reduce(0) { $0 + $1.amountMl }
+            )
+        }
+    }
+
     func fetchBodyCompositionHistory(days: Int) async throws -> [BodyCompositionLog] {
         try await BodyCompositionRepository().fetchHistory(days: days)
     }

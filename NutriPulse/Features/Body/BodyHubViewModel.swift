@@ -174,4 +174,12 @@ final class BodyHubViewModel {
             rangePhrase: selectedRange.phrase
         )
     }
+
+    var milestones: [BodyMilestone] {
+        BodyMilestoneEngine.detect(
+            weight: weightSeries,
+            leanMass: leanSeries,
+            waist: siteSeries(.waist)
+        )
+    }
 }

@@ -6,6 +6,7 @@ struct MainTabView: View {
     // Owned here so the tab bar's Log action can log to the exact day Today is showing.
     @State private var todayVM = TodayViewModel()
     @State private var showLogger = false
+    @State private var loggerInitialTab: FoodLoggingViewModel.LogTab = .talk
     @State private var tabBarHeight: CGFloat = 0
 
     // Log to the day being viewed on Today; anywhere else, log to today.
@@ -38,19 +39,71 @@ struct MainTabView: View {
         // content is never obscured and each tab keeps its own state.
         .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            MainTabBar(selected: $selectedTab, onLog: { showLogger = true })
+            MainTabBar(selected: $selectedTab, onLog: {
+                loggerInitialTab = .talk
+                showLogger = true
+            })
         }
         .onPreferenceChange(TabBarHeightKey.self) { tabBarHeight = $0 }
         .environment(\.tabBarHeight, tabBarHeight)
         .sheet(isPresented: $showLogger, onDismiss: {
             Task { await todayVM.loadData() }
         }) {
-            FoodLoggingView(selectedDate: logDate)
+            FoodLoggingView(selectedDate: logDate, initialTab: loggerInitialTab)
         }
         // A nudge (or any surface) handing a prompt to the coach jumps to the Pulse tab;
         // CoachView sends it and clears it.
         .onChange(of: appState.pendingCoachPrompt) { _, prompt in
             if prompt != nil { selectedTab = .pulse }
+        }
+        .task {
+            handleQuickAction()
+            handleSmartNotificationRoute()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            handleQuickAction()
+            handleSmartNotificationRoute()
+        }
+    }
+
+    private func handleQuickAction() {
+        guard let action = QuickActionStore.consume() else { return }
+        selectedTab = .today
+        switch action {
+        case .addWater:
+            Task {
+                await todayVM.addWater(250)
+                await todayVM.loadData()
+            }
+        case .talkToLog:
+            loggerInitialTab = .talk
+            showLogger = true
+        case .logFavorite:
+            loggerInitialTab = .search
+            showLogger = true
+        case .logDose:
+            appState.pendingQuickAction = .logDose
+        }
+    }
+
+    private func handleSmartNotificationRoute() {
+        guard let route = SmartNotificationRouteStore.consume() else { return }
+        selectedTab = .today
+        switch route.action {
+        case .addWater:
+            Task {
+                await todayVM.addWater(250)
+                await todayVM.loadData()
+            }
+        case .closeProtein:
+            appState.pendingSmartNotificationRoute = route
+        case .repeatMeal:
+            guard let sourceDate = route.sourceDate, let meal = route.meal else { return }
+            Task { await todayVM.repeatMeal(from: sourceDate, meal: meal) }
+        case .reviewMeal:
+            appState.pendingSmartNotificationRoute = route
+        case .viewPreparation:
+            appState.pendingSmartNotificationRoute = route
         }
     }
 }

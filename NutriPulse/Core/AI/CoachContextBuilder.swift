@@ -104,6 +104,17 @@ struct CoachContextBundle: Encodable {
         // from a missing one — it isn't allowed to advise on dosing or timing anyway.
         let nextDue: String?
         let overdue: Bool
+        let cycleDay: Int
+        let todayExperience: Experience?
+
+        struct Experience: Encodable {
+            let appetite: Int
+            let fullness: Int
+            let nausea: Int
+            let energy: Int
+            let digestion: Int
+            let note: String?
+        }
     }
 }
 
@@ -122,6 +133,7 @@ struct CoachContextBuilder {
         // the "7-day history" narrative below just slices the tail of this.
         async let summariesTask = analyticsRepo.fetchDailySummaries(days: 30)
         async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
+        async let shotCheckInTask = ShotCycleRepository().fetchRecent(days: 7)
         async let weightTask = analyticsRepo.fetchWeightLogs(days: 7)
         async let bodyGoalsTask = BodyGoalsRepository().fetch()
         async let activeCalTask = hk.fetchActiveCalories(for: .now)
@@ -153,6 +165,7 @@ struct CoachContextBuilder {
 
         let summaries = (try? await summariesTask) ?? []
         let glp1Logs = (try? await glp1Task) ?? []
+        let shotCheckIns = (try? await shotCheckInTask) ?? []
         let weightLogs = (try? await weightTask) ?? []
         let bodyGoals = (try? await bodyGoalsTask) ?? nil
         let activeCal = await activeCalTask
@@ -176,6 +189,7 @@ struct CoachContextBuilder {
             summaries: summaries,
             goal: goal,
             glp1Log: glp1Logs.first,
+            shotCheckIn: shotCheckIns.first { $0.checkinDate == Date.now.isoDateString },
             weightLogs: weightLogs,
             bodyGoals: bodyGoals,
             workouts: workouts,
@@ -194,6 +208,7 @@ struct CoachContextBuilder {
         summaries: [DailySummary],
         goal: DailyGoal?,
         glp1Log: GLP1Log?,
+        shotCheckIn: ShotCycleCheckIn?,
         weightLogs: [WeightLog],
         bodyGoals: BodyGoals?,
         workouts: [WorkoutLog],
@@ -363,7 +378,22 @@ struct CoachContextBuilder {
                 doseMg: log.doseMg,
                 lastInjected: lastStr,
                 nextDue: nextStr,
-                overdue: isOverdue
+                overdue: isOverdue,
+                cycleDay: max(Calendar.current.dateComponents(
+                    [.day],
+                    from: Calendar.current.startOfDay(for: log.injectedAt),
+                    to: Calendar.current.startOfDay(for: .now)
+                ).day ?? 0, 0),
+                todayExperience: shotCheckIn.map {
+                    .init(
+                        appetite: $0.appetite,
+                        fullness: $0.fullness,
+                        nausea: $0.nausea,
+                        energy: $0.energy,
+                        digestion: $0.digestion,
+                        note: $0.note
+                    )
+                }
             )
         } else {
             glp1Ctx = nil

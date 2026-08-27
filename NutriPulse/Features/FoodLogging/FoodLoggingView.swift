@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FoodLoggingView: View {
     let selectedDate: Date
+    let initialTab: FoodLoggingViewModel.LogTab
 
     // SWIFT CONCEPT — @Environment(\.dismiss) gives any view the ability to close itself
     // when it's presented as a sheet or navigation push. It's like calling
@@ -10,6 +11,12 @@ struct FoodLoggingView: View {
     @State private var vm = FoodLoggingViewModel()
     @State private var searchVM = FoodSearchViewModel()
     @State private var talkVM = TalkToLogViewModel()
+
+    init(selectedDate: Date, initialTab: FoodLoggingViewModel.LogTab = .talk) {
+        self.selectedDate = selectedDate
+        self.initialTab = initialTab
+        _vm = State(initialValue: FoodLoggingViewModel(selectedTab: initialTab))
+    }
 
     var body: some View {
         NavigationStack {
@@ -73,7 +80,13 @@ struct FoodLoggingView: View {
         } else {
             Telemetry.logConfirmed(source: source)
         }
-        dismiss()
+
+        // Favorite quick-adds are intentionally a batch flow: keep the logger open so the
+        // user can add another saved food without returning to Today and reopening Log.
+        // Every other logging path is a single-item flow and still closes on success.
+        if source != .favorite {
+            dismiss()
+        }
     }
 }
 

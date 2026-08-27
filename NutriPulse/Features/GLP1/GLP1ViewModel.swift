@@ -19,9 +19,12 @@ final class GLP1ViewModel {
     var reminderState: ReminderState = .off
     var isBusyReminders       = false
     var isLoading             = false
+    var checkIns: [ShotCycleCheckIn] = []
+    var checkInError: String? = nil
 
     private let glp1Repo = GLP1Repository()
     private let goalRepo = GoalRepository()
+    private let shotCycleRepo = ShotCycleRepository()
 
     func load() async {
         isLoading = true
@@ -32,6 +35,7 @@ final class GLP1ViewModel {
         guard let userId = try? await supabase.auth.session.user.id else { return }
 
         async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
+        async let checkInTask = shotCycleRepo.fetchRecent()
 
         // Today's protein and water come from the local cache (instant, matches Today).
         proteinToday = (try? LocalStore.shared.fetchFoodLogs(for: .now, userId: userId))?
@@ -47,6 +51,7 @@ final class GLP1ViewModel {
         }
 
         latest = (try? await glp1Task)?.first
+        checkIns = (try? await checkInTask) ?? []
     }
 
     // MARK: Reminders
@@ -105,6 +110,31 @@ final class GLP1ViewModel {
     var proteinCleared: Bool { proteinGoal > 0 && proteinToday >= proteinGoal }
     var proteinRemaining: Int { max(Int((proteinGoal - proteinToday).rounded()), 0) }
     var waterPct: Double { waterGoalMl > 0 ? min(waterMl / waterGoalMl, 1) : 0 }
+
+    var todayCheckIn: ShotCycleCheckIn? {
+        checkIns.first { $0.checkinDate == Date.now.isoDateString }
+    }
+
+    var cyclePlan: ShotCyclePlan? {
+        guard let day = daysSinceShot else { return nil }
+        return ShotCyclePlanner.plan(cycleDay: max(day, 0), today: todayCheckIn, history: checkIns)
+    }
+
+    @discardableResult
+    func saveCheckIn(_ draft: ShotCycleCheckInDraft) async -> Bool {
+        guard let day = daysSinceShot else { return false }
+        do {
+            let saved = try await shotCycleRepo.save(draft, cycleDay: day)
+            checkIns.removeAll { $0.checkinDate == saved.checkinDate }
+            checkIns.insert(saved, at: 0)
+            Telemetry.shotCycleCheckInSaved(cycleDay: day)
+            checkInError = nil
+            return true
+        } catch {
+            checkInError = "Couldn't save your check-in. Try again when you're connected."
+            return false
+        }
+    }
 
     // "Due Saturday · in 2 days" / "Due today" / "Overdue by N days"
     var nextDoseText: String? {

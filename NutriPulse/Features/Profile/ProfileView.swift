@@ -10,6 +10,8 @@ struct ProfileView: View {
     @State private var showDeleteAccountConfirm = false
     @State private var showGLP1Tracker = false
     @State private var isSeedingHealth = false
+    @State private var showSmartNotificationExplainer = false
+    @Environment(\.scenePhase) private var scenePhase
 
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
@@ -21,6 +23,7 @@ struct ProfileView: View {
                 measurementsSection
                 goalsSection
                 glp1Section
+                notificationsSection
                 healthKitSection
                 coachSection
                 feedbackSection
@@ -39,6 +42,14 @@ struct ProfileView: View {
             .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .task {
                 await vm.loadData(profile: appState.profile)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task {
+                    await vm.refreshRemindersState()
+                    await vm.refreshSmartCoachingState()
+                    await NotificationManager.shared.reconcileSmartNotificationHistory()
+                }
             }
             .sheet(isPresented: $vm.showEditProfile, onDismiss: {
                 Task { await appState.fetchProfile() }
@@ -78,6 +89,11 @@ struct ProfileView: View {
             .sheet(isPresented: $showGLP1Tracker) {
                 GLP1TrackerView()
             }
+            .sheet(isPresented: $showSmartNotificationExplainer) {
+                SmartNotificationExplainerSheet {
+                    await vm.setSmartCoaching(true)
+                }
+            }
             .alert("Notifications are off", isPresented: $vm.showReminderDeniedAlert) {
                 Button("Open Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -87,6 +103,16 @@ struct ProfileView: View {
                 Button("Not now", role: .cancel) { }
             } message: {
                 Text("Turn on notifications for Footing in Settings to get shot-day reminders.")
+            }
+            .alert("Notifications are off", isPresented: $vm.showSmartNotificationDeniedAlert) {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("Not now", role: .cancel) { }
+            } message: {
+                Text("Turn on notifications for Footing in Settings to receive timely coaching opportunities.")
             }
             .sheet(isPresented: $vm.showSendFeedback) {
                 SendFeedbackSheet(vm: vm)
@@ -341,6 +367,42 @@ struct ProfileView: View {
     }
 
     private var glp1Logs: [GLP1Log] { vm.glp1Logs }
+
+    // MARK: - Notifications
+
+    private var notificationsSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { vm.smartCoachingOn },
+                set: { value in
+                    if value {
+                        showSmartNotificationExplainer = true
+                    } else {
+                        Task { await vm.setSmartCoaching(false) }
+                    }
+                }
+            )) {
+                Label("Smart coaching", systemImage: "bell.and.waves.left.and.right")
+            }
+
+            NavigationLink {
+                SmartNotificationSettingsView()
+            } label: {
+                Label("Notification preferences", systemImage: "slider.horizontal.3")
+            }
+            .disabled(!vm.smartCoachingOn)
+
+            NavigationLink {
+                SmartNotificationHistoryView()
+            } label: {
+                Label("Pulse history", systemImage: "clock.arrow.circlepath")
+            }
+        } header: {
+            Text("Pulse notifications")
+        } footer: {
+            Text("At most one coaching notification a day, only when Footing has a specific next step. Shot-day reminders are separate.")
+        }
+    }
 
     // MARK: - HealthKit
 
@@ -930,6 +992,89 @@ private struct LogInjectionSheet: View {
             dismiss()
         } catch {
             vm.errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct SmartNotificationExplainerSheet: View {
+    let onEnable: () async -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var isEnabling = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                ZStack {
+                    Circle()
+                        .fill(Theme.Colors.primary.opacity(0.12))
+                        .frame(width: 72, height: 72)
+                    Image(systemName: "bell.and.waves.left.and.right.fill")
+                        .font(.system(size: 30, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.primary)
+                }
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text("Useful timing, fewer interruptions")
+                        .font(.title2.weight(.bold))
+                    Text("Pulse waits for a specific next step instead of reminding you on a fixed clock.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    explainerRow("figure.strengthtraining.traditional", "After a workout", "When a recovery gap still has a practical fix.")
+                    explainerRow("fork.knife", "When the finish line is close", "A protein option or usual meal you can act on now.")
+                    explainerRow("moon.zzz.fill", "Quiet by design", "At most one coaching notification a day, never from 9 PM–7 AM.")
+                }
+
+                Text("Shot-day reminders remain separate and keep their own setting.")
+                    .font(.caption)
+                    .foregroundStyle(Theme.Colors.textFaint)
+
+                Spacer()
+
+                Button {
+                    isEnabling = true
+                    Task {
+                        await onEnable()
+                        dismiss()
+                    }
+                } label: {
+                    HStack {
+                        if isEnabling { ProgressView().tint(.white) }
+                        Text("Allow useful notifications")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.Colors.primary)
+                .disabled(isEnabling)
+            }
+            .padding(Theme.Spacing.lg)
+            .background(Theme.Colors.ground.ignoresSafeArea())
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Not now") { dismiss() }
+                        .disabled(isEnabling)
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func explainerRow(_ icon: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Theme.Colors.primary)
+                .frame(width: 28, height: 28)
+                .background(Theme.Colors.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 }

@@ -42,6 +42,7 @@ final class HealthKitManager {
     }
 
     private let store = HKHealthStore()
+    private var workoutObserverQuery: HKObserverQuery?
 
     private init() {
         // Deliberately ignores the legacy boolean and the decided-share-status fallback
@@ -100,6 +101,27 @@ final class HealthKitManager {
         UserDefaults.standard.set(true, forKey: Self.didRequestKey)
         UserDefaults.standard.set(Self.currentAuthVersion, forKey: Self.authVersionKey)
         hasRequestedAuthorization = true
+    }
+
+    // HealthKit can wake the app shortly after another app or Apple Watch saves a workout.
+    // The observer carries no health values in its callback; the coordinator performs a
+    // normal authorized read and decides whether the moment deserves a notification.
+    func startWorkoutObservation(onChange: @escaping @MainActor () async -> Void) {
+        guard isAvailable, workoutObserverQuery == nil else { return }
+        let workoutType = HKObjectType.workoutType()
+        let query = HKObserverQuery(sampleType: workoutType, predicate: nil) { _, completion, error in
+            guard error == nil else {
+                completion()
+                return
+            }
+            Task { @MainActor in
+                await onChange()
+                completion()
+            }
+        }
+        workoutObserverQuery = query
+        store.execute(query)
+        store.enableBackgroundDelivery(for: workoutType, frequency: .immediate) { _, _ in }
     }
 
     #if DEBUG

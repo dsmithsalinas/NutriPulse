@@ -8,6 +8,7 @@ struct GLP1TrackerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    @State private var showCheckIn = false
 
     private var isMetric: Bool { (UnitSystem(rawValue: unitSystemRaw) ?? .metric) == .metric }
 
@@ -16,6 +17,13 @@ struct GLP1TrackerView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.md) {
                     doseCard
+                    if let plan = vm.cyclePlan {
+                        ShotCyclePlanCard(
+                            plan: plan,
+                            hasCheckIn: vm.todayCheckIn != nil,
+                            onCheckIn: { showCheckIn = true }
+                        )
+                    }
                     proteinFloorCard
                     waterCard
                     coachCard
@@ -36,6 +44,22 @@ struct GLP1TrackerView: View {
         }
         .tint(Theme.Colors.primary)
         .task { await vm.load() }
+        .sheet(isPresented: $showCheckIn) {
+            ShotCycleCheckInSheet(
+                cycleDay: max(vm.daysSinceShot ?? 0, 0),
+                existing: vm.todayCheckIn,
+                onSave: { draft in await vm.saveCheckIn(draft) }
+            )
+            .presentationDetents([.large])
+        }
+        .alert("Couldn't save check-in", isPresented: Binding(
+            get: { vm.checkInError != nil },
+            set: { if !$0 { vm.checkInError = nil } }
+        )) {
+            Button("OK") { vm.checkInError = nil }
+        } message: {
+            Text(vm.checkInError ?? "")
+        }
     }
 
     // MARK: Dose card

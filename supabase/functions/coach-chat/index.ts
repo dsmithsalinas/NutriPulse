@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
     }
 
     // Rate-limit before parsing/spending. Counts every authenticated call, malformed included.
-    if (!await checkRateLimit(supabase, 'coach-chat', RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS)) {
+    if (!await checkRateLimit(user.id, 'coach-chat', RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS)) {
       return new Response(
         JSON.stringify({ error: "You're moving fast — give me a minute to catch up and try again." }),
         { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

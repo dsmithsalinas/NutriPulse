@@ -23,9 +23,11 @@ final class AnalyticsViewModel {
     var selectedRange: TimeRange = .week
     var summaries: [DailySummary]             = []
     var movement: [DailyMovement]             = []
+    var hydration: [DailyHydration]           = []
     var weightLogs: [WeightLog]               = []
     var bodyCompHistory: [BodyCompositionLog] = []
     var glp1History: [GLP1Log]               = []
+    var shotCycleCheckIns: [ShotCycleCheckIn] = []
     var goalCalories: Double?                 = nil
     var goalProteinG: Double?                 = nil
 
@@ -47,6 +49,7 @@ final class AnalyticsViewModel {
 
     private let repo     = AnalyticsRepository()
     private let goalRepo = GoalRepository()
+    private let shotCycleRepo = ShotCycleRepository()
 
     // Only count days where the user actually logged something
     var loggedDays: [DailySummary] { summaries.filter(\.hasData) }
@@ -74,6 +77,26 @@ final class AnalyticsViewModel {
         return activeDays.reduce(0) { $0 + $1.minutes } / Double(activeDays.count)
     }
 
+    var weeklyReview: WeeklyReview? {
+        WeeklyReviewEngine.build(
+            summaries: summaries,
+            movement: movement,
+            checkIns: shotCycleCheckIns,
+            proteinGoal: goalProteinG
+        )
+    }
+
+    var cycleInsights: [CycleDayInsight] {
+        CycleAnalyticsEngine.build(
+            summaries: summaries,
+            hydration: hydration,
+            movement: movement,
+            weightLogs: weightLogs,
+            checkIns: shotCycleCheckIns,
+            injections: glp1History
+        )
+    }
+
     func loadData() async {
         isLoading = true
         errorMessage = nil
@@ -81,18 +104,22 @@ final class AnalyticsViewModel {
         do {
             async let summariesTask  = repo.fetchDailySummaries(days: selectedRange.rawValue)
             async let movementTask   = repo.fetchDailyMovement(days: selectedRange.rawValue)
+            async let hydrationTask  = repo.fetchDailyHydration(days: selectedRange.rawValue)
             async let weightTask     = repo.fetchWeightLogs(days: selectedRange.rawValue)
             async let bodyCompTask   = repo.fetchBodyCompositionHistory(days: selectedRange.rawValue)
             async let glp1Task       = repo.fetchGLP1History()
             async let goalTask       = goalRepo.fetchGoal(for: .now)
-            let (s, m, w, bc, glp1, g) = try await (summariesTask, movementTask, weightTask, bodyCompTask, glp1Task, goalTask)
+            async let checkInTask    = shotCycleRepo.fetchRecent(days: max(selectedRange.rawValue, 42))
+            let (s, m, water, w, bc, glp1, g, checks) = try await (summariesTask, movementTask, hydrationTask, weightTask, bodyCompTask, glp1Task, goalTask, checkInTask)
             summaries        = s
             movement         = m
+            hydration        = water
             weightLogs       = w
             bodyCompHistory  = bc
             glp1History      = glp1
             goalCalories     = g?.calories
             goalProteinG     = g?.proteinG
+            shotCycleCheckIns = checks
         } catch {
             errorMessage = error.localizedDescription
         }

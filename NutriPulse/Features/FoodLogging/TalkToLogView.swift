@@ -122,6 +122,21 @@ struct TalkToLogView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    HStack(spacing: Theme.Spacing.sm) {
+                        TextField("Actually, half the rice…", text: $vm.correctionText)
+                            .textInputAutocapitalization(.never)
+                            .submitLabel(.done)
+                            .onSubmit { vm.applyCorrection() }
+                        Button("Apply") { vm.applyCorrection() }
+                            .font(.subheadline.weight(.semibold))
+                            .disabled(vm.correctionText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Theme.Colors.surfaceInset)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityElement(children: .contain)
+
                     ForEach($vm.rows) { $row in
                         ConfirmRowView(row: $row)
                     }

@@ -13,6 +13,9 @@ struct TodayView: View {
     @State private var showWorkoutSheet = false
     @State private var showDatePicker = false
     @State private var showRitual = false
+    @State private var showProteinRescue = false
+    @State private var showRecoveryLogger = false
+    @State private var repeatedMealRoute: SmartNotificationRoute? = nil
     @State private var ringCelebrationTrigger = 0
     @State private var proteinRippleTrigger = 0
     @State private var proteinCelebrationPending = false
@@ -20,6 +23,7 @@ struct TodayView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppState.self) private var appState
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    @AppStorage(LowAppetitePreparationStore.completedKey) private var completedPreparation = ""
     // Which day the user dismissed the dose-day card (ISO date). Hides it for that day only;
     // it returns on the next dose day (or as an overdue prompt the following day).
     @AppStorage("doseCardDismissedDay") private var doseCardDismissedDay = ""
@@ -32,7 +36,8 @@ struct TodayView: View {
     // delay lets the ring spring up to full first, so the ripple reads as the ring completing
     // rather than firing over a half-drawn ring the instant the sheet clears.
     private func playProteinCelebrationIfVisible() {
-        guard proteinCelebrationPending, isFrontmost, vm.isToday else { return }
+        guard proteinCelebrationPending, isFrontmost, !showProteinRescue,
+              !showRecoveryLogger, vm.isToday else { return }
         proteinCelebrationPending = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             proteinRippleTrigger += 1
@@ -78,30 +83,6 @@ struct TodayView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity, minHeight: 200)
                     } else {
-                        // On dose day (or overdue), the shot comes to the front — a living-gradient
-                        // card that opens the injection ritual, instead of a chip buried in the header.
-                        // On dose day the shot comes to the front — a living-gradient card that opens
-                        // the ritual. Once logged, it flips to a celebratory "done" state for the rest
-                        // of the day, then falls away. The user can also dismiss it for the day.
-                        if doseCardDismissedDay != Date.now.isoDateString, let log = vm.latestGLP1 {
-                            if vm.injectionLoggedToday {
-                                DoseDayCard(
-                                    medication: log.medication,
-                                    doseText: "\(log.doseMg.glp1DoseString) mg",
-                                    completed: true,
-                                    onDismiss: { doseCardDismissedDay = Date.now.isoDateString }
-                                )
-                            } else if let dose = vm.doseStatus {
-                                DoseDayCard(
-                                    medication: log.medication,
-                                    doseText: "\(log.doseMg.glp1DoseString) mg",
-                                    overdue: dose.urgent,
-                                    onTap: { showRitual = true },
-                                    onDismiss: { doseCardDismissedDay = Date.now.isoDateString }
-                                )
-                            }
-                        }
-
                         HeroNutritionCard(
                             calories: vm.totalCalories,
                             proteinG: vm.totalProteinG,
@@ -113,25 +94,13 @@ struct TodayView: View {
                         .celebrationBeat(trigger: ringCelebrationTrigger)
                         .proteinRipple(trigger: proteinRippleTrigger)
 
-                        if let nudge = vm.nudge {
-                            UnderEatingNudgeCard(nudge: nudge) {
-                                appState.askPulse(nudge.prompt)
-                            }
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
-
-                        if let suggestion = vm.retargetSuggestion {
-                            RetargetCard(
-                                suggestion: suggestion,
-                                units: units,
-                                onAccept: { Task { await vm.acceptRetarget() } },
-                                onKeep: { vm.dismissRetarget() }
-                            )
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
+                        // Pulse gets one adaptive slot. A single, ranked next step keeps Today
+                        // calm even when dose, recovery, pacing, and target signals coexist.
+                        pulsePriorityCard
 
                         if HealthKitManager.shared.isAvailable {
                             HealthStatsCard(
+                                context: vm.recoveryContext,
                                 activeCalories: vm.activeCalories,
                                 restingHR:      vm.restingHeartRate,
                                 hrv:            vm.hrv,
@@ -161,6 +130,16 @@ struct TodayView: View {
                             goalMl:   vm.waterGoalMl
                         ) { ml in
                             Task { await vm.addWater(ml) }
+                        }
+
+                        if vm.isToday, !vm.availableYesterdayMeals.isEmpty {
+                            RepeatYesterdayCard(
+                                meals: vm.availableYesterdayMeals
+                                    .map { (meal: $0.key, itemCount: $0.value.count) }
+                                    .sorted { $0.meal.sortOrder < $1.meal.sortOrder },
+                                busyMeal: vm.repeatingMeal,
+                                onRepeat: { meal in Task { await vm.repeatYesterday(meal) } }
+                            )
                         }
 
                         if vm.foodLogs.isEmpty {
@@ -248,6 +227,28 @@ struct TodayView: View {
                 }
                 .presentationDetents([.medium, .large])
             }
+            .sheet(isPresented: $showProteinRescue, onDismiss: {
+                playProteinCelebrationIfVisible()
+            }) {
+                ProteinRescueSheet(
+                    date: vm.selectedDate,
+                    proteinGap: vm.recoveryOpportunity?.proteinGap
+                        ?? max(Int(((vm.dailyGoal?.proteinG ?? 0) - vm.totalProteinG).rounded()), 0),
+                    calorieRoom: max(Int(((vm.dailyGoal?.calories ?? 0) - vm.totalCalories).rounded()), 0),
+                    onLogged: { Task { await vm.loadData() } },
+                    onBuildMyOwn: {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            showRecoveryLogger = true
+                        }
+                    }
+                )
+                .presentationDetents([.medium, .large])
+            }
+            .sheet(isPresented: $showRecoveryLogger, onDismiss: {
+                Task { await vm.loadData() }
+            }) {
+                FoodLoggingView(selectedDate: vm.selectedDate)
+            }
             .sheet(item: $editingLog) { log in
                 EditFoodLogSheet(
                     log: log,
@@ -255,6 +256,15 @@ struct TodayView: View {
                         await vm.editLog(id: log.id, meal: meal, quantity: quantity)
                     }
                 )
+            }
+            .sheet(item: $repeatedMealRoute) { route in
+                if let sourceDate = route.sourceDate, let meal = route.meal {
+                    RepeatedMealConfirmationSheet(
+                        sourceDate: sourceDate,
+                        meal: meal,
+                        vm: vm
+                    )
+                }
             }
             .task(id: vm.selectedDate) {
                 // The drift check inside loadData needs the user's stats.
@@ -277,7 +287,35 @@ struct TodayView: View {
             .onChange(of: isFrontmost) { _, _ in
                 playProteinCelebrationIfVisible()
             }
+            .onChange(of: showRecoveryLogger) { _, _ in
+                playProteinCelebrationIfVisible()
+            }
+            .onChange(of: appState.pendingQuickAction) { _, action in
+                guard action == .logDose else { return }
+                appState.pendingQuickAction = nil
+                showRitual = true
+            }
+            .onChange(of: appState.pendingSmartNotificationRoute) { _, route in
+                guard let route else { return }
+                switch route.action {
+                case .closeProtein:
+                    appState.pendingSmartNotificationRoute = nil
+                    showProteinRescue = true
+                case .reviewMeal:
+                    appState.pendingSmartNotificationRoute = nil
+                    repeatedMealRoute = route
+                case .viewPreparation:
+                    // The preparation card is already in Today's ranked Pulse slot.
+                    appState.pendingSmartNotificationRoute = nil
+                case .addWater, .repeatMeal:
+                    break
+                }
+            }
             .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
+                // `lastSyncAt` advances only after a full pull (foreground/reconnect), not
+                // after pushing a local mutation. Water already updates optimistically;
+                // reloading here after every quick-add replaced the whole page with a
+                // spinner and made each selection look like a full refresh.
                 Task { await vm.loadData() }
             }
             .onChange(of: scenePhase) { _, phase in
@@ -295,6 +333,77 @@ struct TodayView: View {
             )) { _ in
                 vm.snapToTodayIfDayChanged()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .smartCoachingSettingsChanged)) { _ in
+                Task { await vm.refreshSmartNotifications() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pulsePriorityCard: some View {
+        if doseCardDismissedDay != Date.now.isoDateString, let log = vm.latestGLP1,
+           !vm.injectionLoggedToday, vm.doseStatus != nil {
+            DoseDayCard(
+                medication: log.medication,
+                doseText: "\(log.doseMg.glp1DoseString) mg",
+                overdue: vm.doseStatus?.urgent ?? false,
+                completed: false,
+                onTap: { showRitual = true },
+                onDismiss: { doseCardDismissedDay = Date.now.isoDateString }
+            )
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        } else if let recovery = vm.recoveryOpportunity {
+            RecoveryCoachCard(
+                opportunity: recovery,
+                onCloseGap: {
+                    Telemetry.recoveryActionUsed(action: "closeProteinGap")
+                    showProteinRescue = true
+                },
+                onAddWater: { ml in
+                    Telemetry.recoveryActionUsed(action: "addWater")
+                    Task { await vm.addWater(ml) }
+                }
+            )
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        } else if let preparation = vm.lowAppetitePreparation,
+                  !LowAppetitePreparationStore.isCompleted(preparation) {
+            LowAppetitePreparationCard(
+                preparation: preparation,
+                onPlan: {
+                    appState.askPulse(
+                        "Tomorrow is cycle day \(preparation.targetCycleDay), which has usually been a lower-appetite day for me. Help me choose one small protein-dense backup to prepare today."
+                    )
+                },
+                onPrepared: {
+                    LowAppetitePreparationStore.markCompleted(preparation)
+                    completedPreparation = LowAppetitePreparationStore.signature(for: preparation)
+                    Task { await vm.refreshSmartNotifications() }
+                }
+            )
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        } else if let suggestion = vm.retargetSuggestion {
+            RetargetCard(
+                suggestion: suggestion,
+                units: units,
+                onAccept: { Task { await vm.acceptRetarget() } },
+                onKeep: { vm.dismissRetarget() }
+            )
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        } else if let nudge = vm.nudge {
+            UnderEatingNudgeCard(nudge: nudge) {
+                appState.askPulse(nudge.prompt)
+            }
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        } else if doseCardDismissedDay != Date.now.isoDateString, let log = vm.latestGLP1,
+                  vm.injectionLoggedToday {
+            // The completed state remains a quiet celebration, but yields to anything the
+            // user can still act on today.
+            DoseDayCard(
+                medication: log.medication,
+                doseText: "\(log.doseMg.glp1DoseString) mg",
+                completed: true,
+                onDismiss: { doseCardDismissedDay = Date.now.isoDateString }
+            )
         }
     }
 }

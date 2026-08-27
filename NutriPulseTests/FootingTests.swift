@@ -39,6 +39,187 @@ final class FootingTests: XCTestCase {
     }
 }
 
+// MARK: - Explainable insights
+
+final class InsightEngineTests: XCTestCase {
+    private let userId = UUID()
+
+    private func day(_ offset: Int) -> Date {
+        Calendar.current.date(byAdding: .day, value: offset, to: Calendar.current.startOfDay(for: .now))!
+    }
+
+    func testWeeklyReviewRequiresEnoughRealDays() {
+        let sparse = [
+            DailySummary(date: day(-2), calories: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0),
+            DailySummary(date: day(-1), calories: 1800, proteinG: 110, carbsG: 0, fatG: 0, fiberG: 0),
+            DailySummary(date: day(0), calories: 1700, proteinG: 100, carbsG: 0, fatG: 0, fiberG: 0),
+        ]
+        XCTAssertNil(WeeklyReviewEngine.build(summaries: sparse, movement: [], checkIns: [], proteinGoal: 120))
+
+        var enough = sparse
+        enough[0].calories = 1600
+        enough[0].proteinG = 125
+        XCTAssertNotNil(WeeklyReviewEngine.build(summaries: enough, movement: [], checkIns: [], proteinGoal: 120))
+    }
+
+    func testCycleAnalyticsAlignsNutritionToDaySinceDose() {
+        let injection = GLP1Log(
+            id: UUID(), userId: userId, injectedAt: day(-2), medication: "Zepbound",
+            doseMg: 5, site: nil, nextDueAt: day(5)
+        )
+        let summaries = [
+            DailySummary(date: day(-2), calories: 1600, proteinG: 120, carbsG: 0, fatG: 0, fiberG: 0),
+            DailySummary(date: day(-1), calories: 1500, proteinG: 100, carbsG: 0, fatG: 0, fiberG: 0),
+        ]
+        let result = CycleAnalyticsEngine.build(
+            summaries: summaries, hydration: [], movement: [], weightLogs: [],
+            checkIns: [], injections: [injection]
+        )
+        XCTAssertEqual(result.map(\.cycleDay), [0, 1])
+        XCTAssertEqual(result.last?.averageProteinG, 100)
+    }
+
+    func testRecoveryContextExplainsSignalsInsteadOfProducingAScore() throws {
+        let context = try XCTUnwrap(RecoveryContextEngine.build(
+            sleepHours: 6, baselineSleep: 7.5,
+            hrv: 35, baselineHRV: 50,
+            restingHR: 65, baselineRestingHR: 58,
+            workoutMinutes: 50,
+            proteinG: 50, proteinGoalG: 120,
+            waterMl: 500, waterGoalMl: 2000
+        ))
+        XCTAssertEqual(context.headline, "Give recovery more room today")
+        XCTAssertGreaterThanOrEqual(context.signals.count, 3)
+        XCTAssertFalse(context.headline.lowercased().contains("score"))
+    }
+
+    func testBodyMilestoneRecognizesLeanMassProtection() {
+        let milestones = BodyMilestoneEngine.detect(
+            weight: [(day(-30), 100), (day(0), 97)],
+            leanMass: [(day(-30), 65), (day(0), 64.5)],
+            waist: []
+        )
+        XCTAssertTrue(milestones.contains { $0.title == "Lean mass held" })
+    }
+}
+
+final class SmartNotificationEngineTests: XCTestCase {
+    private let userId = UUID()
+    private let foodId = UUID()
+
+    private func date(daysAgo: Int, hour: Int) -> Date {
+        let base = Calendar.current.date(byAdding: .day, value: -daysAgo, to: .now)!
+        return Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: base)!
+    }
+
+    private func log(daysAgo: Int, hour: Int = 8, meal: Meal = .breakfast) -> FoodLog {
+        let loggedAt = date(daysAgo: daysAgo, hour: hour)
+        return FoodLog(
+            id: UUID(), userId: userId, loggedAt: loggedAt,
+            logDate: loggedAt.isoDateString, meal: meal, foodItemId: foodId,
+            quantity: 1, caloriesSnapshot: 250, proteinGSnapshot: 25,
+            carbsGSnapshot: 20, fatGSnapshot: 6, fiberGSnapshot: 3,
+            foodItems: nil
+        )
+    }
+
+    func testRepeatedMealRequiresThreeMatchingDaysAndNoMealToday() {
+        let now = date(daysAgo: 0, hour: 8)
+        let history = [log(daysAgo: 1), log(daysAgo: 2), log(daysAgo: 3)]
+        XCTAssertNotNil(RepeatedMealDetector.detect(history: history, todayLogs: [], now: now))
+        XCTAssertNil(RepeatedMealDetector.detect(history: Array(history.prefix(2)), todayLogs: [], now: now))
+        XCTAssertNil(RepeatedMealDetector.detect(history: history, todayLogs: [log(daysAgo: 0)], now: now))
+    }
+
+    func testWorkoutRecoveryOutranksOtherCandidates() {
+        let now = date(daysAgo: 0, hour: 18)
+        let recovery = RecoveryOpportunity(
+            workoutName: "Strength", durationMinutes: 40,
+            proteinGap: 30, waterGapMl: 500,
+            finishedAt: now.addingTimeInterval(-20 * 60)
+        )
+        let result = SmartNotificationEngine.bestOpportunity(
+            recovery: recovery, proteinGap: 30, calorieRoom: 500,
+            rescueOptions: [], repeatedMeal: nil, now: now
+        )
+        XCTAssertEqual(result?.kind, .workoutRecovery)
+        XCTAssertEqual(result?.priority, 3)
+    }
+
+    func testProteinCloseoutNeedsARealOneTapOption() {
+        let now = date(daysAgo: 0, hour: 18)
+        let favorite = FavoriteQuickAdd(
+            foodItemId: foodId, name: "Usual shake", brand: nil,
+            servingDesc: "1 shake", quantity: 1,
+            caloriesSnapshot: 180, proteinGSnapshot: 30,
+            carbsGSnapshot: 8, fatGSnapshot: 3, fiberGSnapshot: 1
+        )
+        let option = ProteinRescuePlanner.options(
+            favorites: [favorite], proteinGap: 28, calorieRoom: 400
+        )
+        XCTAssertEqual(SmartNotificationEngine.bestOpportunity(
+            recovery: nil, proteinGap: 28, calorieRoom: 400,
+            rescueOptions: option, repeatedMeal: nil, now: now
+        )?.kind, .proteinCloseout)
+        XCTAssertNil(SmartNotificationEngine.bestOpportunity(
+            recovery: nil, proteinGap: 28, calorieRoom: 400,
+            rescueOptions: [], repeatedMeal: nil, now: now
+        ))
+    }
+
+    func testQuietHoursSuppressEverything() {
+        let late = date(daysAgo: 0, hour: 22)
+        let recovery = RecoveryOpportunity(
+            workoutName: "Walk", durationMinutes: 30,
+            proteinGap: 20, waterGapMl: 300, finishedAt: late
+        )
+        XCTAssertNil(SmartNotificationEngine.bestOpportunity(
+            recovery: recovery, proteinGap: 20, calorieRoom: 400,
+            rescueOptions: [], repeatedMeal: nil, now: late
+        ))
+    }
+
+    func testCustomQuietHoursCanAllowLaterOpportunity() {
+        let late = date(daysAgo: 0, hour: 22)
+        let recovery = RecoveryOpportunity(
+            workoutName: "Walk", durationMinutes: 30,
+            proteinGap: 20, waterGapMl: 300, finishedAt: late
+        )
+        XCTAssertEqual(SmartNotificationEngine.bestOpportunity(
+            recovery: recovery, proteinGap: 20, calorieRoom: 400,
+            rescueOptions: [], repeatedMeal: nil,
+            quietStartHour: 23, quietEndHour: 6, now: late
+        )?.kind, .workoutRecovery)
+    }
+}
+
+final class SmartNotificationHistoryStoreTests: XCTestCase {
+    func testHistoryUpsertsAndPersistsFeedback() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "SmartNotificationHistoryStoreTests"))
+        defaults.removePersistentDomain(forName: "SmartNotificationHistoryStoreTests")
+        let entry = SmartNotificationHistoryEntry(
+            id: "smart-test", kind: .proteinCloseout,
+            title: "Protein", body: "20g to go", rationale: "Within reach",
+            scheduledAt: .now, fireDate: .now, feedback: nil
+        )
+        SmartNotificationHistoryStore.upsert(entry, defaults: defaults)
+        SmartNotificationHistoryStore.setFeedback(.helpful, for: entry.id, defaults: defaults)
+        XCTAssertEqual(SmartNotificationHistoryStore.load(defaults: defaults).first?.feedback, .helpful)
+        SmartNotificationHistoryStore.setStatus(.opened, for: entry.id, defaults: defaults)
+        XCTAssertEqual(SmartNotificationHistoryStore.load(defaults: defaults).first?.status, .opened)
+        SmartNotificationHistoryStore.remove(ids: [entry.id], defaults: defaults)
+        XCTAssertTrue(SmartNotificationHistoryStore.load(defaults: defaults).isEmpty)
+    }
+
+    func testNegativeFeedbackCanExplicitlyDisableItsOpportunityKind() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "SmartNotificationFeedbackTests"))
+        defaults.removePersistentDomain(forName: "SmartNotificationFeedbackTests")
+        SmartNotificationPreferences.setEnabled(false, for: .proteinCloseout, defaults: defaults)
+        XCTAssertFalse(SmartNotificationPreferences.load(defaults: defaults).proteinCloseout)
+        XCTAssertTrue(SmartNotificationPreferences.load(defaults: defaults).workoutRecovery)
+    }
+}
+
 // MARK: - Trustworthy user-facing state
 
 final class TrustworthyStateTests: XCTestCase {
@@ -1364,5 +1545,117 @@ final class MaintenanceOfferTests: XCTestCase {
         XCTAssertFalse(offer(avg: 72.5, dismissedFor: 72.5))
         XCTAssertTrue(offer(avg: 72.5, dismissedFor: 74.0),
                       "changing the goal re-arms the offer")
+    }
+}
+
+// MARK: - Recovery coaching
+
+final class RecoveryCoachTests: XCTestCase {
+    private let userId = UUID()
+
+    private func goal() -> DailyGoal {
+        DailyGoal(
+            id: UUID(), userId: userId, effectiveDate: "2026-08-26",
+            calories: 2000, proteinG: 150, carbsG: 200, fatG: 67,
+            fiberG: 28, waterMlTarget: 2500
+        )
+    }
+
+    private func workout(startedAt: Date, minutes: Double = 45) -> WorkoutLog {
+        WorkoutLog(
+            id: UUID(), userId: userId, loggedAt: startedAt,
+            logDate: "2026-08-26", activityType: "strength",
+            durationMinutes: minutes, activeCalories: 250, distanceMeters: nil,
+            source: .healthkit, healthKitUUID: UUID().uuidString, startedAt: startedAt
+        )
+    }
+
+    func testRecentWorkoutCreatesExactRecoveryGap() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let result = try XCTUnwrap(RecoveryCoach.opportunity(
+            workouts: [workout(startedAt: now.addingTimeInterval(-90 * 60))],
+            goal: goal(), proteinToday: 112, waterTodayMl: 1800, now: now
+        ))
+        XCTAssertEqual(result.proteinGap, 38)
+        XCTAssertEqual(result.waterGapMl, 700)
+        XCTAssertEqual(result.workoutName, "Strength")
+    }
+
+    func testOldWorkoutDoesNotPretendRecoveryIsStillImmediate() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        XCTAssertNil(RecoveryCoach.opportunity(
+            workouts: [workout(startedAt: now.addingTimeInterval(-10 * 3600))],
+            goal: goal(), proteinToday: 80, waterTodayMl: 1000, now: now
+        ))
+    }
+}
+
+// MARK: - Talk-to-log conversational corrections
+
+final class TalkCorrectionParserTests: XCTestCase {
+    func testParsesRemoveHalfDoubleAndSetQuantity() {
+        XCTAssertEqual(TalkCorrectionParser.parse("Actually, remove the cheese"), .remove(query: "cheese"))
+        XCTAssertEqual(TalkCorrectionParser.parse("half the rice"), .scale(query: "rice", multiplier: 0.5))
+        XCTAssertEqual(TalkCorrectionParser.parse("double chicken"), .scale(query: "chicken", multiplier: 2))
+        XCTAssertEqual(TalkCorrectionParser.parse("make chicken two"), .setQuantity(query: "chicken", quantity: 2))
+        XCTAssertEqual(TalkCorrectionParser.parse("make that 1.5"), .setQuantity(query: nil, quantity: 1.5))
+    }
+
+    func testUnknownCorrectionFailsClosed() {
+        XCTAssertNil(TalkCorrectionParser.parse("make it healthier"))
+    }
+}
+
+// MARK: - Shot-cycle planning
+
+final class ShotCyclePlannerTests: XCTestCase {
+    private func checkIn(day: Int, appetite: Int, nausea: Int = 1, energy: Int = 3) -> ShotCycleCheckIn {
+        ShotCycleCheckIn(
+            id: UUID(), userId: UUID(), checkinDate: "2026-08-26", cycleDay: day,
+            appetite: appetite, fullness: 3, nausea: nausea, energy: energy,
+            digestion: 3, note: nil, createdAt: .now
+        )
+    }
+
+    func testLowAppetiteAdaptsTheFirstAction() {
+        let today = checkIn(day: 2, appetite: 1)
+        let plan = ShotCyclePlanner.plan(cycleDay: 2, today: today, history: [today])
+        XCTAssertEqual(plan.phase, "Low-appetite window")
+        XCTAssertTrue(plan.actions[0].contains("smallest protein-dense"))
+    }
+
+    func testRepeatedCycleDayLearnsPattern() {
+        let history = [checkIn(day: 2, appetite: 1), checkIn(day: 2, appetite: 2)]
+        let plan = ShotCyclePlanner.plan(cycleDay: 2, today: nil, history: history)
+        XCTAssertEqual(plan.learnedPattern, "Your check-ins say day 2 is usually a lower-appetite day.")
+    }
+
+    func testLowAppetitePreparationRequiresRepeatedPriorPattern() {
+        XCTAssertNil(LowAppetitePreparationEngine.predict(
+            currentCycleDay: 1,
+            history: [checkIn(day: 2, appetite: 1)]
+        ))
+        let prediction = LowAppetitePreparationEngine.predict(
+            currentCycleDay: 1,
+            history: [checkIn(day: 2, appetite: 1), checkIn(day: 2, appetite: 2)]
+        )
+        XCTAssertEqual(prediction?.targetCycleDay, 2)
+        XCTAssertEqual(prediction?.confidence, .emerging)
+    }
+
+    func testPreparationCompletionIsScopedToThePredictionAndDay() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "LowAppetitePreparationStoreTests"))
+        defaults.removePersistentDomain(forName: "LowAppetitePreparationStoreTests")
+        let preparation = LowAppetitePreparation(
+            targetCycleDay: 2, averageAppetite: 1.5, sampleCount: 2, confidence: .emerging
+        )
+        let day = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 8, day: 26)))
+        LowAppetitePreparationStore.markCompleted(preparation, date: day, defaults: defaults)
+        XCTAssertTrue(LowAppetitePreparationStore.isCompleted(preparation, date: day, defaults: defaults))
+        XCTAssertFalse(LowAppetitePreparationStore.isCompleted(
+            preparation,
+            date: Calendar.current.date(byAdding: .day, value: 1, to: day)!,
+            defaults: defaults
+        ))
     }
 }

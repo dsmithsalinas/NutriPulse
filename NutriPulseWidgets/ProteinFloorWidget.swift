@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import AppIntents
 
 // Brand colors, duplicated locally — the widget extension can't pull in the app's Theme.
 private extension Color {
@@ -65,14 +66,14 @@ struct ProteinFloorWidgetEntryView: View {
 
     // Home Screen — medium: ring + framing text side by side.
     private var medium: some View {
-        HStack(spacing: 16) {
-            ring(size: 92, line: 11)
+        HStack(spacing: 12) {
+            ring(size: 84, line: 10)
             VStack(alignment: .leading, spacing: 4) {
                 Text("PROTEIN FLOOR")
                     .font(.system(size: 11, weight: .bold)).tracking(0.8)
                     .foregroundStyle(Color.pulseIndigo)
                 Text("\(Int(snap.proteinToday.rounded())) / \(Int(snap.proteinGoal.rounded()))g")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(.system(size: 21, weight: .bold, design: .rounded))
                     .monospacedDigit()
                 Text(snap.cleared
                      ? "Floor cleared — muscle protected."
@@ -82,7 +83,51 @@ struct ProteinFloorWidgetEntryView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
+            VStack(spacing: 6) {
+                Button(intent: FootingQuickActionIntent(action: primaryAction)) {
+                    VStack(spacing: 3) {
+                        Image(systemName: primaryIcon)
+                            .font(.system(size: 15, weight: .bold))
+                        Text(primaryLabel)
+                            .font(.system(size: 10, weight: .bold))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 96, height: 48)
+                    .background(pulseGradient, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                HStack(spacing: 6) {
+                    quickAction(.addWater, icon: "drop.fill", label: "Add water")
+                    quickAction(.logDose, icon: "syringe.fill", label: "Log dose")
+                }
+            }
         }
+    }
+
+    private var primaryAction: FootingQuickAction {
+        !snap.cleared && snap.remaining <= 45 ? .logFavorite : .talkToLog
+    }
+
+    private var primaryIcon: String {
+        primaryAction == .logFavorite ? "star.fill" : "waveform"
+    }
+
+    private var primaryLabel: String {
+        primaryAction == .logFavorite ? "Close floor" : "Log food"
+    }
+
+    private func quickAction(_ action: FootingQuickAction, icon: String, label: String) -> some View {
+        Button(intent: FootingQuickActionIntent(action: action)) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .background(Color.pulseIndigo.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .tint(.pulseIndigo)
+        .accessibilityLabel(label)
     }
 
     // Lock Screen — circular gauge.

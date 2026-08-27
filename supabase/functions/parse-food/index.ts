@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
     }
 
     // Rate-limit before parsing/spending. Counts every authenticated call, malformed included.
-    if (!await checkRateLimit(supabase, 'parse-food', RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS)) {
+    if (!await checkRateLimit(user.id, 'parse-food', RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS)) {
       return new Response(
         JSON.stringify({ error: "You're logging fast — give it a minute and try again." }),
         { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

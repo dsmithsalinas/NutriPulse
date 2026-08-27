@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HealthStatsCard: View {
+    let context: RecoveryContext?
     let activeCalories: Double?
     let restingHR: Double?
     let hrv: Double?
@@ -10,6 +11,7 @@ struct HealthStatsCard: View {
     let hasRequestedAuthorization: Bool
     let onConnect: () -> Void
     let onOpenHealthApp: () -> Void
+    @State private var isExpanded = false
 
     private var hasActivityData: Bool { activeCalories != nil }
     private var hasVitalsData: Bool { restingHR != nil || hrv != nil || sleepHours != nil }
@@ -17,18 +19,60 @@ struct HealthStatsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Today's signals")
-                .font(.system(size: 13, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(Theme.Colors.textFaint)
-                .textCase(.uppercase)
+            HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(context == nil ? "TODAY'S SIGNALS" : "TODAY'S CONTEXT")
+                        .font(.system(size: 10, weight: .bold)).tracking(0.8)
+                        .foregroundStyle(context == nil ? Theme.Colors.textFaint : Theme.Colors.primary)
+                    Text(context?.headline ?? "Apple Health")
+                        .font(.headline)
+                }
+                Spacer()
+                Image(systemName: "waveform.path.ecg.rectangle")
+                    .font(.title2)
+                    .foregroundStyle(Theme.Colors.primary)
+            }
 
-            // Three states, not two. Previously a user who denied Health access — or who
-            // simply owns no Apple Watch — saw "Connect Apple Health" forever, and tapping
-            // it visibly did nothing, because the only thing it could do was re-request a
-            // permission iOS would never prompt for again.
+            if let context {
+                Text(context.suggestion)
+                    .font(.subheadline.weight(.medium))
+                if let first = context.signals.first {
+                    Label(first, systemImage: "circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .labelStyle(TinyBulletLabelStyle())
+                }
+            }
+
+            // Keep setup visible. Once Health data exists, tuck the raw numbers and supporting
+            // signals into disclosure so the interpretation remains the visual lead.
             if hasAnyData {
-                signalChips
+                DisclosureGroup(isExpanded: $isExpanded) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        if let context {
+                            ForEach(context.signals.dropFirst(), id: \.self) { signal in
+                                Label(signal, systemImage: "circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .labelStyle(TinyBulletLabelStyle())
+                            }
+                        }
+
+                        signalChips
+
+                        if context != nil {
+                            Text("Context only — not medical advice.")
+                                .font(.caption2)
+                                .foregroundStyle(Theme.Colors.textFaint)
+                        }
+                    }
+                    .padding(.top, Theme.Spacing.xs)
+                } label: {
+                    Text(isExpanded ? "Hide Health details" : "Health details")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.Colors.primary)
+                }
+                .tint(Theme.Colors.primary)
             } else if hasRequestedAuthorization {
                 noDataRow
             } else {
@@ -49,7 +93,7 @@ struct HealthStatsCard: View {
             restingHR.map      { (icon: "heart.fill",         color: Color.red,    value: "\(Int($0))",           label: "RESTING") },
         ].compactMap { $0 }
 
-        return HStack(spacing: Theme.Spacing.sm) {
+        return LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: Theme.Spacing.sm) {
             ForEach(items.indices, id: \.self) { i in
                 signalChip(items[i])
             }
@@ -128,5 +172,14 @@ struct HealthStatsCard: View {
         let h = Int(hours)
         let m = Int((hours - Double(h)) * 60)
         return m > 0 ? "\(h)h \(m)m" : "\(h)h"
+    }
+}
+
+private struct TinyBulletLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            configuration.icon.font(.system(size: 5))
+            configuration.title
+        }
     }
 }

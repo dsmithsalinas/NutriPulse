@@ -42,6 +42,10 @@ final class FoodLoggingViewModel {
     var isLoading = false
     var errorMessage: String? = nil
 
+    init(selectedTab: LogTab = .talk) {
+        self.selectedTab = selectedTab
+    }
+
     // `calories > 0` made water, black coffee, and diet soda impossible to log manually —
     // the button was permanently disabled for a legitimate, common entry, with nothing
     // explaining why. Negative macros can't get in here: MacroField strips the sign as you

@@ -95,6 +95,29 @@ struct BodyHubView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
 
+                if !vm.milestones.isEmpty {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                        Text("MEANINGFUL CHANGES")
+                            .font(.system(size: 11, weight: .bold))
+                            .tracking(0.6)
+                            .foregroundStyle(Theme.Colors.textFaint)
+                        ForEach(vm.milestones) { milestone in
+                            HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+                                Image(systemName: "sparkles")
+                                    .foregroundStyle(Theme.Colors.primary)
+                                    .frame(width: 22)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(milestone.title).font(.subheadline.weight(.semibold))
+                                    Text(milestone.detail).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(Theme.Spacing.md)
+                            .card()
+                        }
+                    }
+                }
+
                 Button {
                     showCheckIn = true
                 } label: {

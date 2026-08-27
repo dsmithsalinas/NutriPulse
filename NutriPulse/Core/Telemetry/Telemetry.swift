@@ -48,6 +48,38 @@ enum Telemetry {
         )
     }
 
+    static func recoveryActionUsed(action: String) {
+        TelemetryDeck.signal(
+            TelemetrySignal.recoveryActionUsed.rawValue,
+            parameters: ["action": action]
+        )
+    }
+
+    static func proteinRescueLogged(itemCount: Int) {
+        TelemetryDeck.signal(
+            TelemetrySignal.proteinRescueLogged.rawValue,
+            parameters: ["itemCount": String(itemCount)]
+        )
+    }
+
+    static func mealRepeated(meal: Meal, itemCount: Int) {
+        TelemetryDeck.signal(
+            TelemetrySignal.mealRepeated.rawValue,
+            parameters: ["meal": meal.rawValue, "itemCount": String(itemCount)]
+        )
+    }
+
+    static func talkCorrectionApplied() {
+        TelemetryDeck.signal(TelemetrySignal.talkCorrectionApplied.rawValue)
+    }
+
+    static func shotCycleCheckInSaved(cycleDay: Int) {
+        TelemetryDeck.signal(
+            TelemetrySignal.shotCycleCheckInSaved.rawValue,
+            parameters: ["cycleDay": String(cycleDay)]
+        )
+    }
+
     // MARK: - Pulse
 
     /// A user sent a message to Pulse (not an auto-generated check-in).

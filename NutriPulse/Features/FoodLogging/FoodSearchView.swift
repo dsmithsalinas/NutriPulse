@@ -322,6 +322,7 @@ private struct FavoriteQuickAddRow: View {
     let onLogged: (LogSource) -> Void
 
     @State private var isLogging = false
+    @State private var didLog = false
     private let repo = FavoriteRepository()
 
     var body: some View {
@@ -345,6 +346,10 @@ private struct FavoriteQuickAddRow: View {
                     Group {
                         if isLogging {
                             ProgressView().scaleEffect(0.75)
+                        } else if didLog {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.green)
                         } else {
                             Image(systemName: "plus.circle.fill")
                                 .font(.title3)
@@ -354,7 +359,8 @@ private struct FavoriteQuickAddRow: View {
                     .frame(width: 30, height: 30)
                 }
                 .buttonStyle(.plain)
-                .disabled(isLogging)
+                .disabled(isLogging || didLog)
+                .accessibilityLabel(didLog ? "Logged" : "Log \(fav.name)")
             }
         }
         .padding(.vertical, 2)
@@ -375,6 +381,7 @@ private struct FavoriteQuickAddRow: View {
         defer { isLogging = false }
         do {
             try await repo.quickLog(fav, on: date, meal: .current)
+            didLog = true
             onLogged(.favorite)
         } catch {
             // Previously `catch {}`: the spinner stopped, nothing logged, no error.

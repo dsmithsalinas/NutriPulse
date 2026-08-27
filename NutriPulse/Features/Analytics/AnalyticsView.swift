@@ -20,6 +20,17 @@ struct AnalyticsView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    if let review = vm.weeklyReview {
+                        WeeklyReviewCard(review: review)
+                    }
+
+                    if vm.cycleInsights.count >= 2 {
+                        CycleAwareAnalyticsCard(
+                            insights: vm.cycleInsights,
+                            proteinGoal: vm.goalProteinG
+                        )
+                    }
+
                     if !vm.loggedDays.isEmpty {
                         AnalyticsSummaryCard(
                             avgProtein:   vm.averageProteinG,

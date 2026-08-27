@@ -149,6 +149,9 @@ final class SyncEngine {
             failedStage = failure.0
             Telemetry.syncFailed(stage: failure.0.rawValue)
         } else {
+            // Today observes this to reconcile data pulled from other devices/sessions.
+            // Local-only pushes below must not advance it: their views already applied the
+            // mutation optimistically and a reload would flash the full-page loading state.
             lastSyncAt = .now
         }
 
@@ -184,8 +187,6 @@ final class SyncEngine {
         if let failure = results.first(where: { !$0.1 }) {
             failedStage = failure.0
             Telemetry.syncFailed(stage: failure.0.rawValue)
-        } else {
-            lastSyncAt = .now
         }
 
         await flushIfRequested()
@@ -209,7 +210,6 @@ final class SyncEngine {
                 Telemetry.syncFailed(stage: failure.0.rawValue)
             } else {
                 failedStage = nil
-                lastSyncAt = .now
             }
         }
         needsAnotherPush = false

@@ -8,6 +8,19 @@ final class NotificationManager {
 
     private let center = UNUserNotificationCenter.current()
 
+    static let smartCoachingEnabledKey = "smartCoachingNotificationsEnabled"
+    static let smartSuppressedDayKey = "smartCoachingSuppressedDay"
+    static let smartIdentifierPrefix = "smart-"
+    static let closeProteinAction = "smart-close-protein"
+    static let addWaterAction = "smart-add-water"
+    static let repeatMealAction = "smart-repeat-meal"
+    static let reviewMealAction = "smart-review-meal"
+    static let notTodayAction = "smart-not-today"
+    static let recoveryCategory = "smart-recovery"
+    static let proteinCategory = "smart-protein"
+    static let mealCategory = "smart-meal"
+    static let appetiteCategory = "smart-appetite"
+
     // Reminders fire at 9am local time.
     private static let reminderHour = 9
 
@@ -77,6 +90,176 @@ final class NotificationManager {
 
     func cancelGLP1Reminders() {
         center.removePendingNotificationRequests(withIdentifiers: Self.allIdentifiers)
+    }
+
+    // MARK: - Smart coaching notifications
+
+    func registerSmartCategories() {
+        let closeProtein = UNNotificationAction(
+            identifier: Self.closeProteinAction,
+            title: "Close the gap",
+            options: [.foreground]
+        )
+        let addWater = UNNotificationAction(
+            identifier: Self.addWaterAction,
+            title: "Add 250 ml",
+            options: [.foreground]
+        )
+        let repeatMeal = UNNotificationAction(
+            identifier: Self.repeatMealAction,
+            title: "Log again",
+            options: [.foreground]
+        )
+        let reviewMeal = UNNotificationAction(
+            identifier: Self.reviewMealAction,
+            title: "Review first",
+            options: [.foreground]
+        )
+        let notToday = UNNotificationAction(
+            identifier: Self.notTodayAction,
+            title: "Not today",
+            options: []
+        )
+        center.setNotificationCategories([
+            UNNotificationCategory(
+                identifier: Self.recoveryCategory,
+                actions: [closeProtein, addWater, notToday],
+                intentIdentifiers: []
+            ),
+            UNNotificationCategory(
+                identifier: Self.proteinCategory,
+                actions: [closeProtein, notToday],
+                intentIdentifiers: []
+            ),
+            UNNotificationCategory(
+                identifier: Self.mealCategory,
+                actions: [repeatMeal, reviewMeal, notToday],
+                intentIdentifiers: []
+            ),
+            UNNotificationCategory(
+                identifier: Self.appetiteCategory,
+                actions: [notToday],
+                intentIdentifiers: []
+            ),
+        ])
+    }
+
+    @discardableResult
+    func setSmartCoachingEnabled(_ enabled: Bool) async -> Bool {
+        if enabled {
+            guard await requestPermissionIfNeeded() else { return false }
+            UserDefaults.standard.set(true, forKey: Self.smartCoachingEnabledKey)
+            NotificationCenter.default.post(name: .smartCoachingSettingsChanged, object: nil)
+            return true
+        }
+        UserDefaults.standard.set(false, forKey: Self.smartCoachingEnabledKey)
+        cancelSmartNotifications()
+        NotificationCenter.default.post(name: .smartCoachingSettingsChanged, object: nil)
+        return true
+    }
+
+    func scheduleSmartOpportunity(_ opportunity: SmartNotificationOpportunity?) async {
+        guard UserDefaults.standard.bool(forKey: Self.smartCoachingEnabledKey) else {
+            cancelSmartNotifications()
+            return
+        }
+        guard UserDefaults.standard.string(forKey: Self.smartSuppressedDayKey) != Date.now.isoDateString else {
+            cancelSmartNotifications()
+            return
+        }
+        guard let opportunity else {
+            cancelSmartNotifications()
+            return
+        }
+
+        let preferences = SmartNotificationPreferences.load()
+        guard preferences.enabledKinds.contains(opportunity.kind),
+              !preferences.isQuiet(at: opportunity.fireDate) else {
+            cancelSmartNotifications()
+            return
+        }
+
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+
+        let dayPrefix = "\(Self.smartIdentifierPrefix)\(Date.now.isoDateString)-"
+        let delivered = await center.deliveredNotifications()
+        // Strict coaching budget: once one smart notification reached Notification Center
+        // today, every later candidate stays in the app. Shot reminders are separate.
+        guard !delivered.contains(where: { $0.request.identifier.hasPrefix(dayPrefix) }) else {
+            cancelSmartNotifications()
+            return
+        }
+
+        let pending = await center.pendingNotificationRequests()
+        let existing = pending.first { $0.identifier.hasPrefix(Self.smartIdentifierPrefix) }
+        let existingPriority = existing?.content.userInfo["priority"] as? Int ?? -1
+        if existingPriority >= opportunity.priority { return }
+        let replacedIDs = pending.filter { $0.identifier.hasPrefix(Self.smartIdentifierPrefix) }.map(\.identifier)
+        center.removePendingNotificationRequests(withIdentifiers: replacedIDs)
+
+        let content = UNMutableNotificationContent()
+        content.title = opportunity.title
+        content.body = opportunity.body
+        content.sound = .default
+        content.userInfo = [
+            "kind": opportunity.kind.rawValue,
+            "priority": opportunity.priority,
+            "sourceDate": opportunity.sourceDate ?? "",
+            "meal": opportunity.meal?.rawValue ?? "",
+        ]
+        switch opportunity.kind {
+        case .workoutRecovery: content.categoryIdentifier = Self.recoveryCategory
+        case .proteinCloseout: content.categoryIdentifier = Self.proteinCategory
+        case .lowAppetite: content.categoryIdentifier = Self.appetiteCategory
+        case .repeatedMeal: content.categoryIdentifier = Self.mealCategory
+        }
+
+        let interval = max(opportunity.fireDate.timeIntervalSinceNow, 1)
+        let identifier = "\(dayPrefix)\(opportunity.kind.rawValue)"
+        do {
+            try await center.add(UNNotificationRequest(
+                identifier: identifier,
+                content: content,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+            ))
+            SmartNotificationHistoryStore.remove(ids: replacedIDs)
+            SmartNotificationHistoryStore.upsert(.init(
+                id: identifier,
+                kind: opportunity.kind,
+                title: opportunity.title,
+                body: opportunity.body,
+                rationale: opportunity.rationale,
+                scheduledAt: .now,
+                fireDate: opportunity.fireDate,
+                feedback: nil,
+                status: .scheduled
+            ))
+        } catch { }
+    }
+
+    func cancelSmartNotifications() {
+        Task { @MainActor in
+            let requests = await center.pendingNotificationRequests()
+            let ids = requests.filter { $0.identifier.hasPrefix(Self.smartIdentifierPrefix) }.map(\.identifier)
+            center.removePendingNotificationRequests(withIdentifiers: ids)
+            SmartNotificationHistoryStore.remove(ids: ids)
+        }
+    }
+
+    // iOS does not wake the app merely to say a background notification was delivered.
+    // Reconcile against Notification Center whenever history is opened/Footing resumes,
+    // and never infer delivery just because a fire date passed.
+    func reconcileSmartNotificationHistory() async {
+        let pendingIDs = Set(await center.pendingNotificationRequests().map(\.identifier))
+        let deliveredIDs = Set(await center.deliveredNotifications().map { $0.request.identifier })
+        for entry in SmartNotificationHistoryStore.load() {
+            if deliveredIDs.contains(entry.id), entry.status == .scheduled {
+                SmartNotificationHistoryStore.setStatus(.delivered, for: entry.id)
+            } else if pendingIDs.contains(entry.id), entry.status != .scheduled {
+                SmartNotificationHistoryStore.setStatus(.scheduled, for: entry.id)
+            }
+        }
     }
 
     // MARK: - Private

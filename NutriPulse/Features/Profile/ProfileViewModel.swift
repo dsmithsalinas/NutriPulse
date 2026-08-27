@@ -20,6 +20,8 @@ final class ProfileViewModel {
     // Shot-day reminders
     var remindersOn              = false
     var showReminderDeniedAlert  = false
+    var smartCoachingOn          = false
+    var showSmartNotificationDeniedAlert = false
 
     // Sheet presentation flags
     var showEditProfile    = false
@@ -100,6 +102,7 @@ final class ProfileViewModel {
             errorMessage = error.localizedDescription
         }
         await refreshRemindersState()
+        await refreshSmartCoachingState()
     }
 
     // MARK: - Shot-day reminders
@@ -132,6 +135,22 @@ final class ProfileViewModel {
             NotificationManager.shared.cancelGLP1Reminders()
             remindersOn = false
         }
+    }
+
+    func refreshSmartCoachingState() async {
+        let enabled = UserDefaults.standard.bool(forKey: NotificationManager.smartCoachingEnabledKey)
+        guard enabled else {
+            smartCoachingOn = false
+            return
+        }
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        smartCoachingOn = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+    }
+
+    func setSmartCoaching(_ on: Bool) async {
+        let accepted = await NotificationManager.shared.setSmartCoachingEnabled(on)
+        smartCoachingOn = on && accepted
+        if on && !accepted { showSmartNotificationDeniedAlert = true }
     }
 
     // MARK: - Profile update

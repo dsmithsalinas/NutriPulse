@@ -24,6 +24,14 @@ enum TelemetrySignal: String {
     /// `logIntentStarted`), so it carries time-to-log automatically.
     case logConfirmed = "log.confirmed"
 
+    // MARK: Coaching actions — are the new shortcuts actually reducing friction?
+
+    case recoveryActionUsed = "recovery.actionUsed"
+    case proteinRescueLogged = "recovery.proteinRescueLogged"
+    case mealRepeated = "log.mealRepeated"
+    case talkCorrectionApplied = "log.talkCorrectionApplied"
+    case shotCycleCheckInSaved = "glp1.checkInSaved"
+
     // MARK: Goal 2 — is Pulse valuable enough to justify its cost?
 
     /// A user sent a message to Pulse (not an auto-generated check-in).

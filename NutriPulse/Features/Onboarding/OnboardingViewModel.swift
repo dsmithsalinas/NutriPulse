@@ -199,6 +199,22 @@ final class OnboardingViewModel {
         isLoading = true
         defer { isLoading = false }
 
+        // No onboarding mutation is allowed until this session can read its
+        // trigger-created profile. A complete profile means this is a returning user.
+        let activeUserId = try await supabase.auth.session.user.id
+        guard activeUserId == userId else { throw OnboardingSaveError.sessionExpired }
+        let existing: [UserProfile] = try await supabase
+            .from("profiles")
+            .select()
+            .eq("id", value: userId)
+            .limit(1)
+            .execute()
+            .value
+        guard let existingProfile = existing.first else {
+            throw OnboardingSaveError.profileUnavailable
+        }
+        if existingProfile.fullName != nil { return existingProfile }
+
         let goals = calculatedGoals
 
         // 1. Record starting weight (idempotent on the client-generated id)
@@ -293,6 +309,20 @@ final class OnboardingViewModel {
         UserDefaults.standard.set(useImperialUnits ? "imperial" : "metric", forKey: "unitSystem")
 
         return savedProfile
+    }
+}
+
+enum OnboardingSaveError: LocalizedError {
+    case sessionExpired
+    case profileUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .sessionExpired:
+            "Your session changed. Please sign in again."
+        case .profileUnavailable:
+            "We couldn't securely load your account. No setup changes were saved. Please try signing in again."
+        }
     }
 }
 

@@ -13,10 +13,12 @@ final class TodayViewModel {
     private let measurementRepo = BodyMeasurementRepository()
     private let foodLogRepo  = FoodLogRepository()
     private let glp1Repo     = GLP1Repository()
+    private let shotCycleRepo = ShotCycleRepository()
 
     // Most recent GLP-1 injection, for the dose-day chip in the header. Fetched on load; the
     // chip only surfaces on today, and only when a dose is due today or overdue.
     var latestGLP1: GLP1Log? = nil
+    var shotCycleCheckIns: [ShotCycleCheckIn] = []
 
     var selectedDate: Date = .now
     // Whether `selectedDate` is the user's "today" rather than a day they
@@ -58,6 +60,44 @@ final class TodayViewModel {
     // Workouts for the selected date — HealthKit imports and manual logs merged,
     // read from LocalStore (imports land there via loadWorkouts()).
     var workouts: [WorkoutLog] = []
+
+    // Yesterday's meal groups are an implicit, zero-setup template library. Most people
+    // repeat breakfast and lunch; keeping the source in history avoids making them name and
+    // manage "templates" before the shortcut becomes useful.
+    var yesterdayMeals: [Meal: [FoodLog]] = [:]
+    var repeatingMeal: Meal? = nil
+    var repeatedMeals: Set<Meal> = []
+    private var repeatTargetDate: String? = nil
+
+    var availableYesterdayMeals: [Meal: [FoodLog]] {
+        yesterdayMeals.filter { !repeatedMeals.contains($0.key) }
+    }
+
+    var recoveryOpportunity: RecoveryOpportunity? {
+        guard isToday else { return nil }
+        return RecoveryCoach.opportunity(
+            workouts: workouts,
+            goal: dailyGoal,
+            proteinToday: totalProteinG,
+            waterTodayMl: waterIntakeMl
+        )
+    }
+
+    var lowAppetitePreparation: LowAppetitePreparation? {
+        guard isToday, let injectedAt = latestGLP1?.injectedAt else { return nil }
+        let currentDay = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: injectedAt),
+            to: Calendar.current.startOfDay(for: .now)
+        ).day ?? -1
+        guard currentDay >= 0 else { return nil }
+        let preparation = LowAppetitePreparationEngine.predict(
+            currentCycleDay: currentDay,
+            history: shotCycleCheckIns
+        )
+        guard let preparation, !LowAppetitePreparationStore.isCompleted(preparation) else { return nil }
+        return preparation
+    }
 
     // Set by TodayView from AppState before loadData — the weight-drift check needs the
     // user's stats (sex, height, DOB, activity) to rebuild TDEEs.
@@ -109,6 +149,22 @@ final class TodayViewModel {
     var restingHeartRate: Double? = nil
     var hrv: Double?            = nil
     var sleepHours: Double?     = nil
+    var baselineRestingHeartRate: Double? = nil
+    var baselineHRV: Double? = nil
+    var baselineSleepHours: Double? = nil
+    private var recoveryBaselineDay = ""
+
+    var recoveryContext: RecoveryContext? {
+        guard isToday else { return nil }
+        return RecoveryContextEngine.build(
+            sleepHours: sleepHours, baselineSleep: baselineSleepHours,
+            hrv: hrv, baselineHRV: baselineHRV,
+            restingHR: restingHeartRate, baselineRestingHR: baselineRestingHeartRate,
+            workoutMinutes: workouts.reduce(0) { $0 + $1.durationMinutes },
+            proteinG: totalProteinG, proteinGoalG: dailyGoal?.proteinG,
+            waterMl: waterIntakeMl, waterGoalMl: waterGoalMl
+        )
+    }
 
     // Dose-day chip content. Only on today, and only when the next dose is due today or has
     // passed — the actionable states. On other days the header stays clean.
@@ -250,6 +306,10 @@ final class TodayViewModel {
     }
 
     func loadData() async {
+        if repeatTargetDate != selectedDate.isoDateString {
+            repeatedMeals = []
+            repeatTargetDate = selectedDate.isoDateString
+        }
         let wasClosed      = allRingsClosed
         let wasProteinHit  = proteinGoalHit
         isLoading    = true
@@ -258,6 +318,7 @@ final class TodayViewModel {
 
         async let bodyCompTask = buildBodyCompData()
         async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
+        async let shotCycleTask = shotCycleRepo.fetchRecent(days: 84)
 
         do {
             let userId = try await supabase.auth.session.user.id
@@ -267,6 +328,14 @@ final class TodayViewModel {
             dailyGoal     = try? LocalStore.shared.fetchGoal(for: selectedDate, userId: userId)
             waterIntakeMl = (try? LocalStore.shared.fetchWaterTotal(for: selectedDate, userId: userId)) ?? 0
             waterGoalMl   = dailyGoal?.waterMlTarget ?? 2000
+
+            if isToday,
+               let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: selectedDate) {
+                let prior = (try? LocalStore.shared.fetchFoodLogs(for: yesterday, userId: userId)) ?? []
+                yesterdayMeals = Dictionary(grouping: prior, by: \.meal)
+            } else {
+                yesterdayMeals = [:]
+            }
 
             // Cache miss on first launch — fetch goal from Supabase and store locally
             if dailyGoal == nil {
@@ -309,12 +378,131 @@ final class TodayViewModel {
         }
 
         latestGLP1 = (try? await glp1Task)?.first
+        shotCycleCheckIns = (try? await shotCycleTask) ?? []
         bodyComp = await bodyCompTask
         latestWaistCm = ((try? await measurementRepo.fetchLatestPerSite()) ?? [:])[.waist]?.valueCm
         await loadHealthData()
         await loadWorkouts()
         await checkWeightDrift()
         await FavoritesStore.shared.loadIfNeeded()
+        await evaluateSmartNotifications()
+    }
+
+    // Copies the exact per-serving snapshots and quantities from yesterday into today.
+    // This is local-first like every other logging path, so "same breakfast" works at the
+    // gym or on a commute without waiting for a network round trip.
+    func repeatYesterday(_ meal: Meal) async {
+        guard repeatingMeal == nil, let source = yesterdayMeals[meal], !source.isEmpty,
+              let userId = try? await supabase.auth.session.user.id else { return }
+        repeatingMeal = meal
+        defer { repeatingMeal = nil }
+
+        do {
+            for log in source {
+                try LocalStore.shared.insertFoodLog(
+                    id: UUID(),
+                    userId: userId,
+                    logDate: selectedDate.isoDateString,
+                    meal: meal.rawValue,
+                    foodItemId: log.foodItemId,
+                    foodItemName: log.displayName,
+                    quantity: log.quantity,
+                    caloriesSnapshot: log.caloriesSnapshot,
+                    proteinGSnapshot: log.proteinGSnapshot,
+                    carbsGSnapshot: log.carbsGSnapshot,
+                    fatGSnapshot: log.fatGSnapshot,
+                    fiberGSnapshot: log.fiberGSnapshot
+                )
+            }
+            foodLogs = try LocalStore.shared.fetchFoodLogs(for: selectedDate, userId: userId)
+            Telemetry.mealRepeated(meal: meal, itemCount: source.count)
+            repeatedMeals.insert(meal)
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+        } catch {
+            errorMessage = "Couldn't repeat that meal."
+        }
+    }
+
+    // Notification action for a learned routine. The notification carries the exact
+    // source date and meal that established the pattern, so the action remains local-first
+    // and deterministic even if the network is unavailable when the user taps it.
+    func mealLogs(from sourceDate: String, meal: Meal) async -> [FoodLog] {
+        guard let date = Date.fromISODateString(sourceDate),
+              let userId = try? await supabase.auth.session.user.id else { return [] }
+        return ((try? LocalStore.shared.fetchFoodLogs(for: date, userId: userId)) ?? [])
+            .filter { $0.meal == meal }
+    }
+
+    func repeatMeal(from sourceDate: String, meal: Meal, quantities: [UUID: Double] = [:]) async {
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+        let source = await mealLogs(from: sourceDate, meal: meal)
+        guard !source.isEmpty else { return }
+        do {
+            for log in source {
+                let quantity = max(quantities[log.id] ?? log.quantity, 0.5)
+                try LocalStore.shared.insertFoodLog(
+                    id: UUID(), userId: userId,
+                    logDate: Date.now.isoDateString, meal: meal.rawValue,
+                    foodItemId: log.foodItemId, foodItemName: log.displayName,
+                    quantity: quantity,
+                    caloriesSnapshot: log.caloriesSnapshot,
+                    proteinGSnapshot: log.proteinGSnapshot,
+                    carbsGSnapshot: log.carbsGSnapshot,
+                    fatGSnapshot: log.fatGSnapshot,
+                    fiberGSnapshot: log.fiberGSnapshot
+                )
+            }
+            selectedDate = .now
+            foodLogs = try LocalStore.shared.fetchFoodLogs(for: .now, userId: userId)
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+            await evaluateSmartNotifications()
+        } catch {
+            errorMessage = "Couldn't repeat that meal."
+        }
+    }
+
+    private func evaluateSmartNotifications() async {
+        guard isToday else { return }
+        guard UserDefaults.standard.bool(forKey: NotificationManager.smartCoachingEnabledKey) else {
+            await NotificationManager.shared.scheduleSmartOpportunity(nil)
+            return
+        }
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+
+        var history: [FoodLog] = []
+        for offset in 1...7 {
+            guard let date = Calendar.current.date(byAdding: .day, value: -offset, to: .now) else { continue }
+            history += (try? LocalStore.shared.fetchFoodLogs(for: date, userId: userId)) ?? []
+        }
+        let pattern = RepeatedMealDetector.detect(history: history, todayLogs: foodLogs, now: .now)
+        let favorites = (try? await FavoriteRepository().fetchQuickAdds()) ?? []
+        let proteinGap = max(Int(((dailyGoal?.proteinG ?? 0) - totalProteinG).rounded()), 0)
+        let calorieRoom = max(Int(((dailyGoal?.calories ?? 0) - totalCalories).rounded()), 0)
+        let options = ProteinRescuePlanner.options(
+            favorites: favorites,
+            proteinGap: proteinGap,
+            calorieRoom: calorieRoom
+        )
+        let preferences = SmartNotificationPreferences.load()
+        let opportunity = SmartNotificationEngine.bestOpportunity(
+            recovery: recoveryOpportunity,
+            proteinGap: proteinGap,
+            calorieRoom: calorieRoom,
+            rescueOptions: options,
+            lowAppetite: lowAppetitePreparation,
+            repeatedMeal: pattern,
+            enabledKinds: preferences.enabledKinds,
+            quietStartHour: preferences.quietStartHour,
+            quietEndHour: preferences.quietEndHour,
+            now: .now
+        )
+        await NotificationManager.shared.scheduleSmartOpportunity(opportunity)
+    }
+
+    func refreshSmartNotifications() async {
+        await evaluateSmartNotifications()
     }
 
     // MARK: - Weight-drift retarget
@@ -671,6 +859,31 @@ final class TodayViewModel {
         restingHeartRate = heartRate
         hrv              = heartRateVar
         sleepHours       = sleepTime
+
+        if isToday, recoveryBaselineDay != selectedDate.isoDateString {
+            recoveryBaselineDay = selectedDate.isoDateString
+            var restingValues: [Double] = []
+            var hrvValues: [Double] = []
+            var sleepValues: [Double] = []
+            for offset in 1...7 {
+                guard let date = Calendar.current.date(byAdding: .day, value: -offset, to: selectedDate) else { continue }
+                async let priorHR = hk.fetchRestingHeartRate(for: date)
+                async let priorHRV = hk.fetchHRV(for: date)
+                async let priorSleep = hk.fetchSleepHours(for: date)
+                let values = await (priorHR, priorHRV, priorSleep)
+                if let value = values.0 { restingValues.append(value) }
+                if let value = values.1 { hrvValues.append(value) }
+                if let value = values.2 { sleepValues.append(value) }
+            }
+            baselineRestingHeartRate = Self.average(restingValues)
+            baselineHRV = Self.average(hrvValues)
+            baselineSleepHours = Self.average(sleepValues)
+        }
+    }
+
+    nonisolated private static func average(_ values: [Double]) -> Double? {
+        guard values.count >= 3 else { return nil }
+        return values.reduce(0, +) / Double(values.count)
     }
 
     // Triggered by the card's "Connect Apple Health" row. Only meaningful before the

@@ -43,6 +43,7 @@ final class TalkToLogViewModel {
     var isParsing = false
     var rows: [ConfirmRow] = []
     var selectedMeal: Meal = .current
+    var correctionText = ""
     var isLogging = false
     var errorMessage: String? = nil
 
@@ -92,8 +93,51 @@ final class TalkToLogViewModel {
 
     func reset() {
         inputText = ""
+        correctionText = ""
         rows = []
         errorMessage = nil
+    }
+
+    // Applies common conversational corrections directly to the confirm card. The parser is
+    // intentionally deterministic: it never changes nutrition data, only inclusion and
+    // quantity, so a correction cannot turn a grounded row into an unmarked AI estimate.
+    @discardableResult
+    func applyCorrection() -> Bool {
+        guard let action = TalkCorrectionParser.parse(correctionText) else {
+            errorMessage = "Try “half the rice,” “remove cheese,” or “make chicken two.”"
+            return false
+        }
+
+        let query: String? = switch action {
+        case .remove(let query): query
+        case .scale(let query, _), .setQuantity(let query, _): query
+        }
+        let candidates = rows.indices.filter { !rows[$0].isSaved }
+        let index: Int? = if let query {
+            candidates.first { rowIndex in
+                let haystack = "\(rows[rowIndex].name) \(rows[rowIndex].brand ?? "") \(rows[rowIndex].servingDesc)".lowercased()
+                return query.split(separator: " ").allSatisfy { haystack.contains(String($0)) }
+            }
+        } else {
+            candidates.count == 1 ? candidates.first : candidates.last
+        }
+
+        guard let index else {
+            errorMessage = "I couldn't match that correction to an item in this meal."
+            return false
+        }
+
+        switch action {
+        case .remove:
+            rows[index].isIncluded = false
+        case .scale(_, let multiplier):
+            rows[index].quantity = min(max(rows[index].quantity * multiplier, 0.25), 10)
+        case .setQuantity(_, let quantity):
+            rows[index].quantity = min(max(quantity, 0.25), 10)
+        }
+        correctionText = ""
+        Telemetry.talkCorrectionApplied()
+        return true
     }
 
     // Confirmed rows only — unchecked rows are dropped, never silently logged.
