@@ -3,6 +3,7 @@
 xcuserdata/
 .build/
 DerivedData/
+/build/
 .env
 .env.status-report
 # Supabase credentials — copy Secrets.xcconfig.template → Secrets.xcconfig locally
