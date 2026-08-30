@@ -15,6 +15,7 @@ struct TodayView: View {
     @State private var showRitual = false
     @State private var showProteinRescue = false
     @State private var showRecoveryLogger = false
+    @State private var showShotCycleCheckIn = false
     @State private var repeatedMealRoute: SmartNotificationRoute? = nil
     @State private var ringCelebrationTrigger = 0
     @State private var proteinRippleTrigger = 0
@@ -24,6 +25,7 @@ struct TodayView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
     @AppStorage(LowAppetitePreparationStore.completedKey) private var completedPreparation = ""
+    @AppStorage(ShotCycleCheckInSchedule.dismissedDayKey) private var dismissedShotCheckInDay = ""
     // Which day the user dismissed the dose-day card (ISO date). Hides it for that day only;
     // it returns on the next dose day (or as an overdue prompt the following day).
     @AppStorage("doseCardDismissedDay") private var doseCardDismissedDay = ""
@@ -101,6 +103,8 @@ struct TodayView: View {
                         if HealthKitManager.shared.isAvailable {
                             HealthStatsCard(
                                 context: vm.recoveryContext,
+                                shotCycleCheckIn: vm.todayShotCycleCheckIn,
+                                shotCycleDay: vm.currentShotCycleDay,
                                 activeCalories: vm.activeCalories,
                                 restingHR:      vm.restingHeartRate,
                                 hrv:            vm.hrv,
@@ -249,6 +253,24 @@ struct TodayView: View {
             }) {
                 FoodLoggingView(selectedDate: vm.selectedDate)
             }
+            .sheet(isPresented: $showShotCycleCheckIn) {
+                if let cycleDay = vm.currentShotCycleDay {
+                    ShotCycleCheckInSheet(
+                        cycleDay: cycleDay,
+                        existing: vm.todayShotCycleCheckIn,
+                        onSave: { draft in await vm.saveShotCycleCheckIn(draft) }
+                    )
+                    .presentationDetents([.large])
+                }
+            }
+            .alert("Couldn’t save check-in", isPresented: Binding(
+                get: { vm.shotCycleCheckInError != nil },
+                set: { if !$0 { vm.shotCycleCheckInError = nil } }
+            )) {
+                Button("OK", role: .cancel) { vm.shotCycleCheckInError = nil }
+            } message: {
+                Text(vm.shotCycleCheckInError ?? "Please try again.")
+            }
             .sheet(item: $editingLog) { log in
                 EditFoodLogSheet(
                     log: log,
@@ -350,6 +372,15 @@ struct TodayView: View {
                 completed: false,
                 onTap: { showRitual = true },
                 onDismiss: { doseCardDismissedDay = Date.now.isoDateString }
+            )
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        } else if dismissedShotCheckInDay != Date.now.isoDateString,
+                  vm.scheduledShotCycleCheckInDue,
+                  let cycleDay = vm.currentShotCycleDay {
+            ShotCycleCheckInCard(
+                cycleDay: cycleDay,
+                onCheckIn: { showShotCycleCheckIn = true },
+                onNotNow: { dismissedShotCheckInDay = Date.now.isoDateString }
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
         } else if let recovery = vm.recoveryOpportunity {

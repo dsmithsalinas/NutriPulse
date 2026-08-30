@@ -7,6 +7,16 @@ struct ShotCyclePlan: Equatable {
     let learnedPattern: String?
 }
 
+enum ShotCycleCheckInSchedule {
+    static let scheduledDays: Set<Int> = [1, 3, 6]
+    static let dismissedDayKey = "shotCycleCheckInDismissedDay"
+
+    static func isDue(cycleDay: Int?, hasTodayCheckIn: Bool) -> Bool {
+        guard let cycleDay else { return false }
+        return scheduledDays.contains(cycleDay) && !hasTodayCheckIn
+    }
+}
+
 enum ShotCyclePlanner {
     static func plan(cycleDay: Int, today: ShotCycleCheckIn?, history: [ShotCycleCheckIn]) -> ShotCyclePlan {
         let baseline: (String, String, [String])

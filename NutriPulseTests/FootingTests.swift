@@ -5,7 +5,15 @@ import SwiftData
 final class FootingTests: XCTestCase {
     func testMealSortOrder() {
         let meals = Meal.allCases.sorted { $0.sortOrder < $1.sortOrder }
-        XCTAssertEqual(meals, [.breakfast, .lunch, .dinner, .snack])
+        XCTAssertEqual(meals, [.breakfast, .lunch, .preWorkout, .postWorkout, .dinner, .snack])
+    }
+
+    func testWorkoutMealCategoriesUseStableStorageValuesAndFriendlyLabels() {
+        XCTAssertEqual(Meal.preWorkout.rawValue, "pre_workout")
+        XCTAssertEqual(Meal.postWorkout.rawValue, "post_workout")
+        XCTAssertEqual(Meal.preWorkout.displayName, "Pre-Workout")
+        XCTAssertEqual(Meal.postWorkout.displayName, "Post-Workout")
+        XCTAssertNotNil(Meal(rawValue: "snack"))
     }
 
     func testFoodLogTotals() {
@@ -36,6 +44,322 @@ final class FootingTests: XCTestCase {
         components.day = 15
         let date = Calendar.current.date(from: components)!
         XCTAssertEqual(date.isoDateString, "2024-03-15")
+    }
+}
+
+// MARK: - Health data quality
+
+final class HealthDataQualityEngineTests: XCTestCase {
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .iso8601)
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        return value
+    }
+
+    private func date(_ day: Int, hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 8, day: day, hour: hour))!
+    }
+
+    func testMissingReadingsAreInsufficientRatherThanZero() {
+        let result = HealthDataQualityEngine.assess(
+            metric: .steps,
+            observations: [],
+            expectedDates: [date(28), date(29), date(30)],
+            now: date(30, hour: 23),
+            calendar: calendar
+        )
+        XCTAssertEqual(result.status, .insufficientData)
+        XCTAssertEqual(result.observedCount, 0)
+        XCTAssertTrue(result.issueCodes.contains(HealthDataQualityIssueCode.missingData.rawValue))
+    }
+
+    func testImplausibleReadingIsQuarantinedWithoutChangingRawInput() {
+        let raw = [HealthQualityObservation(metric: .sleepDuration, value: 27, observedAt: date(30))]
+        let result = HealthDataQualityEngine.assess(
+            metric: .sleepDuration,
+            observations: raw,
+            expectedDates: [date(30)],
+            now: date(30, hour: 23),
+            calendar: calendar
+        )
+        XCTAssertEqual(raw.count, 1)
+        XCTAssertTrue(result.usableObservations.isEmpty)
+        XCTAssertEqual(result.outlierCount, 1)
+        XCTAssertEqual(result.status, .implausible)
+        XCTAssertEqual(
+            result.issues.first { $0.code == .implausibleValue }?.detail,
+            "1 reading fell outside Footing’s conservative validation range and was excluded."
+        )
+    }
+
+    func testDisagreeingSourcesAreExcludedFromDerivedResults() {
+        let observations = [
+            HealthQualityObservation(metric: .sleepDuration, value: 7, observedAt: date(30), sourceIdentifier: "watch"),
+            HealthQualityObservation(metric: .sleepDuration, value: 10, observedAt: date(30), sourceIdentifier: "ring"),
+        ]
+        let result = HealthDataQualityEngine.assess(
+            metric: .sleepDuration,
+            observations: observations,
+            expectedDates: [date(30)],
+            now: date(30, hour: 23),
+            calendar: calendar
+        )
+        XCTAssertEqual(result.status, .conflictingSources)
+        XCTAssertEqual(result.sourceCount, 2)
+        XCTAssertTrue(result.usableObservations.isEmpty)
+        XCTAssertEqual(
+            result.issues.first { $0.code == .conflictingSources }?.detail,
+            "Sources disagreed beyond the expected tolerance on 1 day."
+        )
+    }
+
+    func testSourceTransitionMakesTrendUsableWithCaution() {
+        let observations = [
+            HealthQualityObservation(metric: .weight, value: 90, observedAt: date(28), sourceIdentifier: "scale-a"),
+            HealthQualityObservation(metric: .weight, value: 89.8, observedAt: date(29), sourceIdentifier: "scale-a"),
+            HealthQualityObservation(metric: .weight, value: 89.7, observedAt: date(30), sourceIdentifier: "scale-b"),
+        ]
+        let result = HealthDataQualityEngine.assess(
+            metric: .weight,
+            observations: observations,
+            expectedDates: [date(28), date(29), date(30)],
+            now: date(30, hour: 23),
+            calendar: calendar
+        )
+        XCTAssertEqual(result.status, .usableWithCaution)
+        XCTAssertTrue(result.issueCodes.contains(HealthDataQualityIssueCode.sourceChanged.rawValue))
+    }
+
+    func testInProgressDayIsMarkedPartial() {
+        let result = HealthDataQualityEngine.assess(
+            metric: .steps,
+            observations: [.init(metric: .steps, value: 4_000, observedAt: date(30, hour: 10))],
+            expectedDates: [date(30)],
+            now: date(30, hour: 12),
+            calendar: calendar
+        )
+        XCTAssertEqual(result.status, .usableWithCaution)
+        XCTAssertTrue(result.issueCodes.contains(HealthDataQualityIssueCode.partialDay.rawValue))
+    }
+
+    func testLastNightsSleepIsNotTreatedAsPartialToday() {
+        let result = HealthDataQualityEngine.assess(
+            metric: .sleepDuration,
+            observations: [.init(metric: .sleepDuration, value: 7.5, observedAt: date(30, hour: 8))],
+            expectedDates: [date(30)],
+            now: date(30, hour: 12),
+            calendar: calendar
+        )
+        XCTAssertEqual(result.status, .usable)
+        XCTAssertFalse(result.issueCodes.contains(HealthDataQualityIssueCode.partialDay.rawValue))
+    }
+}
+
+// MARK: - Personal goals
+
+final class GoalProgressCalculatorTests: XCTestCase {
+    private let userId = UUID()
+    private let goalId = UUID()
+    private let versionId = UUID()
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .iso8601)
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        return value
+    }
+
+    private func date(_ value: String) -> Date {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        return calendar.date(from: .init(year: parts[0], month: parts[1], day: parts[2]))!
+    }
+
+    private func version(
+        period: GoalPeriod = .custom,
+        start: String = "2026-08-24",
+        end: String? = "2026-08-30"
+    ) -> GoalVersion {
+        GoalVersion(
+            id: versionId, goalId: goalId, userId: userId, versionNumber: 1,
+            title: "Test goal", detail: nil, period: period,
+            startDate: start, endDate: end, timezoneId: "UTC",
+            scheduledWeekdays: [1, 2, 3, 4, 5, 6, 7],
+            effectiveFrom: start, effectiveTo: nil, createdAt: date(start)
+        )
+    }
+
+    private func measurement(
+        kind: GoalMeasurementKind,
+        aggregation: GoalAggregation,
+        comparison: GoalComparison,
+        target: Double?,
+        coverage: Double = 0
+    ) -> GoalMeasurement {
+        GoalMeasurement(
+            id: UUID(), goalVersionId: versionId, userId: userId, role: "primary",
+            name: "Test", kind: kind, aggregation: aggregation,
+            comparison: comparison, targetValue: target, unit: nil,
+            sourceType: .manualNumber, sourceMetric: nil,
+            minimumCoverage: coverage, createdAt: date("2026-08-24")
+        )
+    }
+
+    func testHabitMissingDayDoesNotBecomeFailureOrBreakConfirmedStreak() {
+        let metric = measurement(kind: .habit, aggregation: .rate, comparison: .atLeast, target: 0.75)
+        let values = [
+            GoalDailyValue(date: date("2026-08-24"), boolean: true),
+            GoalDailyValue(date: date("2026-08-26"), boolean: true),
+            GoalDailyValue(date: date("2026-08-27"), boolean: false),
+            GoalDailyValue(date: date("2026-08-29"), boolean: true),
+            GoalDailyValue(date: date("2026-08-30"), boolean: true),
+        ]
+        let result = GoalProgressCalculator.calculate(
+            version: version(), measurement: metric, values: values,
+            today: date("2026-08-30"), calendar: calendar
+        )
+        XCTAssertEqual(result.metCount, 4)
+        XCTAssertEqual(result.missedCount, 1)
+        XCTAssertEqual(result.measuredCount, 5)
+        XCTAssertEqual(result.currentStreak, 2)
+    }
+
+    func testAccumulationUsesTargetToDate() {
+        let metric = measurement(kind: .accumulation, aggregation: .sum, comparison: .atLeast, target: 700)
+        let values = (24...27).map { GoalDailyValue(date: date("2026-08-\($0)"), number: 100) }
+        let result = GoalProgressCalculator.calculate(
+            version: version(), measurement: metric, values: values,
+            today: date("2026-08-27"), calendar: calendar
+        )
+        XCTAssertEqual(result.value, 400)
+        XCTAssertEqual(result.status, .onTrack)
+    }
+
+    func testFrequencyCountsConfirmedQualifyingEvents() {
+        let metric = measurement(kind: .frequency, aggregation: .count, comparison: .atLeast, target: 3)
+        let values = [24, 25, 26].map { GoalDailyValue(date: date("2026-08-\($0)"), boolean: true) }
+        let result = GoalProgressCalculator.calculate(
+            version: version(), measurement: metric, values: values,
+            today: date("2026-08-26"), calendar: calendar
+        )
+        XCTAssertEqual(result.value, 3)
+        XCTAssertEqual(result.status, .onTrack)
+    }
+
+    func testAverageAndThresholdCompareOnlyMeasuredValues() {
+        let metric = measurement(kind: .average, aggregation: .average, comparison: .atLeast, target: 8)
+        let values = [7.0, 9.0].enumerated().map {
+            GoalDailyValue(date: date("2026-08-\(24 + $0.offset)"), number: $0.element)
+        }
+        let result = GoalProgressCalculator.calculate(
+            version: version(), measurement: metric, values: values,
+            today: date("2026-08-25"), calendar: calendar
+        )
+        XCTAssertEqual(result.value, 8)
+        XCTAssertEqual(result.status, .onTrack)
+    }
+
+    func testReachTargetUsesBaselineAndElapsedPace() {
+        let metric = measurement(kind: .target, aggregation: .latest, comparison: .reach, target: 90)
+        let values = [
+            GoalDailyValue(date: date("2026-08-24"), number: 100),
+            GoalDailyValue(date: date("2026-08-27"), number: 94),
+        ]
+        let result = GoalProgressCalculator.calculate(
+            version: version(), measurement: metric, values: values,
+            today: date("2026-08-27"), calendar: calendar
+        )
+        XCTAssertEqual(result.status, .onTrack)
+    }
+
+    func testBelowThresholdAndRate() {
+        let threshold = measurement(kind: .threshold, aggregation: .average, comparison: .atMost, target: 5)
+        let thresholdResult = GoalProgressCalculator.calculate(
+            version: version(), measurement: threshold,
+            values: [GoalDailyValue(date: date("2026-08-24"), number: 4)],
+            today: date("2026-08-24"), calendar: calendar
+        )
+        XCTAssertEqual(thresholdResult.status, .onTrack)
+
+        let rate = measurement(kind: .habit, aggregation: .rate, comparison: .atLeast, target: 0.5)
+        let rateResult = GoalProgressCalculator.calculate(
+            version: version(), measurement: rate,
+            values: [
+                GoalDailyValue(date: date("2026-08-24"), boolean: true),
+                GoalDailyValue(date: date("2026-08-25"), boolean: false),
+            ],
+            today: date("2026-08-25"), calendar: calendar
+        )
+        XCTAssertEqual(rateResult.value, 0.5)
+        XCTAssertEqual(rateResult.status, .onTrack)
+    }
+
+    func testSubjectiveCheckinTracksWithoutJudgingSuccess() {
+        let metric = measurement(kind: .subjective, aggregation: .average, comparison: .none, target: nil)
+        let result = GoalProgressCalculator.calculate(
+            version: version(period: .ongoing, end: nil), measurement: metric,
+            values: [GoalDailyValue(date: date("2026-08-30"), number: 3)],
+            today: date("2026-08-30"), calendar: calendar
+        )
+        XCTAssertEqual(result.value, 3)
+        XCTAssertEqual(result.status, .pending)
+    }
+
+    func testGoalRemainsActiveThroughItsInclusiveEndDate() {
+        XCTAssertFalse(GoalLifecycle.hasEnded(
+            version(end: "2026-08-30"),
+            today: date("2026-08-30"),
+            calendar: calendar
+        ))
+    }
+
+    func testFiniteGoalEndsOnTheFollowingLocalDay() {
+        XCTAssertTrue(GoalLifecycle.hasEnded(
+            version(end: "2026-08-30"),
+            today: date("2026-08-31"),
+            calendar: calendar
+        ))
+    }
+
+    func testOngoingGoalDoesNotAutoComplete() {
+        XCTAssertFalse(GoalLifecycle.hasEnded(
+            version(period: .ongoing, end: nil),
+            today: date("2027-08-30"),
+            calendar: calendar
+        ))
+    }
+}
+
+final class GoalDraftTests: XCTestCase {
+    func testProteinSuggestionUsesFoodLogsRatherThanAppleHealth() {
+        let draft = GoalDraft(template: .protein)
+        XCTAssertEqual(draft.trackingSource, .foodLogs)
+        XCTAssertEqual(draft.sourceMetric, .protein)
+        XCTAssertEqual(draft.targetValue, 5)
+        XCTAssertEqual(draft.period, .weekly)
+    }
+
+    func testSelectingAppleHealthMetricAppliesCoherentDefaults() {
+        var draft = GoalDraft()
+        draft.select(.appleHealth)
+        draft.select(.sleepDuration)
+        XCTAssertEqual(draft.trackingSource, .appleHealth)
+        XCTAssertEqual(draft.kind, .average)
+        XCTAssertEqual(draft.aggregation, .average)
+        XCTAssertEqual(draft.targetValue, 8)
+        XCTAssertEqual(draft.unit, "hours")
+        XCTAssertEqual(draft.durationDays, 42)
+    }
+
+    func testManualBooleanDisplaysPercentButStoresRate() {
+        var draft = GoalDraft()
+        draft.displayTargetValue = 85
+        XCTAssertEqual(draft.targetValue, 0.85, accuracy: 0.0001)
+        XCTAssertEqual(draft.displayTargetValue, 85, accuracy: 0.0001)
+    }
+
+    func testCustomGoalRequiresATitle() {
+        var draft = GoalDraft()
+        XCTAssertFalse(draft.isValid)
+        draft.title = "Stretch after lunch"
+        XCTAssertTrue(draft.isValid)
     }
 }
 
@@ -1622,6 +1946,22 @@ final class ShotCyclePlannerTests: XCTestCase {
         let plan = ShotCyclePlanner.plan(cycleDay: 2, today: today, history: [today])
         XCTAssertEqual(plan.phase, "Low-appetite window")
         XCTAssertTrue(plan.actions[0].contains("smallest protein-dense"))
+    }
+
+    func testExperienceCheckInScheduleUsesDaysOneThreeAndSix() {
+        XCTAssertTrue(ShotCycleCheckInSchedule.isDue(cycleDay: 1, hasTodayCheckIn: false))
+        XCTAssertTrue(ShotCycleCheckInSchedule.isDue(cycleDay: 3, hasTodayCheckIn: false))
+        XCTAssertTrue(ShotCycleCheckInSchedule.isDue(cycleDay: 6, hasTodayCheckIn: false))
+        XCTAssertFalse(ShotCycleCheckInSchedule.isDue(cycleDay: 0, hasTodayCheckIn: false))
+        XCTAssertFalse(ShotCycleCheckInSchedule.isDue(cycleDay: 2, hasTodayCheckIn: false))
+        XCTAssertFalse(ShotCycleCheckInSchedule.isDue(cycleDay: 4, hasTodayCheckIn: false))
+        XCTAssertFalse(ShotCycleCheckInSchedule.isDue(cycleDay: 5, hasTodayCheckIn: false))
+        XCTAssertFalse(ShotCycleCheckInSchedule.isDue(cycleDay: 7, hasTodayCheckIn: false))
+    }
+
+    func testCompletedExperienceCheckInIsNotDueAgainThatDay() {
+        XCTAssertFalse(ShotCycleCheckInSchedule.isDue(cycleDay: 3, hasTodayCheckIn: true))
+        XCTAssertFalse(ShotCycleCheckInSchedule.isDue(cycleDay: nil, hasTodayCheckIn: false))
     }
 
     func testRepeatedCycleDayLearnsPattern() {

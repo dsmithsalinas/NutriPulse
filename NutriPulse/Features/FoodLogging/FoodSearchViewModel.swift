@@ -34,6 +34,11 @@ final class FoodSearchViewModel {
     var logError: String? = nil
     var quickAdds: [FavoriteQuickAdd] = []
     var wantsToFavorite = false
+    private(set) var favoriteLogsThisSession = 0
+
+    func recordFavoriteLogged() {
+        favoriteLogsThisSession += 1
+    }
 
     // Guards against a slow response for food A landing after the user has moved on to
     // food B. Both flows share this ViewModel's `detail`/`selectedServing`, so without

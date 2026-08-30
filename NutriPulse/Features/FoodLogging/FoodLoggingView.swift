@@ -47,8 +47,15 @@ struct FoodLoggingView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                if searchVM.favoriteLogsThisSession > 0 {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                            .fontWeight(.semibold)
+                    }
+                } else {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
                 }
             }
             // .constant() evaluates once and freezes — Binding(get:set:) re-evaluates
@@ -81,10 +88,12 @@ struct FoodLoggingView: View {
             Telemetry.logConfirmed(source: source)
         }
 
-        // Favorite quick-adds are intentionally a batch flow: keep the logger open so the
-        // user can add another saved food without returning to Today and reopening Log.
-        // Every other logging path is a single-item flow and still closes on success.
-        if source != .favorite {
+        // Favorite quick-adds are intentionally a batch flow. Each tap logs immediately,
+        // then the toolbar changes from Cancel to Done so the user has a clear exit after
+        // adding one or several saved foods. Every other path remains single-item.
+        if source == .favorite {
+            searchVM.recordFavoriteLogged()
+        } else {
             dismiss()
         }
     }

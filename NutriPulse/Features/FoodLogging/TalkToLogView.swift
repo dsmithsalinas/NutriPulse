@@ -120,7 +120,7 @@ struct TalkToLogView: View {
                             Label(meal.displayName, systemImage: meal.icon).tag(meal)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
 
                     HStack(spacing: Theme.Spacing.sm) {
                         TextField("Actually, half the rice…", text: $vm.correctionText)

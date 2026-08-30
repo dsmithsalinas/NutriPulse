@@ -307,11 +307,22 @@ private struct FavoritesQuickAddList: View {
             } header: {
                 Label("Favorites", systemImage: "star.fill")
                     .foregroundStyle(.yellow)
+            } footer: {
+                if vm.favoriteLogsThisSession > 0 {
+                    Text(favoritesFooter)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .listRowBackground(Theme.Colors.surfaceCard)
+    }
+
+    private var favoritesFooter: String {
+        let count = vm.favoriteLogsThisSession
+        let noun = count == 1 ? "food" : "foods"
+        return "\(count) \(noun) added to your log. Tap Done when you’re finished."
     }
 }
 
@@ -360,7 +371,7 @@ private struct FavoriteQuickAddRow: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isLogging || didLog)
-                .accessibilityLabel(didLog ? "Logged" : "Log \(fav.name)")
+                .accessibilityLabel(didLog ? "\(fav.name) added to log" : "Add \(fav.name) to log")
             }
         }
         .padding(.vertical, 2)

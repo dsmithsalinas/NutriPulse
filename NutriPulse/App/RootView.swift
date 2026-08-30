@@ -9,7 +9,14 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if appState.isLoading {
+            if isGoalBuilderPreview {
+                CreateGoalView(
+                    vm: GoalsViewModel(),
+                    initialDraft: GoalDraft(template: .protein)
+                )
+            } else if isGoalsPreview {
+                MainTabView()
+            } else if appState.isLoading {
                 ProgressView("Loading...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if appState.isPasswordRecoveryFlow {
@@ -33,6 +40,22 @@ struct RootView: View {
         .task {
             await appState.startObservingAuth()
         }
+    }
+
+    private var isGoalsPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--goals-preview")
+        #else
+        false
+        #endif
+    }
+
+    private var isGoalBuilderPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--goal-builder-preview")
+        #else
+        false
+        #endif
     }
 }
 

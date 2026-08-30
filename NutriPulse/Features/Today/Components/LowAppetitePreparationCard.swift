@@ -60,3 +60,82 @@ struct LowAppetitePreparationCard: View {
         .overlay { RoundedRectangle(cornerRadius: 20).strokeBorder(Theme.Colors.hairline) }
     }
 }
+
+struct ShotCycleCheckInCard: View {
+    let cycleDay: Int
+    let onCheckIn: () -> Void
+    let onNotNow: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Theme.Colors.primaryGradient)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("POST-SHOT CHECK-IN")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(Theme.Colors.primary)
+                    Text("How are you feeling after your shot?")
+                        .font(Theme.Typography.headline)
+                }
+
+                Spacer()
+
+                Text("DAY \(cycleDay)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Theme.Colors.primary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Theme.Colors.primary.opacity(0.1), in: Capsule())
+            }
+
+            Text(detail)
+                .font(.subheadline)
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: Theme.Spacing.sm) {
+                Button("Check in", action: onCheckIn)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.Colors.primary)
+
+                Button("Not now", action: onNotNow)
+                    .buttonStyle(.bordered)
+                    .accessibilityHint("Hides this check-in for today")
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+        .padding(Theme.Spacing.md)
+        .background {
+            LinearGradient(
+                colors: [Theme.Colors.primary.opacity(0.12), Theme.Colors.surfaceCard],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Theme.Colors.primary.opacity(0.22), lineWidth: 1)
+        }
+    }
+
+    private var detail: String {
+        switch cycleDay {
+        case 1:
+            "A 30-second check-in captures the early part of this shot cycle."
+        case 3:
+            "Check appetite, fullness, nausea, energy, and digestion as the week settles in."
+        case 6:
+            "One last check-in helps compare how you feel near the end of this shot cycle."
+        default:
+            "Five quick signals help Footing learn your shot-cycle pattern."
+        }
+    }
+}

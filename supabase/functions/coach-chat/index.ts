@@ -59,6 +59,7 @@ If a message contains language suggesting disordered eating, respond with care: 
 
 GLP-1 GUIDANCE
 You may reference the user's configured GLP-1 schedule to contextualize appetite or food volume. You cannot advise on changing doses or timing.
+USER CONTEXT may include \`glp1.cycleDay\`, \`glp1.scheduledCheckInDue\`, and \`glp1.todayExperience\`. Scheduled experience check-ins occur on cycle days 1, 3, and 6. If a scheduled check-in is due, that means today's entry is missing—not that the user has or does not have any symptom. Invite the quick check-in without guessing how they feel or framing missing data as a problem. When \`todayExperience\` is present, use it as the user's subjective report and keep any interpretation on the nutrition, hydration, activity, and rest side of the medical boundary.
 
 HOW TARGETS ARE CALCULATED
 If asked how their numbers are computed, explain plainly — this is the app's actual math, described as "how the app computes your targets", never as a prescription:
@@ -75,8 +76,18 @@ USER CONTEXT may include \`bodyGoals\` — a weight target, a body-fat target, a
 MOVEMENT
 USER CONTEXT may include today's workouts (\`today.workouts\`) and a 7-day movement summary (\`sevenDayHistory.workoutSessions\` / \`workoutMinutes\`) — Apple Health imports and manual logs together. Read them like a coach reads a training log: on strength days the protein floor matters more, so connect the session to what's on the plate; movement is part of protecting lean mass while the medication does its part. Never frame exercise as burning off food or earning calories — that's the banned burn-it-off framing. Absence of workout data is not evidence the user didn't move; say nothing about it rather than calling it out.
 
+WORKOUT NUTRITION
+USER CONTEXT may include \`today.workoutNutrition\` when the user deliberately labeled food as Pre-Workout or Post-Workout. Treat those labels as the user's intended role for the meal, not proof that a workout occurred. When workout timestamps are also present, you may describe timing and the logged carbs, protein, fat, and calories in plain language. Connect preparation or recovery to the user's actual workout and nutrition data, while using tentative language for possible effects. A missing Pre-Workout or Post-Workout entry is unknown, not evidence that the user skipped food. Never promise performance or recovery outcomes, diagnose a deficiency, or present an association as causation.
+
 CELEBRATION
-USER CONTEXT may include a \`recentWins\` list — real, already-detected accomplishments (a closed ring, a logging or protein streak, a first-time goal hit). When it's non-empty, weave an acknowledgment into your response naturally, in your own voice — don't announce it like a notification and don't force it into a reply where it doesn't fit what the user actually asked. Only mention a win that's in the list; never invent or infer one that isn't there. The praise means something specific here because you're equally direct about problems elsewhere — keep it grounded and concrete, not generic hype.`
+USER CONTEXT may include a \`recentWins\` list — real, already-detected accomplishments (a closed ring, a logging or protein streak, a first-time goal hit). When it's non-empty, weave an acknowledgment into your response naturally, in your own voice — don't announce it like a notification and don't force it into a reply where it doesn't fit what the user actually asked. Only mention a win that's in the list; never invent or infer one that isn't there. The praise means something specific here because you're equally direct about problems elsewhere — keep it grounded and concrete, not generic hype.
+
+GOALS AND PERSONAL EXPERIMENTS
+USER CONTEXT may include \`activeGoals\`. Their status, counts, streaks, and coverage were calculated deterministically by Footing. Explain those values; never recalculate them from partial context or override their status. Missing opportunities are unknown, not failures, and must not be added to misses or used to break a streak. When coverage is low, say there is not enough measured data instead of calling the user behind. Relate relevant sleep, stress, activity, nutrition, recovery, and adherence signals only as possible context.
+
+USER CONTEXT may include \`healthDataQuality\` and per-goal quality fields. Apply these as a hard interpretation gate. If status is \`insufficient_data\`, do not claim a trend or that the user did or did not perform the behavior. If status is \`conflicting_sources\` or \`implausible\`, do not use the affected metric to support a conclusion. If status is \`usable_with_caution\`, state the relevant limitation when discussing that metric. A partial day can increase and must not be compared as a complete day. Device coverage is evidence availability, not proof that a device was or was not worn. Never interpret a quality flag as a medical abnormality.
+
+An experiment can describe an observed association, never causation. Use language such as "coincided with," "was associated with," or "may be related." Mention plausible confounders, uneven adherence, missing wearable data, and small samples when relevant. Never diagnose, endorse an unsafe target, prescribe a weight-loss rate, or recommend medication changes.`
 
 // ── Context sanitisation ─────────────────────────────────────────────────────
 // `context` is assembled on-device (CoachContextBuilder) and includes HealthKit data that only
@@ -118,6 +129,7 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
   const today = o(c.today)
   const totals = today && o(today.totals)
   const progress = today && o(today.goalProgress)
+  const workoutNutrition = today && o(today.workoutNutrition)
   const week = o(c.sevenDayHistory)
   const weight = o(c.weightTrend)
   const bodyGoals = o(c.bodyGoals)
@@ -125,7 +137,10 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
   // `healthConnect` block. Accept both so the coach never silently drops
   // Android recovery data while older iOS builds remain compatible.
   const hk = o(c.healthConnect ?? c.healthKit)
+  const healthDataQuality = o(c.healthDataQuality)
   const glp1 = o(c.glp1)
+  const glp1Experience = glp1 && o(glp1.todayExperience)
+  const activeGoals = c.activeGoals
 
   return compact({
     currentDateTime: s(c.currentDateTime, 40),
@@ -156,6 +171,31 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
       }),
       activeCaloriesBurned: i(today.activeCaloriesBurned),
       workouts: a(today.workouts, 10, (w) => s(w, 120)),
+      workoutNutrition: workoutNutrition && compact({
+        preWorkoutEntries: a(workoutNutrition.preWorkoutEntries, 20, (entry) => {
+          const food = o(entry)
+          return food && compact({
+            name: s(food.name, 120), loggedAt: s(food.loggedAt, 40),
+            calories: i(food.calories), proteinG: i(food.proteinG),
+            carbsG: i(food.carbsG), fatG: i(food.fatG),
+          })
+        }),
+        postWorkoutEntries: a(workoutNutrition.postWorkoutEntries, 20, (entry) => {
+          const food = o(entry)
+          return food && compact({
+            name: s(food.name, 120), loggedAt: s(food.loggedAt, 40),
+            calories: i(food.calories), proteinG: i(food.proteinG),
+            carbsG: i(food.carbsG), fatG: i(food.fatG),
+          })
+        }),
+        workoutTimings: a(workoutNutrition.workoutTimings, 10, (entry) => {
+          const workout = o(entry)
+          return workout && compact({
+            name: s(workout.name, 120), startedAt: s(workout.startedAt, 40),
+            endedAt: s(workout.endedAt, 40),
+          })
+        }),
+      }),
     }),
     sevenDayHistory: week && compact({
       daysLogged: i(week.daysLogged), avgCalories: i(week.avgCalories), avgProteinG: i(week.avgProteinG),
@@ -180,9 +220,57 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
       exerciseMinutes: i(hk.exerciseMinutes),
       distanceMeters: n(hk.distanceMeters),
     }),
+    healthDataQuality: healthDataQuality && compact({
+      algorithmVersion: i(healthDataQuality.algorithmVersion),
+      metrics: a(healthDataQuality.metrics, 20, (entry) => {
+        const metric = o(entry)
+        return metric && compact({
+          metric: s(metric.metric, 40),
+          status: s(metric.status, 40),
+          observedDays: i(metric.observedDays),
+          expectedDays: i(metric.expectedDays),
+          coverage: n(metric.coverage),
+          sourceCount: i(metric.sourceCount),
+          outlierCount: i(metric.outlierCount),
+          issues: a(metric.issues, 10, (issue) => s(issue, 50)),
+        })
+      }),
+    }),
     glp1: glp1 && compact({
       medication: s(glp1.medication, 40), doseMg: n(glp1.doseMg),
       lastInjected: s(glp1.lastInjected, 80), nextDue: s(glp1.nextDue, 80), overdue: b(glp1.overdue),
+      cycleDay: i(glp1.cycleDay),
+      scheduledCheckInDue: b(glp1.scheduledCheckInDue),
+      todayExperience: glp1Experience && compact({
+        appetite: i(glp1Experience.appetite),
+        fullness: i(glp1Experience.fullness),
+        nausea: i(glp1Experience.nausea),
+        energy: i(glp1Experience.energy),
+        digestion: i(glp1Experience.digestion),
+        note: s(glp1Experience.note, 500),
+      }),
+    }),
+    activeGoals: a(activeGoals, 10, (g) => {
+      const goal = o(g)
+      return goal && compact({
+        title: s(goal.title, 120),
+        period: s(goal.period, 20),
+        timeframe: s(goal.timeframe, 100),
+        measurement: s(goal.measurement, 100),
+        source: s(goal.source, 40),
+        status: s(goal.status, 30),
+        currentValue: n(goal.currentValue),
+        targetValue: n(goal.targetValue),
+        measuredOpportunities: i(goal.measuredOpportunities),
+        expectedOpportunities: i(goal.expectedOpportunities),
+        confirmedSuccesses: i(goal.confirmedSuccesses),
+        confirmedMisses: i(goal.confirmedMisses),
+        confirmedStreak: i(goal.confirmedStreak),
+        missingDataIsFailure: b(goal.missingDataIsFailure),
+        dataQualityStatus: s(goal.dataQualityStatus, 40),
+        dataQualityCoverage: n(goal.dataQualityCoverage),
+        dataQualityIssues: a(goal.dataQualityIssues, 10, (issue) => s(issue, 50)),
+      })
     }),
   })
 }
@@ -190,8 +278,18 @@ function sanitizeContext(raw: unknown): Record<string, unknown> | undefined {
 function buildSystemPrompt(context: Record<string, unknown> | undefined, messageType: string): string {
   let instruction = ''
   if (messageType === 'checkin') {
-    instruction = `\n\nMESSAGE TYPE: DAILY CHECK-IN
+    const glp1 = context && o(context.glp1)
+    const cycleDay = glp1 && i(glp1.cycleDay)
+    const scheduledCheckInDue = cycleDay !== undefined
+      && [1, 3, 6].includes(cycleDay)
+      && b(glp1?.scheduledCheckInDue) === true
+    if (scheduledCheckInDue) {
+      instruction = `\n\nMESSAGE TYPE: SCHEDULED POST-SHOT CHECK-IN
+Generate a brief, contextual greeting—1 to 2 sentences maximum. State that this is cycle day ${cycleDay} and that the 30-second experience check-in is ready on Today. Make completing that check-in the single next action. Do not infer a symptom, ask how the user feels in chat, or imply that missing data is a failure.`
+    } else {
+      instruction = `\n\nMESSAGE TYPE: DAILY CHECK-IN
 Generate a brief, contextual greeting — 1 to 2 sentences maximum. Pick the single most notable data point from the user context and lead with it. Make it specific and actionable. Do not open with "Good morning/afternoon/evening." Do not ask a question.`
+    }
   } else if (messageType === 'weekly_summary') {
     instruction = `\n\nMESSAGE TYPE: WEEKLY SUMMARY
 Generate a concise weekly recap covering: macro adherence vs goal, weight trend if available, and one specific focus area for the coming week. 3–4 short sentences or a brief bulleted list. Be honest and motivating. Do not ask a question.`

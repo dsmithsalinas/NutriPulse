@@ -14,7 +14,9 @@ struct CoachContextBundle: Encodable {
     let weightTrend: WeightTrendContext?
     let bodyGoals: BodyGoalsContext?
     let healthKit: HealthKitContext?
+    let healthDataQuality: HealthDataQualityContext
     let glp1: GLP1Context?
+    let activeGoals: [PersonalGoalContext]
 
     struct UserContext: Encodable {
         let name: String
@@ -39,6 +41,10 @@ struct CoachContextBundle: Encodable {
         // Formatted like foodLog items — "Traditional Strength Training (32 min, 208 cal)".
         // nil (not empty) when nothing is logged, so Pulse can't read absence as rest.
         let workouts: [String]?
+        // Only present when the user deliberately labels food as workout nutrition.
+        // Raw timestamps let Pulse discuss proximity without treating the label as proof
+        // that a workout happened or that the food caused an outcome.
+        let workoutNutrition: WorkoutNutritionContext?
 
         struct MealContext: Encodable {
             let meal: String
@@ -60,6 +66,27 @@ struct CoachContextBundle: Encodable {
             let proteinPct: String
             let carbsPct: String
             let fatPct: String
+        }
+
+        struct WorkoutNutritionContext: Encodable {
+            let preWorkoutEntries: [FoodEntry]?
+            let postWorkoutEntries: [FoodEntry]?
+            let workoutTimings: [WorkoutTiming]?
+
+            struct FoodEntry: Encodable {
+                let name: String
+                let loggedAt: String
+                let calories: Int
+                let proteinG: Int
+                let carbsG: Int
+                let fatG: Int
+            }
+
+            struct WorkoutTiming: Encodable {
+                let name: String
+                let startedAt: String
+                let endedAt: String
+            }
         }
     }
 
@@ -96,6 +123,22 @@ struct CoachContextBundle: Encodable {
         let hrv: String?
     }
 
+    struct HealthDataQualityContext: Encodable {
+        let algorithmVersion: Int
+        let metrics: [Metric]
+
+        struct Metric: Encodable {
+            let metric: String
+            let status: String
+            let observedDays: Int
+            let expectedDays: Int
+            let coverage: Double
+            let sourceCount: Int
+            let outlierCount: Int
+            let issues: [String]
+        }
+    }
+
     struct GLP1Context: Encodable {
         let medication: String
         let doseMg: Double
@@ -105,6 +148,7 @@ struct CoachContextBundle: Encodable {
         let nextDue: String?
         let overdue: Bool
         let cycleDay: Int
+        let scheduledCheckInDue: Bool
         let todayExperience: Experience?
 
         struct Experience: Encodable {
@@ -115,6 +159,26 @@ struct CoachContextBundle: Encodable {
             let digestion: Int
             let note: String?
         }
+    }
+
+    struct PersonalGoalContext: Encodable {
+        let title: String
+        let period: String
+        let timeframe: String
+        let measurement: String
+        let source: String
+        let status: String
+        let currentValue: Double?
+        let targetValue: Double?
+        let measuredOpportunities: Int
+        let expectedOpportunities: Int
+        let confirmedSuccesses: Int
+        let confirmedMisses: Int
+        let confirmedStreak: Int
+        let missingDataIsFailure: Bool
+        let dataQualityStatus: String?
+        let dataQualityCoverage: Double?
+        let dataQualityIssues: [String]?
     }
 }
 
@@ -140,6 +204,7 @@ struct CoachContextBuilder {
         async let sleepTask = hk.fetchSleepHours(for: .now)
         async let hrTask = hk.fetchRestingHeartRate(for: .now)
         async let hrvTask = hk.fetchHRV(for: .now)
+        async let healthQualityTask = recentHealthQuality(hk: hk, days: 7)
 
         // Today is local-first so it can include a meal the user just logged while
         // offline. Pulse must use that same snapshot or the two tabs can tell
@@ -172,6 +237,7 @@ struct CoachContextBuilder {
         let sleep = await sleepTask
         let hr = await hrTask
         let hrv = await hrvTask
+        let healthQuality = await healthQualityTask
 
         // Workouts come from LocalStore, not Supabase: a HealthKit import made seconds
         // ago is still pendingCreate locally, and the coach should know about the
@@ -183,7 +249,7 @@ struct CoachContextBuilder {
             }
         }
 
-        return assemble(
+        return await assemble(
             profile: profile,
             logs: logs,
             summaries: summaries,
@@ -196,7 +262,8 @@ struct CoachContextBuilder {
             activeCal: activeCal,
             sleep: sleep,
             hr: hr,
-            hrv: hrv
+            hrv: hrv,
+            healthQuality: healthQuality
         )
     }
 
@@ -215,8 +282,9 @@ struct CoachContextBuilder {
         activeCal: Double?,
         sleep: Double?,
         hr: Double?,
-        hrv: Double?
-    ) -> CoachContextBundle {
+        hrv: Double?,
+        healthQuality: [MetricQualityAssessment]
+    ) async -> CoachContextBundle {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d, yyyy, h:mm a"
         let dateStr = formatter.string(from: .now)
@@ -270,6 +338,48 @@ struct CoachContextBuilder {
             return "\(Int(val / t * 100))%"
         }
 
+        let todayStr = Date.now.isoDateString
+        let todaysWorkouts = workouts
+            .filter { $0.logDate == todayStr }
+            .sorted { $0.startedAt < $1.startedAt }
+
+        let workoutNutrition: CoachContextBundle.TodayContext.WorkoutNutritionContext? = {
+            typealias Context = CoachContextBundle.TodayContext.WorkoutNutritionContext
+            let pre = logs.filter { $0.meal == .preWorkout }.sorted { $0.loggedAt < $1.loggedAt }
+            let post = logs.filter { $0.meal == .postWorkout }.sorted { $0.loggedAt < $1.loggedAt }
+            guard !pre.isEmpty || !post.isEmpty else { return nil }
+
+            let timestamp = ISO8601DateFormatter()
+            func entries(_ foodLogs: [FoodLog]) -> [Context.FoodEntry]? {
+                guard !foodLogs.isEmpty else { return nil }
+                return foodLogs.map { log in
+                    .init(
+                        name: log.displayName,
+                        loggedAt: timestamp.string(from: log.loggedAt),
+                        calories: Int(log.totalCalories.rounded()),
+                        proteinG: Int(log.totalProteinG.rounded()),
+                        carbsG: Int(log.totalCarbsG.rounded()),
+                        fatG: Int(log.totalFatG.rounded())
+                    )
+                }
+            }
+
+            let timings: [Context.WorkoutTiming]? = todaysWorkouts.isEmpty ? nil : todaysWorkouts.map { workout in
+                .init(
+                    name: workout.displayName,
+                    startedAt: timestamp.string(from: workout.startedAt),
+                    endedAt: timestamp.string(
+                        from: workout.startedAt.addingTimeInterval(workout.durationMinutes * 60)
+                    )
+                )
+            }
+            return .init(
+                preWorkoutEntries: entries(pre),
+                postWorkoutEntries: entries(post),
+                workoutTimings: timings
+            )
+        }()
+
         let todayCtx = CoachContextBundle.TodayContext(
             foodLog: mealCtxs,
             totals: .init(
@@ -288,8 +398,7 @@ struct CoachContextBuilder {
             // nil when HealthKit reported nothing — don't tell Pulse the user burned zero.
             activeCaloriesBurned: activeCal.map { Int($0.rounded()) },
             workouts: {
-                let todayStr = Date.now.isoDateString
-                let todays = workouts.filter { $0.logDate == todayStr }.map { w -> String in
+                let todays = todaysWorkouts.map { w -> String in
                     let minutes = Int(w.durationMinutes.rounded())
                     if let kcal = w.activeCalories, kcal > 0 {
                         return "\(w.displayName) (\(minutes) min, \(Int(kcal.rounded())) cal)"
@@ -297,7 +406,8 @@ struct CoachContextBuilder {
                     return "\(w.displayName) (\(minutes) min)"
                 }
                 return todays.isEmpty ? nil : todays
-            }()
+            }(),
+            workoutNutrition: workoutNutrition
         )
 
         // 7-day history — tail of the wider window fetched above
@@ -373,17 +483,22 @@ struct CoachContextBuilder {
                     ? "overdue since \(df.string(from: due))"
                     : "\(rel.localizedString(for: due, relativeTo: .now)) (\(df.string(from: due)))"
             }
+            let cycleDay = max(Calendar.current.dateComponents(
+                [.day],
+                from: Calendar.current.startOfDay(for: log.injectedAt),
+                to: Calendar.current.startOfDay(for: .now)
+            ).day ?? 0, 0)
             glp1Ctx = .init(
                 medication: log.medication,
                 doseMg: log.doseMg,
                 lastInjected: lastStr,
                 nextDue: nextStr,
                 overdue: isOverdue,
-                cycleDay: max(Calendar.current.dateComponents(
-                    [.day],
-                    from: Calendar.current.startOfDay(for: log.injectedAt),
-                    to: Calendar.current.startOfDay(for: .now)
-                ).day ?? 0, 0),
+                cycleDay: cycleDay,
+                scheduledCheckInDue: ShotCycleCheckInSchedule.isDue(
+                    cycleDay: cycleDay,
+                    hasTodayCheckIn: shotCheckIn != nil
+                ),
                 todayExperience: shotCheckIn.map {
                     .init(
                         appetite: $0.appetite,
@@ -411,6 +526,72 @@ struct CoachContextBuilder {
             bodyGoalsCtx = nil
         }
 
+        // Personal goals use the same deterministic calculator as the Goals screen. Pulse
+        // receives the result and coverage, not permission to reinterpret missing data or
+        // invent a status. Automatic HealthKit values are summarized on-device here.
+        let goalBundles = (try? await PersonalGoalRepository().fetchActiveGoals()) ?? []
+        let personalGoalMetrics = await GoalMetricService()
+        var personalGoalContexts: [CoachContextBundle.PersonalGoalContext] = []
+        for bundle in goalBundles.prefix(10) {
+            guard let measurement = bundle.primaryMeasurement else { continue }
+            let evaluation = await personalGoalMetrics.evaluation(for: bundle)
+            let values = evaluation.values
+            let progress = GoalProgressCalculator.calculate(
+                version: bundle.version, measurement: measurement, values: values
+            )
+            let timeframe: String
+            if let end = bundle.version.endDate {
+                timeframe = "\(bundle.version.startDate) through \(end)"
+            } else {
+                timeframe = "from \(bundle.version.startDate), no fixed end date"
+            }
+            personalGoalContexts.append(.init(
+                title: bundle.version.title,
+                period: bundle.version.period.rawValue,
+                timeframe: timeframe,
+                measurement: "\(measurement.kind.rawValue), \(measurement.aggregation.rawValue), \(measurement.comparison.rawValue)",
+                source: measurement.sourceMetric?.rawValue ?? measurement.sourceType.rawValue,
+                status: progress.status.rawValue,
+                currentValue: progress.value,
+                targetValue: progress.target,
+                measuredOpportunities: progress.measuredCount,
+                expectedOpportunities: progress.expectedCount,
+                confirmedSuccesses: progress.metCount,
+                confirmedMisses: progress.missedCount,
+                confirmedStreak: progress.currentStreak,
+                missingDataIsFailure: false,
+                dataQualityStatus: evaluation.quality?.status.rawValue,
+                dataQualityCoverage: evaluation.quality?.coverage,
+                dataQualityIssues: evaluation.quality?.issueCodes
+            ))
+        }
+
+        let weightQuality = HealthDataQualityEngine.assess(
+            metric: .weight,
+            observations: weightLogs.map {
+                .init(metric: .weight, value: $0.weightKg, observedAt: $0.loggedAt)
+            },
+            expectedDates: (0..<7).compactMap {
+                Calendar.current.date(byAdding: .day, value: -$0, to: .now)
+            }
+        )
+        let allQuality = healthQuality + [weightQuality]
+        let healthDataQualityCtx = CoachContextBundle.HealthDataQualityContext(
+            algorithmVersion: MetricQualityAssessment.algorithmVersion,
+            metrics: allQuality.map { assessment in
+                .init(
+                    metric: assessment.metric.rawValue,
+                    status: assessment.status.rawValue,
+                    observedDays: assessment.observedCount,
+                    expectedDays: assessment.expectedCount,
+                    coverage: assessment.coverage,
+                    sourceCount: assessment.sourceCount,
+                    outlierCount: assessment.outlierCount,
+                    issues: assessment.issueCodes
+                )
+            }
+        )
+
         return CoachContextBundle(
             currentDateTime: dateStr,
             user: userCtx,
@@ -421,7 +602,60 @@ struct CoachContextBuilder {
             weightTrend: weightTrend,
             bodyGoals: bodyGoalsCtx,
             healthKit: hkCtx,
-            glp1: glp1Ctx
+            healthDataQuality: healthDataQualityCtx,
+            glp1: glp1Ctx,
+            activeGoals: personalGoalContexts
         )
+    }
+
+    /// Seven-day sampling coverage gives Pulse enough context to distinguish a real trend
+    /// from a single reading or an unworn device. HealthKit read denial is intentionally
+    /// indistinguishable from no samples, so the result describes evidence, not permission.
+    private func recentHealthQuality(
+        hk: HealthKitManager,
+        days: Int
+    ) async -> [MetricQualityAssessment] {
+        let calendar = Calendar.current
+        let dates = (0..<days).compactMap {
+            calendar.date(byAdding: .day, value: -$0, to: .now)
+        }.reversed()
+
+        async let sleepSourceTask = hk.fetchQualityObservations(
+            metric: .sleepDuration, dates: Array(dates)
+        )
+        async let restingHRSourceTask = hk.fetchQualityObservations(
+            metric: .restingHeartRate, dates: Array(dates)
+        )
+        async let hrvSourceTask = hk.fetchQualityObservations(
+            metric: .hrv, dates: Array(dates)
+        )
+
+        var observations: [HealthQualityMetric: [HealthQualityObservation]] = [:]
+        for date in dates {
+            async let steps = hk.fetchSteps(for: date)
+            async let energy = hk.fetchActiveCalories(for: date)
+            let readings: [(HealthQualityMetric, Double?)] = await [
+                (.steps, steps), (.activeEnergy, energy),
+            ]
+            for (metric, value) in readings {
+                guard let value else { continue }
+                observations[metric, default: []].append(
+                    .init(metric: metric, value: value, observedAt: date)
+                )
+            }
+        }
+        observations[.sleepDuration] = await sleepSourceTask
+        observations[.restingHeartRate] = await restingHRSourceTask
+        observations[.hrv] = await hrvSourceTask
+
+        return [
+            HealthQualityMetric.steps, .sleepDuration, .activeEnergy, .restingHeartRate, .hrv,
+        ].map { metric in
+            HealthDataQualityEngine.assess(
+                metric: metric,
+                observations: observations[metric] ?? [],
+                expectedDates: Array(dates)
+            )
+        }
     }
 }

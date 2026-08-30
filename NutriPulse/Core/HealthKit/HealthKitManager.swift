@@ -386,6 +386,29 @@ final class HealthKitManager {
         }
     }
 
+    // Daily cumulative steps. Keep nil distinct from zero: HealthKit deliberately does not
+    // reveal whether permission was denied, and a day with no readable samples is missing
+    // evidence rather than proof the user took no steps.
+    func fetchSteps(for date: Date) async -> Double? {
+        guard let type = HKQuantityType.quantityType(forIdentifier: .stepCount) else { return nil }
+        let (start, end) = dayInterval(for: date)
+        let predicate = HKQuery.predicateForSamples(
+            withStart: start, end: end, options: .strictStartDate
+        )
+        return await withCheckedContinuation { continuation in
+            let query = HKStatisticsQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum
+            ) { _, stats, _ in
+                continuation.resume(
+                    returning: stats?.sumQuantity()?.doubleValue(for: .count())
+                )
+            }
+            store.execute(query)
+        }
+    }
+
     // MARK: - Resting Heart Rate
 
     func fetchRestingHeartRate(for date: Date) async -> Double? {
@@ -476,6 +499,127 @@ final class HealthKitManager {
             }
             self.store.execute(query)
         }
+    }
+
+    /// Source-aware observations used only by the on-device quality layer. Identifiers are
+    /// bundle IDs plus a device model when available—never a device serial or local identifier.
+    /// The observations are not persisted or uploaded; Pulse receives only the derived status.
+    func fetchQualityObservations(
+        metric: HealthQualityMetric,
+        dates: [Date]
+    ) async -> [HealthQualityObservation] {
+        switch metric {
+        case .sleepDuration:
+            var result: [HealthQualityObservation] = []
+            for date in dates {
+                result.append(contentsOf: await fetchSleepQualityObservations(for: date))
+            }
+            return result
+        case .restingHeartRate:
+            return await fetchLatestQuantityQualityObservations(
+                identifier: .restingHeartRate,
+                unit: HKUnit.count().unitDivided(by: .minute()),
+                metric: metric,
+                dates: dates
+            )
+        case .hrv:
+            return await fetchLatestQuantityQualityObservations(
+                identifier: .heartRateVariabilitySDNN,
+                unit: .secondUnit(with: .milli),
+                metric: metric,
+                dates: dates
+            )
+        default:
+            // Additive metrics such as steps and active energy can legitimately combine
+            // non-overlapping contributions from a phone and watch. Treating each source's
+            // subtotal as a competing measurement would manufacture false conflicts.
+            return []
+        }
+    }
+
+    private func fetchSleepQualityObservations(for date: Date) async -> [HealthQualityObservation] {
+        guard let type = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis) else { return [] }
+        let cal = Calendar.current
+        let dayStart = cal.startOfDay(for: date)
+        let nightStart = cal.date(byAdding: .hour, value: -6, to: dayStart)!
+        let nightEnd = cal.date(byAdding: .hour, value: 10, to: dayStart)!
+        let predicate = HKQuery.predicateForSamples(
+            withStart: nightStart, end: nightEnd, options: .strictStartDate
+        )
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit,
+                sortDescriptors: nil
+            ) { _, samples, _ in
+                let asleep = (samples as? [HKCategorySample] ?? []).filter { sample in
+                    guard let value = HKCategoryValueSleepAnalysis(rawValue: sample.value) else { return false }
+                    switch value {
+                    case .asleepUnspecified, .asleepCore, .asleepDeep, .asleepREM: return true
+                    default: return false
+                    }
+                }
+                let grouped = Dictionary(grouping: asleep) { Self.qualitySourceKey(for: $0) }
+                let observations = grouped.compactMap { source, rows -> HealthQualityObservation? in
+                    let duration = Self.mergedDuration(of: rows.map { ($0.startDate, $0.endDate) })
+                    guard duration > 0 else { return nil }
+                    return .init(
+                        metric: .sleepDuration,
+                        value: duration / 3_600,
+                        observedAt: date,
+                        sourceIdentifier: source,
+                        deviceClass: rows.first?.device?.model
+                    )
+                }
+                continuation.resume(returning: observations)
+            }
+            store.execute(query)
+        }
+    }
+
+    private func fetchLatestQuantityQualityObservations(
+        identifier: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        metric: HealthQualityMetric,
+        dates: [Date]
+    ) async -> [HealthQualityObservation] {
+        guard let type = HKQuantityType.quantityType(forIdentifier: identifier),
+              let first = dates.min(), let last = dates.max()
+        else { return [] }
+        let start = dayInterval(for: first).0
+        let end = dayInterval(for: last).1
+        let predicate = HKQuery.predicateForSamples(
+            withStart: start, end: end, options: .strictStartDate
+        )
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: true)
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit,
+                sortDescriptors: [sort]
+            ) { _, samples, _ in
+                let rows = samples as? [HKQuantitySample] ?? []
+                let grouped = Dictionary(grouping: rows) { sample in
+                    "\(Calendar.current.startOfDay(for: sample.endDate).timeIntervalSince1970)|\(Self.qualitySourceKey(for: sample))"
+                }
+                let observations = grouped.compactMap { _, sourceRows -> HealthQualityObservation? in
+                    guard let sample = sourceRows.last else { return nil }
+                    return .init(
+                        metric: metric,
+                        value: sample.quantity.doubleValue(for: unit),
+                        observedAt: sample.endDate,
+                        sourceIdentifier: Self.qualitySourceKey(for: sample),
+                        deviceClass: sample.device?.model
+                    )
+                }
+                continuation.resume(returning: observations)
+            }
+            store.execute(query)
+        }
+    }
+
+    nonisolated private static func qualitySourceKey(for sample: HKSample) -> String {
+        let bundle = sample.sourceRevision.source.bundleIdentifier
+        guard let model = sample.device?.model, !model.isEmpty else { return bundle }
+        return "\(bundle)|\(model)"
     }
 
     // Total time covered by a set of (possibly overlapping) [start, end) intervals, counting

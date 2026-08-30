@@ -9,6 +9,15 @@ struct AnalyticsRepository {
         let cal = Calendar.current
         let today = cal.startOfDay(for: .now)
         let startDate = cal.date(byAdding: .day, value: -(days - 1), to: today)!
+        return try await fetchDailySummaries(from: startDate, through: today)
+    }
+
+    func fetchDailySummaries(from startDate: Date, through endDate: Date) async throws -> [DailySummary] {
+        let cal = Calendar.current
+        let startDate = cal.startOfDay(for: startDate)
+        let endDate = cal.startOfDay(for: endDate)
+        guard startDate <= endDate else { return [] }
+        let days = (cal.dateComponents([.day], from: startDate, to: endDate).day ?? 0) + 1
 
         struct LogRow: Decodable {
             let logDate: String
@@ -34,7 +43,7 @@ struct AnalyticsRepository {
             .from("food_logs")
             .select("log_date, calories_snapshot, protein_g_snapshot, carbs_g_snapshot, fat_g_snapshot, fiber_g_snapshot, quantity")
             .gte("log_date", value: startDate.isoDateString)
-            .lte("log_date", value: today.isoDateString)
+            .lte("log_date", value: endDate.isoDateString)
             .execute()
             .value
 
@@ -60,6 +69,15 @@ struct AnalyticsRepository {
         let cal = Calendar.current
         let today = cal.startOfDay(for: .now)
         let startDate = cal.date(byAdding: .day, value: -(days - 1), to: today)!
+        return try await fetchDailyMovement(from: startDate, through: today)
+    }
+
+    func fetchDailyMovement(from startDate: Date, through endDate: Date) async throws -> [DailyMovement] {
+        let cal = Calendar.current
+        let startDate = cal.startOfDay(for: startDate)
+        let endDate = cal.startOfDay(for: endDate)
+        guard startDate <= endDate else { return [] }
+        let days = (cal.dateComponents([.day], from: startDate, to: endDate).day ?? 0) + 1
 
         struct WorkoutRow: Decodable {
             let logDate: String
@@ -75,7 +93,7 @@ struct AnalyticsRepository {
             .from("workout_logs")
             .select("log_date, duration_minutes")
             .gte("log_date", value: startDate.isoDateString)
-            .lte("log_date", value: today.isoDateString)
+            .lte("log_date", value: endDate.isoDateString)
             .execute()
             .value
 
@@ -100,11 +118,20 @@ struct AnalyticsRepository {
         let cal = Calendar.current
         let today = cal.startOfDay(for: .now)
         let startDate = cal.date(byAdding: .day, value: -(days - 1), to: today)!
+        return try await fetchDailyHydration(from: startDate, through: today)
+    }
+
+    func fetchDailyHydration(from startDate: Date, through endDate: Date) async throws -> [DailyHydration] {
+        let cal = Calendar.current
+        let startDate = cal.startOfDay(for: startDate)
+        let endDate = cal.startOfDay(for: endDate)
+        guard startDate <= endDate else { return [] }
+        let days = (cal.dateComponents([.day], from: startDate, to: endDate).day ?? 0) + 1
         let rows: [WaterLog] = try await supabase
             .from("water_logs")
             .select()
             .gte("log_date", value: startDate.isoDateString)
-            .lte("log_date", value: today.isoDateString)
+            .lte("log_date", value: endDate.isoDateString)
             .execute()
             .value
         let grouped = Dictionary(grouping: rows, by: \.logDate)
@@ -125,6 +152,15 @@ struct AnalyticsRepository {
         let cal = Calendar.current
         let today = cal.startOfDay(for: .now)
         let startDate = cal.date(byAdding: .day, value: -(days - 1), to: today)!
+        return try await fetchWeightLogs(from: startDate, through: today)
+    }
+
+    func fetchWeightLogs(from startDate: Date, through endDate: Date) async throws -> [WeightLog] {
+        let cal = Calendar.current
+        let startDate = cal.startOfDay(for: startDate)
+        let endDate = cal.startOfDay(for: endDate)
+        guard startDate <= endDate else { return [] }
+        let endExclusive = cal.date(byAdding: .day, value: 1, to: endDate)!
 
         // logged_at is a timestamptz, not a date. Sending "2026-06-29" made Postgres cast it
         // to 2026-06-29 00:00:00+00 — UTC midnight — so a user in California (UTC-7) pulled in
@@ -137,6 +173,7 @@ struct AnalyticsRepository {
             .from("weight_logs")
             .select()
             .gte("logged_at", value: startDate.ISO8601Format())
+            .lt("logged_at", value: endExclusive.ISO8601Format())
             .order("logged_at", ascending: true)
             .execute()
             .value

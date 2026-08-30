@@ -6,15 +6,25 @@ import Foundation
 enum Meal: String, Codable, CaseIterable, Hashable {
     case breakfast
     case lunch
+    case preWorkout = "pre_workout"
+    case postWorkout = "post_workout"
     case dinner
     case snack
 
-    var displayName: String { rawValue.capitalized }
+    var displayName: String {
+        switch self {
+        case .preWorkout:  "Pre-Workout"
+        case .postWorkout: "Post-Workout"
+        default:           rawValue.capitalized
+        }
+    }
 
     var icon: String {
         switch self {
         case .breakfast: "sunrise.fill"
         case .lunch:     "sun.max.fill"
+        case .preWorkout: "bolt.fill"
+        case .postWorkout: "figure.cooldown"
         case .dinner:    "moon.stars.fill"
         case .snack:     "carrot.fill"
         }
@@ -25,8 +35,10 @@ enum Meal: String, Codable, CaseIterable, Hashable {
         switch self {
         case .breakfast: 0
         case .lunch:     1
-        case .dinner:    2
-        case .snack:     3
+        case .preWorkout: 2
+        case .postWorkout: 3
+        case .dinner:    4
+        case .snack:     5
         }
     }
 

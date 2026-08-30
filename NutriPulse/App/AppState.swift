@@ -105,6 +105,7 @@ final class AppState {
         SmartNotificationPreferences.quietStartKey,
         SmartNotificationPreferences.quietEndKey,
         LowAppetitePreparationStore.completedKey,
+        ShotCycleCheckInSchedule.dismissedDayKey,
         AuthViewModel.pendingAppleFullNameKey,
     ]
 

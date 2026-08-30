@@ -19,6 +19,7 @@ final class TodayViewModel {
     // chip only surfaces on today, and only when a dose is due today or overdue.
     var latestGLP1: GLP1Log? = nil
     var shotCycleCheckIns: [ShotCycleCheckIn] = []
+    var shotCycleCheckInError: String? = nil
 
     var selectedDate: Date = .now
     // Whether `selectedDate` is the user's "today" rather than a day they
@@ -186,6 +187,45 @@ final class TodayViewModel {
     var injectionLoggedToday: Bool {
         guard isToday, let injected = latestGLP1?.injectedAt else { return false }
         return Calendar.current.isDateInToday(injected)
+    }
+
+    var currentShotCycleDay: Int? {
+        guard isToday, let injectedAt = latestGLP1?.injectedAt else { return nil }
+        let day = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: injectedAt),
+            to: Calendar.current.startOfDay(for: .now)
+        ).day
+        guard let day, day >= 0 else { return nil }
+        return day
+    }
+
+    var todayShotCycleCheckIn: ShotCycleCheckIn? {
+        guard isToday else { return nil }
+        return shotCycleCheckIns.first { $0.checkinDate == Date.now.isoDateString }
+    }
+
+    var scheduledShotCycleCheckInDue: Bool {
+        ShotCycleCheckInSchedule.isDue(
+            cycleDay: currentShotCycleDay,
+            hasTodayCheckIn: todayShotCycleCheckIn != nil
+        )
+    }
+
+    @discardableResult
+    func saveShotCycleCheckIn(_ draft: ShotCycleCheckInDraft) async -> Bool {
+        guard let cycleDay = currentShotCycleDay else { return false }
+        do {
+            let saved = try await shotCycleRepo.save(draft, cycleDay: cycleDay)
+            shotCycleCheckIns.removeAll { $0.checkinDate == saved.checkinDate }
+            shotCycleCheckIns.insert(saved, at: 0)
+            shotCycleCheckInError = nil
+            Telemetry.shotCycleCheckInSaved(cycleDay: cycleDay)
+            return true
+        } catch {
+            shotCycleCheckInError = "Your check-in couldn’t be saved. Check your connection and try again."
+            return false
+        }
     }
 
     // Called the instant an injection is logged from the ritual — update the card immediately

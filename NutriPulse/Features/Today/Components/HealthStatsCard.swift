@@ -2,6 +2,8 @@ import SwiftUI
 
 struct HealthStatsCard: View {
     let context: RecoveryContext?
+    let shotCycleCheckIn: ShotCycleCheckIn?
+    let shotCycleDay: Int?
     let activeCalories: Double?
     let restingHR: Double?
     let hrv: Double?
@@ -16,15 +18,16 @@ struct HealthStatsCard: View {
     private var hasActivityData: Bool { activeCalories != nil }
     private var hasVitalsData: Bool { restingHR != nil || hrv != nil || sleepHours != nil }
     private var hasAnyData: Bool { hasActivityData || hasVitalsData }
+    private var hasTodayContext: Bool { context != nil || shotCycleCheckIn != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(context == nil ? "TODAY'S SIGNALS" : "TODAY'S CONTEXT")
+                    Text(hasTodayContext ? "TODAY'S CONTEXT" : "TODAY'S SIGNALS")
                         .font(.system(size: 10, weight: .bold)).tracking(0.8)
-                        .foregroundStyle(context == nil ? Theme.Colors.textFaint : Theme.Colors.primary)
-                    Text(context?.headline ?? "Apple Health")
+                        .foregroundStyle(hasTodayContext ? Theme.Colors.primary : Theme.Colors.textFaint)
+                    Text(context?.headline ?? shotCycleHeadline ?? "Apple Health")
                         .font(.headline)
                 }
                 Spacer()
@@ -42,6 +45,21 @@ struct HealthStatsCard: View {
                         .foregroundStyle(.secondary)
                         .labelStyle(TinyBulletLabelStyle())
                 }
+            }
+
+            if let checkIn = shotCycleCheckIn {
+                VStack(alignment: .leading, spacing: 5) {
+                    Label("Your report", systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.Colors.primary)
+                    Text("Appetite \(checkIn.appetite)/5 · Energy \(checkIn.energy)/5 · Nausea \(checkIn.nausea)/5")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.Colors.primary.opacity(0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
 
             // Keep setup visible. Once Health data exists, tuck the raw numbers and supporting
@@ -172,6 +190,11 @@ struct HealthStatsCard: View {
         let h = Int(hours)
         let m = Int((hours - Double(h)) * 60)
         return m > 0 ? "\(h)h \(m)m" : "\(h)h"
+    }
+
+    private var shotCycleHeadline: String? {
+        guard shotCycleCheckIn != nil, let shotCycleDay else { return nil }
+        return "Day \(shotCycleDay) check-in recorded"
     }
 }
 
