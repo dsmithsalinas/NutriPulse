@@ -236,7 +236,7 @@ final class HealthKitManager {
 
     // MARK: - Workouts
 
-    struct HKWorkoutSummary {
+    struct HKWorkoutSummary: Sendable {
         let uuid: String
         let activitySlug: String
         let startDate: Date
@@ -269,10 +269,66 @@ final class HealthKitManager {
                         distanceMeters: Self.distanceMeters(of: workout)
                     )
                 }
-                continuation.resume(returning: workouts)
+                continuation.resume(returning: Self.deduplicatedWorkouts(workouts))
             }
             store.execute(query)
         }
+    }
+
+    // Multiple apps can save the same physical session to HealthKit under different UUIDs
+    // (for example, an Apple Watch workout plus a gym app's mirrored workout). UUID dedup
+    // cannot catch that. Collapse only extremely similar same-activity intervals: at least
+    // 90% overlap of the shorter workout and durations within 20%. The narrow threshold
+    // avoids combining adjacent sets or genuinely separate sessions.
+    nonisolated static func deduplicatedWorkouts(_ workouts: [HKWorkoutSummary]) -> [HKWorkoutSummary] {
+        var kept: [HKWorkoutSummary] = []
+        for candidate in workouts.sorted(by: workoutSort) {
+            if let index = kept.firstIndex(where: { areNearDuplicates($0, candidate) }) {
+                if prefer(candidate, over: kept[index]) { kept[index] = candidate }
+            } else {
+                kept.append(candidate)
+            }
+        }
+        return kept.sorted(by: workoutSort)
+    }
+
+    nonisolated private static func workoutSort(_ lhs: HKWorkoutSummary, _ rhs: HKWorkoutSummary) -> Bool {
+        lhs.startDate == rhs.startDate ? lhs.uuid < rhs.uuid : lhs.startDate < rhs.startDate
+    }
+
+    nonisolated private static func areNearDuplicates(
+        _ lhs: HKWorkoutSummary,
+        _ rhs: HKWorkoutSummary
+    ) -> Bool {
+        guard lhs.activitySlug == rhs.activitySlug,
+              lhs.durationMinutes > 0, rhs.durationMinutes > 0 else { return false }
+
+        let shorter = min(lhs.durationMinutes, rhs.durationMinutes)
+        let longer = max(lhs.durationMinutes, rhs.durationMinutes)
+        guard shorter / longer >= 0.8 else { return false }
+
+        let lhsEnd = lhs.startDate.addingTimeInterval(lhs.durationMinutes * 60)
+        let rhsEnd = rhs.startDate.addingTimeInterval(rhs.durationMinutes * 60)
+        let overlapStart = max(lhs.startDate, rhs.startDate)
+        let overlapEnd = min(lhsEnd, rhsEnd)
+        let overlapMinutes = max(0, overlapEnd.timeIntervalSince(overlapStart) / 60)
+        return overlapMinutes / shorter >= 0.9
+    }
+
+    // Prefer the richer record, then the longer duration, with UUID as a stable tie-break.
+    nonisolated private static func prefer(
+        _ candidate: HKWorkoutSummary,
+        over existing: HKWorkoutSummary
+    ) -> Bool {
+        let candidateRichness = (candidate.activeCalories == nil ? 0 : 1)
+            + (candidate.distanceMeters == nil ? 0 : 1)
+        let existingRichness = (existing.activeCalories == nil ? 0 : 1)
+            + (existing.distanceMeters == nil ? 0 : 1)
+        if candidateRichness != existingRichness { return candidateRichness > existingRichness }
+        if candidate.durationMinutes != existing.durationMinutes {
+            return candidate.durationMinutes > existing.durationMinutes
+        }
+        return candidate.uuid < existing.uuid
     }
 
     // workout.totalDistance is deprecated; statistics(for:) is the modern read, but the

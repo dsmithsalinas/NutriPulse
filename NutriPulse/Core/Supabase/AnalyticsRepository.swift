@@ -79,23 +79,14 @@ struct AnalyticsRepository {
         guard startDate <= endDate else { return [] }
         let days = (cal.dateComponents([.day], from: startDate, to: endDate).day ?? 0) + 1
 
-        struct WorkoutRow: Decodable {
-            let logDate: String
-            let durationMinutes: Double
-
-            enum CodingKeys: String, CodingKey {
-                case logDate         = "log_date"
-                case durationMinutes = "duration_minutes"
-            }
-        }
-
-        let rows: [WorkoutRow] = try await supabase
+        let fetched: [WorkoutLog] = try await supabase
             .from("workout_logs")
-            .select("log_date, duration_minutes")
+            .select()
             .gte("log_date", value: startDate.isoDateString)
             .lte("log_date", value: endDate.isoDateString)
             .execute()
             .value
+        let rows = WorkoutLog.deduplicated(fetched)
 
         let grouped = Dictionary(grouping: rows, by: \.logDate)
 

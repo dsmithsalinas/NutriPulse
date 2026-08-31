@@ -73,6 +73,54 @@ struct WorkoutLog: Codable, Identifiable, Hashable {
         case startedAt       = "started_at"
     }
 
+    // HealthKit can contain two UUIDs for one physical session when separate apps save
+    // mirrored workouts. Keep manual entries exact, but collapse highly-overlapping Health
+    // rows so existing server data does not double movement totals after this fix ships.
+    static func deduplicated(_ workouts: [WorkoutLog]) -> [WorkoutLog] {
+        var kept: [WorkoutLog] = []
+        for candidate in workouts.sorted(by: workoutSort) {
+            if let index = kept.firstIndex(where: { areNearDuplicates($0, candidate) }) {
+                if prefer(candidate, over: kept[index]) { kept[index] = candidate }
+            } else {
+                kept.append(candidate)
+            }
+        }
+        return kept.sorted(by: workoutSort)
+    }
+
+    private static func workoutSort(_ lhs: WorkoutLog, _ rhs: WorkoutLog) -> Bool {
+        lhs.startedAt == rhs.startedAt ? lhs.id.uuidString < rhs.id.uuidString : lhs.startedAt < rhs.startedAt
+    }
+
+    private static func areNearDuplicates(_ lhs: WorkoutLog, _ rhs: WorkoutLog) -> Bool {
+        guard lhs.source == .healthkit, rhs.source == .healthkit,
+              lhs.activityType == rhs.activityType,
+              lhs.durationMinutes > 0, rhs.durationMinutes > 0 else { return false }
+
+        let shorter = min(lhs.durationMinutes, rhs.durationMinutes)
+        let longer = max(lhs.durationMinutes, rhs.durationMinutes)
+        guard shorter / longer >= 0.8 else { return false }
+
+        let lhsEnd = lhs.startedAt.addingTimeInterval(lhs.durationMinutes * 60)
+        let rhsEnd = rhs.startedAt.addingTimeInterval(rhs.durationMinutes * 60)
+        let overlapStart = max(lhs.startedAt, rhs.startedAt)
+        let overlapEnd = min(lhsEnd, rhsEnd)
+        let overlapMinutes = max(0, overlapEnd.timeIntervalSince(overlapStart) / 60)
+        return overlapMinutes / shorter >= 0.9
+    }
+
+    private static func prefer(_ candidate: WorkoutLog, over existing: WorkoutLog) -> Bool {
+        let candidateRichness = (candidate.activeCalories == nil ? 0 : 1)
+            + (candidate.distanceMeters == nil ? 0 : 1)
+        let existingRichness = (existing.activeCalories == nil ? 0 : 1)
+            + (existing.distanceMeters == nil ? 0 : 1)
+        if candidateRichness != existingRichness { return candidateRichness > existingRichness }
+        if candidate.durationMinutes != existing.durationMinutes {
+            return candidate.durationMinutes > existing.durationMinutes
+        }
+        return candidate.id.uuidString < existing.id.uuidString
+    }
+
     var displayName: String {
         if let manual = ManualActivityType(rawValue: activityType) {
             return manual.displayName

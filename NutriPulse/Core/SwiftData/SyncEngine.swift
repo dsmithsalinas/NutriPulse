@@ -136,11 +136,13 @@ final class SyncEngine {
         let results: [(SyncFailureStage, Bool)] = [
             (.foodUpload, await pushPendingFoodLogs()),
             (.waterUpload, await pushPendingWaterLogs()),
+            // Pull before workout upload so an existing server-side HealthKit row can
+            // coalesce a fresh local import by healthKitUUID before the insert is tried.
+            (.workoutRefresh, await pullRecentWorkoutLogs()),
             (.workoutUpload, await pushPendingWorkoutLogs()),
             (.goalRefresh, await pullGoal()),
             (.foodRefresh, await pullRecentFoodLogs()),
             (.waterRefresh, await pullTodayWater()),
-            (.workoutRefresh, await pullRecentWorkoutLogs()),
         ]
 
         isSyncing = false

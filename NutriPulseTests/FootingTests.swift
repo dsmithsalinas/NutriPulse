@@ -1407,6 +1407,76 @@ final class LocalStoreSyncStateTests: XCTestCase {
         XCTAssertNotNil(try row(old), "belongs to a different user")
     }
 
+    // MARK: Workout reconciliation
+
+    private func remoteWorkout(
+        id: UUID = UUID(),
+        healthKitUUID: String,
+        startedAt: Date = Date(timeIntervalSince1970: 2_000_000)
+    ) -> WorkoutLog {
+        WorkoutLog(
+            id: id, userId: userId, loggedAt: startedAt,
+            logDate: "2026-07-07", activityType: "traditionalStrengthTraining",
+            durationMinutes: 33, activeCalories: 145, distanceMeters: nil,
+            source: .healthkit, healthKitUUID: healthKitUUID, startedAt: startedAt
+        )
+    }
+
+    func testWorkoutPullCoalescesPendingImportWithSameHealthKitUUID() throws {
+        let healthKitUUID = UUID().uuidString
+        try LocalStore.shared.insertWorkoutLog(
+            id: UUID(), userId: userId, logDate: "2026-07-07",
+            activityType: "traditionalStrengthTraining", durationMinutes: 33,
+            activeCalories: 145, distanceMeters: nil, source: "healthkit",
+            healthKitUUID: healthKitUUID, startedAt: Date(timeIntervalSince1970: 2_000_000)
+        )
+        let remote = remoteWorkout(healthKitUUID: healthKitUUID)
+
+        try LocalStore.shared.upsertWorkoutLog(from: remote)
+
+        let rows = try LocalStore.shared.fetchWorkoutLogs(for: dateFor("2026-07-07"), userId: userId)
+        XCTAssertEqual(rows.map(\.id), [remote.id])
+        XCTAssertTrue(try LocalStore.shared.pendingWorkoutLogs().isEmpty)
+    }
+
+    func testWorkoutPullCleansDuplicateEvenWhenCanonicalRemoteRowAlreadyExists() throws {
+        let healthKitUUID = UUID().uuidString
+        let remote = remoteWorkout(healthKitUUID: healthKitUUID)
+        try LocalStore.shared.upsertWorkoutLog(from: remote)
+        try LocalStore.shared.insertWorkoutLog(
+            id: UUID(), userId: userId, logDate: "2026-07-07",
+            activityType: remote.activityType, durationMinutes: remote.durationMinutes,
+            activeCalories: remote.activeCalories, distanceMeters: nil, source: "healthkit",
+            healthKitUUID: healthKitUUID, startedAt: remote.startedAt
+        )
+
+        try LocalStore.shared.upsertWorkoutLog(from: remote)
+
+        let rows = try LocalStore.shared.fetchWorkoutLogs(for: dateFor("2026-07-07"), userId: userId)
+        XCTAssertEqual(rows.map(\.id), [remote.id])
+        XCTAssertTrue(try LocalStore.shared.pendingWorkoutLogs().isEmpty)
+    }
+
+    func testWorkoutPullRekeysPendingDeletionToRemoteID() throws {
+        let healthKitUUID = UUID().uuidString
+        let localID = UUID()
+        try LocalStore.shared.insertWorkoutLog(
+            id: localID, userId: userId, logDate: "2026-07-07",
+            activityType: "traditionalStrengthTraining", durationMinutes: 33,
+            activeCalories: 145, distanceMeters: nil, source: "healthkit",
+            healthKitUUID: healthKitUUID, startedAt: Date(timeIntervalSince1970: 2_000_000)
+        )
+        try LocalStore.shared.markWorkoutLogDeleted(id: localID)
+        let remote = remoteWorkout(healthKitUUID: healthKitUUID)
+
+        try LocalStore.shared.upsertWorkoutLog(from: remote)
+
+        XCTAssertTrue(try LocalStore.shared.fetchWorkoutLogs(
+            for: dateFor("2026-07-07"), userId: userId
+        ).isEmpty)
+        XCTAssertEqual(try LocalStore.shared.deletedWorkoutLogs().map(\.id), [remote.id])
+    }
+
     // MARK: Goal ownership
 
     // The cross-account leak: SDDailyGoal had no owner, so the next user to sign in
@@ -1446,6 +1516,83 @@ final class LocalStoreSyncStateTests: XCTestCase {
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = .current
         return f.date(from: iso)!
+    }
+}
+
+// MARK: - HealthKit workout overlap deduplication
+
+@MainActor
+final class HealthKitWorkoutDeduplicationTests: XCTestCase {
+    private func workout(
+        _ uuid: String,
+        activity: String = "traditionalStrengthTraining",
+        startMinute: Double,
+        duration: Double,
+        calories: Double? = nil
+    ) -> HealthKitManager.HKWorkoutSummary {
+        HealthKitManager.HKWorkoutSummary(
+            uuid: uuid, activitySlug: activity,
+            startDate: Date(timeIntervalSince1970: startMinute * 60),
+            durationMinutes: duration, activeCalories: calories, distanceMeters: nil
+        )
+    }
+
+    func testNearIdenticalOverlappingHealthWorkoutsCollapse() {
+        let first = workout("a", startMinute: 0, duration: 33, calories: 145)
+        let mirrored = workout("b", startMinute: 1, duration: 32, calories: 155)
+
+        let result = HealthKitManager.deduplicatedWorkouts([mirrored, first])
+
+        XCTAssertEqual(result.map(\.uuid), ["a"], "the longer equally-rich record wins")
+    }
+
+    func testAdjacentWorkoutsRemainSeparate() {
+        let first = workout("a", startMinute: 0, duration: 30)
+        let second = workout("b", startMinute: 30, duration: 30)
+        XCTAssertEqual(
+            HealthKitManager.deduplicatedWorkouts([second, first]).map(\.uuid),
+            ["a", "b"]
+        )
+    }
+
+    func testDifferentActivitiesRemainSeparateEvenWhenTheyOverlap() {
+        let strength = workout("a", startMinute: 0, duration: 30)
+        let walk = workout("b", activity: "walking", startMinute: 1, duration: 30)
+        XCTAssertEqual(
+            HealthKitManager.deduplicatedWorkouts([walk, strength]).map(\.uuid),
+            ["a", "b"]
+        )
+    }
+}
+
+final class StoredWorkoutDeduplicationTests: XCTestCase {
+    private let userID = UUID()
+
+    private func workout(
+        id: UUID = UUID(),
+        source: WorkoutSource = .healthkit,
+        startMinute: Double,
+        duration: Double
+    ) -> WorkoutLog {
+        WorkoutLog(
+            id: id, userId: userID, loggedAt: Date(timeIntervalSince1970: startMinute * 60),
+            logDate: "2026-07-07", activityType: "traditionalStrengthTraining",
+            durationMinutes: duration, activeCalories: 145, distanceMeters: nil,
+            source: source, healthKitUUID: source == .healthkit ? UUID().uuidString : nil,
+            startedAt: Date(timeIntervalSince1970: startMinute * 60)
+        )
+    }
+
+    func testExistingMirroredServerRowsCollapseForConsumers() {
+        let first = workout(startMinute: 0, duration: 33)
+        let mirrored = workout(startMinute: 1, duration: 32)
+        XCTAssertEqual(WorkoutLog.deduplicated([mirrored, first]).map(\.id), [first.id])
+    }
+
+    func testOverlappingManualEntriesAreNeverSilentlyCollapsed() {
+        let first = workout(source: .manual, startMinute: 0, duration: 33)
+        let second = workout(source: .manual, startMinute: 1, duration: 32)
+        XCTAssertEqual(WorkoutLog.deduplicated([second, first]).count, 2)
     }
 }
 

@@ -271,9 +271,10 @@ final class LocalStore {
             predicate: #Predicate { $0.logDate == dateStr },
             sortBy: [SortDescriptor(\.startedAt)]
         )
-        return try context.fetch(descriptor)
+        let workouts = try context.fetch(descriptor)
             .filter { $0.userId == userId && $0.syncState != "pendingDelete" }
             .map(\.asWorkoutLog)
+        return WorkoutLog.deduplicated(workouts)
     }
 
     func insertWorkoutLog(
@@ -382,6 +383,67 @@ final class LocalStore {
 
     func upsertWorkoutLog(from remote: WorkoutLog) throws {
         guard let context else { return }
+
+        // HealthKit identity is the natural key across devices. Each installation creates
+        // its own workout_logs.id while importing, so a fresh cache can contain a local
+        // pending row and then pull the already-synced server row with a different id. If
+        // we compare ids only, both render and the local upload is rejected forever by the
+        // server's (user_id, healthkit_uuid) unique index.
+        if let remoteHealthKitUUID = remote.healthKitUUID {
+            let uuid: String? = remoteHealthKitUUID
+            let descriptor = FetchDescriptor<SDWorkoutLog>(
+                predicate: #Predicate { $0.healthKitUUID == uuid }
+            )
+            let matches = try context.fetch(descriptor).filter { $0.userId == remote.userId }
+
+            // A local removal wins over a pull. Re-key its tombstone to the server's id so
+            // the next delete reaches the row that actually exists remotely.
+            if let deletion = matches.first(where: { $0.syncState == "pendingDelete" }) {
+                let revision = matches.map(\.revision).max() ?? deletion.revision
+                if deletion.id == remote.id {
+                    for duplicate in matches where duplicate !== deletion { context.delete(duplicate) }
+                } else {
+                    for match in matches { context.delete(match) }
+                    context.insert(SDWorkoutLog(
+                        id: remote.id, userId: remote.userId, logDate: remote.logDate,
+                        activityType: remote.activityType, durationMinutes: remote.durationMinutes,
+                        activeCalories: remote.activeCalories, distanceMeters: remote.distanceMeters,
+                        source: remote.source.rawValue, healthKitUUID: remote.healthKitUUID,
+                        startedAt: remote.startedAt, loggedAt: remote.loggedAt,
+                        syncState: "pendingDelete", revision: revision
+                    ))
+                }
+                try context.save()
+                return
+            }
+
+            // Prefer the server row/id and discard any local pending or stale synced copy.
+            // This both repairs existing duplicate stores and makes future pulls idempotent.
+            if let canonical = matches.first(where: { $0.id == remote.id }) {
+                for duplicate in matches where duplicate !== canonical { context.delete(duplicate) }
+                canonical.logDate = remote.logDate
+                canonical.activityType = remote.activityType
+                canonical.durationMinutes = remote.durationMinutes
+                canonical.activeCalories = remote.activeCalories
+                canonical.distanceMeters = remote.distanceMeters
+                canonical.source = remote.source.rawValue
+                canonical.startedAt = remote.startedAt
+                canonical.loggedAt = remote.loggedAt
+                canonical.syncState = "synced"
+            } else {
+                for match in matches { context.delete(match) }
+                context.insert(SDWorkoutLog(
+                    id: remote.id, userId: remote.userId, logDate: remote.logDate,
+                    activityType: remote.activityType, durationMinutes: remote.durationMinutes,
+                    activeCalories: remote.activeCalories, distanceMeters: remote.distanceMeters,
+                    source: remote.source.rawValue, healthKitUUID: remote.healthKitUUID,
+                    startedAt: remote.startedAt, loggedAt: remote.loggedAt, syncState: "synced"
+                ))
+            }
+            try context.save()
+            return
+        }
+
         let id = remote.id
         let descriptor = FetchDescriptor<SDWorkoutLog>(predicate: #Predicate { $0.id == id })
         // Rows are immutable once created (delete-only), so an existing row —
@@ -407,11 +469,12 @@ final class LocalStore {
         let start = cal.date(byAdding: .day, value: -(days - 1), to: cal.startOfDay(for: .now))!
         let startStr = start.isoDateString
         // String >= isn't #Predicate-translatable (same reason as pruneDeletedFoodLogs).
-        return try context.fetch(FetchDescriptor<SDWorkoutLog>(sortBy: [SortDescriptor(\.startedAt)]))
+        let workouts = try context.fetch(FetchDescriptor<SDWorkoutLog>(sortBy: [SortDescriptor(\.startedAt)]))
             .filter {
                 $0.userId == userId && $0.syncState != "pendingDelete" && $0.logDate >= startStr
             }
             .map(\.asWorkoutLog)
+        return WorkoutLog.deduplicated(workouts)
     }
 
     // Same contract and caveats as pruneDeletedFoodLogs: synced rows only, and
