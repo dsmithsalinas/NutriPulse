@@ -2,12 +2,29 @@ import SwiftUI
 import Charts
 
 struct AnalyticsView: View {
-    @State private var vm = AnalyticsViewModel()
+    let embeddedInNavigation: Bool
+    @State private var vm: AnalyticsViewModel
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
+    init(
+        embeddedInNavigation: Bool = false,
+        initialRange: AnalyticsViewModel.TimeRange = .week
+    ) {
+        self.embeddedInNavigation = embeddedInNavigation
+        _vm = State(initialValue: AnalyticsViewModel(selectedRange: initialRange))
+    }
+
+    @ViewBuilder
     var body: some View {
-        NavigationStack {
+        if embeddedInNavigation {
+            content
+        } else {
+            NavigationStack { content }
+        }
+    }
+
+    private var content: some View {
             // The spinner used to REPLACE the ScrollView — and the range Picker lives inside
             // it — so every tap on a range flashed the whole screen, picker included, to a
             // bare ProgressView. Keep the content mounted and overlay the spinner instead.
@@ -19,10 +36,6 @@ struct AnalyticsView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-
-                    if let review = vm.weeklyReview {
-                        WeeklyReviewCard(review: review)
-                    }
 
                     if vm.cycleInsights.count >= 2 {
                         CycleAwareAnalyticsCard(
@@ -91,7 +104,6 @@ struct AnalyticsView: View {
             .task(id: vm.selectedRange) {
                 await vm.loadData()
             }
-        }
         .tint(Theme.Colors.primary)
     }
 

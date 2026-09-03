@@ -15,6 +15,8 @@ struct RootView: View {
                     initialDraft: GoalDraft(template: .protein)
                 )
             } else if isGoalsPreview {
+                GoalsView()
+            } else if isProgressPreview {
                 MainTabView()
             } else if appState.isLoading {
                 ProgressView("Loading...")
@@ -53,6 +55,14 @@ struct RootView: View {
     private var isGoalBuilderPreview: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--goal-builder-preview")
+        #else
+        false
+        #endif
+    }
+
+    private var isProgressPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--progress-preview")
         #else
         false
         #endif

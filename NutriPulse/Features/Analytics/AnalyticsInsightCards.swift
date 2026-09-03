@@ -14,7 +14,7 @@ struct WeeklyReviewCard: View {
             reviewRow("Pattern noticed", review.pattern, "waveform.path.ecg", Theme.Colors.primary)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("ONE EXPERIMENT")
+                Text("ONE THING TO TRY")
                     .font(.system(size: 10, weight: .bold)).tracking(0.7)
                     .foregroundStyle(Theme.Colors.textFaint)
                 Text(review.experiment)

@@ -2,8 +2,8 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
-    @State private var selectedTab: MainTab = ProcessInfo.processInfo.arguments.contains("--goals-preview")
-        ? .goals : .today
+    @State private var selectedTab: MainTab = ProcessInfo.processInfo.arguments.contains("--progress-preview")
+        ? .progress : .today
     // Owned here so the tab bar's Log action can log to the exact day Today is showing.
     @State private var todayVM = TodayViewModel()
     @State private var showLogger = false
@@ -27,8 +27,8 @@ struct MainTabView: View {
             TodayView(vm: todayVM, isFrontmost: todayIsFrontmost)
                 .tag(MainTab.today)
 
-            GoalsView()
-                .tag(MainTab.goals)
+            ProgressDashboardView()
+                .tag(MainTab.progress)
 
             CoachView(isActive: selectedTab == .pulse)
                 .tag(MainTab.pulse)
