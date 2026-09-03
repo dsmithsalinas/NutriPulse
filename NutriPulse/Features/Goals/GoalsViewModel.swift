@@ -24,8 +24,12 @@ final class GoalsViewModel {
     func load() async {
         guard !isLoading else { return }
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--goals-preview") {
-            active = Self.previewStates()
+        if ProcessInfo.processInfo.arguments.contains("--goals-preview")
+            || ProcessInfo.processInfo.arguments.contains("--progress-preview") {
+            let previews = Self.previewStates()
+            active = ProcessInfo.processInfo.arguments.contains("--progress-preview")
+                ? Array(previews.prefix(1))
+                : previews
             completed = []
             error = nil
             return

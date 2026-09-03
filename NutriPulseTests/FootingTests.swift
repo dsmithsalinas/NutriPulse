@@ -47,6 +47,88 @@ final class FootingTests: XCTestCase {
     }
 }
 
+// MARK: - Progress summaries
+
+final class ProgressSummaryTests: XCTestCase {
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .iso8601)
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        return value
+    }
+
+    private func date(_ day: Int) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 8, day: day))!
+    }
+
+    private func summaries(count: Int, endingOn end: Date? = nil) -> [DailySummary] {
+        let end = end ?? date(30)
+        return (0..<count).map { offset in
+            DailySummary(
+                date: calendar.date(byAdding: .day, value: offset - (count - 1), to: end)!,
+                calories: offset % 5 == 0 ? 0 : 1_400,
+                proteinG: offset % 3 == 0 ? 100 : 140,
+                carbsG: 120,
+                fatG: 50,
+                fiberG: 20
+            )
+        }
+    }
+
+    func testSummaryRequiresThreeMeasuredDays() {
+        let notReady = ProgressMetrics(summaries: Array(summaries(count: 3).prefix(2)), proteinGoal: 130)
+        let ready = ProgressMetrics(summaries: summaries(count: 4), proteinGoal: 130)
+        XCTAssertFalse(notReady.summaryReady)
+        XCTAssertTrue(ready.summaryReady)
+    }
+
+    func testNoGoalUsesLoggedStateInsteadOfMet() {
+        let logged = DailySummary(date: date(30), calories: 1_400, proteinG: 120, carbsG: 0, fatG: 0, fiberG: 0)
+        let metrics = ProgressMetrics(summaries: [logged], proteinGoal: nil)
+        XCTAssertEqual(metrics.state(for: logged), .logged)
+        XCTAssertFalse(metrics.hasGoal)
+        XCTAssertEqual(metrics.completion, 1)
+    }
+
+    func testNinetyDaysBecomeThirteenWeeklyIntervals() {
+        let intervals = ProgressTimelineBuilder.thirteenWeeks(
+            summaries: summaries(count: 90),
+            proteinGoal: 130
+        )
+        XCTAssertEqual(intervals.count, 13)
+        XCTAssertEqual(intervals.reduce(0) { $0 + $1.expectedDays }, 90)
+    }
+
+    func testSinceLastShotStartsOnMostRecentDose() {
+        let userId = UUID()
+        let shots = [20, 27].map { day in
+            GLP1Log(
+                id: UUID(), userId: userId, injectedAt: date(day),
+                medication: "Zepbound", doseMg: 5, site: nil, nextDueAt: nil
+            )
+        }
+        let window = ProgressSummaryPeriod.sinceLastShot.window(
+            shots: shots,
+            now: date(30),
+            calendar: calendar
+        )
+        XCTAssertEqual(window?.lowerBound, date(27))
+        XCTAssertEqual(window?.upperBound, date(30))
+    }
+
+    func testPreviousSevenDaySummariesExcludeCurrentPeriod() {
+        let data = summaries(count: 28)
+        let history = ProgressHistoryBuilder.previousPeriods(
+            for: .week,
+            summaries: data,
+            shots: [],
+            now: date(30),
+            calendar: calendar
+        )
+        XCTAssertEqual(history.count, 3)
+        XCTAssertFalse(history[0].dateRange.contains("Aug 30"))
+    }
+}
+
 // MARK: - Health data quality
 
 final class HealthDataQualityEngineTests: XCTestCase {

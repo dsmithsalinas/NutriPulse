@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct GoalsView: View {
+    var embeddedInNavigation = false
     @Environment(AppState.self) private var appState
     @State private var vm = GoalsViewModel()
     @State private var selection: GoalListSelection = .active
@@ -14,8 +15,16 @@ struct GoalsView: View {
         var id: String { rawValue }
     }
 
+    @ViewBuilder
     var body: some View {
-        NavigationStack {
+        if embeddedInNavigation {
+            screenContent
+        } else {
+            NavigationStack { screenContent }
+        }
+    }
+
+    private var screenContent: some View {
             ScrollView {
                 VStack(spacing: 16) {
                     header
@@ -27,7 +36,7 @@ struct GoalsView: View {
                 .padding(.bottom, 28)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
-            .toolbar(.hidden, for: .navigationBar)
+            .toolbar(embeddedInNavigation ? .visible : .hidden, for: .navigationBar)
             .refreshable { await vm.load() }
             .task { await vm.load() }
             .sheet(isPresented: $showCreate) {
@@ -49,7 +58,6 @@ struct GoalsView: View {
             } message: {
                 Text(vm.error ?? "Please try again.")
             }
-        }
     }
 
     private var header: some View {

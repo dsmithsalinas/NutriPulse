@@ -9,6 +9,7 @@ final class AnalyticsViewModel {
         case week     = 7
         case twoWeeks = 14
         case month    = 30
+        case quarter  = 90
 
         var id: Int { rawValue }
         var label: String {
@@ -16,6 +17,7 @@ final class AnalyticsViewModel {
             case .week:     return "7 days"
             case .twoWeeks: return "14 days"
             case .month:    return "30 days"
+            case .quarter:  return "90 days"
             }
         }
     }
@@ -47,9 +49,15 @@ final class AnalyticsViewModel {
     var isLoading                 = false
     var errorMessage: String?     = nil
 
+    private var activeLoadID = UUID()
+
     private let repo     = AnalyticsRepository()
     private let goalRepo = GoalRepository()
     private let shotCycleRepo = ShotCycleRepository()
+
+    init(selectedRange: TimeRange = .week) {
+        self.selectedRange = selectedRange
+    }
 
     // Only count days where the user actually logged something
     var loggedDays: [DailySummary] { summaries.filter(\.hasData) }
@@ -98,9 +106,16 @@ final class AnalyticsViewModel {
     }
 
     func loadData() async {
+        let loadID = UUID()
+        activeLoadID = loadID
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--progress-preview") {
+            loadProgressPreview()
+            return
+        }
+        #endif
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
         do {
             async let summariesTask  = repo.fetchDailySummaries(days: selectedRange.rawValue)
             async let movementTask   = repo.fetchDailyMovement(days: selectedRange.rawValue)
@@ -111,6 +126,7 @@ final class AnalyticsViewModel {
             async let goalTask       = goalRepo.fetchGoal(for: .now)
             async let checkInTask    = shotCycleRepo.fetchRecent(days: max(selectedRange.rawValue, 42))
             let (s, m, water, w, bc, glp1, g, checks) = try await (summariesTask, movementTask, hydrationTask, weightTask, bodyCompTask, glp1Task, goalTask, checkInTask)
+            guard activeLoadID == loadID, !Task.isCancelled else { return }
             summaries        = s
             movement         = m
             hydration        = water
@@ -121,7 +137,55 @@ final class AnalyticsViewModel {
             goalProteinG     = g?.proteinG
             shotCycleCheckIns = checks
         } catch {
-            errorMessage = error.localizedDescription
+            guard activeLoadID == loadID, !Task.isCancelled else { return }
+            errorMessage = "Progress couldn’t refresh. Check your connection and try again."
         }
+        if activeLoadID == loadID { isLoading = false }
     }
+
+    #if DEBUG
+    private func loadProgressPreview() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let totalDays = selectedRange.rawValue
+        summaries = (0..<totalDays).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset - (totalDays - 1), to: today)!
+            let recentIndex = offset - max(totalDays - 30, 0)
+            let isMissing = recentIndex >= 0 && [3, 8, 14, 20, 26, 29].contains(recentIndex)
+            let isBelow = recentIndex >= 0 && [1, 6, 11, 16, 22, 27].contains(recentIndex)
+            return DailySummary(
+                date: date,
+                calories: isMissing ? 0 : (isBelow ? 1_180 : 1_460),
+                proteinG: isMissing ? 0 : (isBelow ? 94 : 138),
+                carbsG: isMissing ? 0 : 122,
+                fatG: isMissing ? 0 : 48,
+                fiberG: isMissing ? 0 : 22
+            )
+        }
+        movement = []
+        let latestShotOffset = min(4, max(totalDays - 1, 0))
+        let latestShotDate = calendar.date(byAdding: .day, value: -latestShotOffset, to: today)!
+        hydration = summaries.map { summary in
+            let distance = calendar.dateComponents([.day], from: latestShotDate, to: summary.date).day ?? 0
+            let cycleDay = (distance % 7 + 7) % 7
+            return DailyHydration(date: summary.date, amountMl: [2, 3].contains(cycleDay) ? 1_150 : 1_850)
+        }
+        weightLogs = []
+        bodyCompHistory = []
+        let oldestShotOffset = latestShotOffset + ((max(totalDays - 1, latestShotOffset) - latestShotOffset) / 7) * 7
+        glp1History = stride(from: oldestShotOffset, through: latestShotOffset, by: -7).map { offset in
+            let injectedAt = calendar.date(byAdding: .day, value: -offset, to: today)!
+            return GLP1Log(
+                id: UUID(), userId: UUID(), injectedAt: injectedAt,
+                medication: "Zepbound", doseMg: 5, site: "Left Abdomen",
+                nextDueAt: calendar.date(byAdding: .day, value: 7, to: injectedAt)
+            )
+        }
+        shotCycleCheckIns = []
+        goalCalories = 1_600
+        goalProteinG = 130
+        errorMessage = nil
+        isLoading = false
+    }
+    #endif
 }

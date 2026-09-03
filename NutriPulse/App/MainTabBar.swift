@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-enum MainTab: Hashable { case today, goals, pulse, profile }
+enum MainTab: Hashable { case today, progress, pulse, profile }
 
 // SwiftUI places `.safeAreaInset` content above the keyboard but does NOT inset the main
 // content by it, so a pinned composer ends up underneath this bar (and under the raised Log
@@ -39,7 +39,7 @@ struct MainTabBar: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 0) {
             tab(.today,     "Today",     "house.fill")
-            tab(.goals,     "Goals",     "target")
+            tab(.progress,  "Progress",  "chart.line.uptrend.xyaxis")
             logButton
             tab(.pulse,     "Pulse",     "bubble.left.and.bubble.right.fill")
             tab(.profile,   "Profile",   "person.fill")
