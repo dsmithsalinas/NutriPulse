@@ -86,6 +86,7 @@ final class AppState {
             UserDefaults.standard.removeObject(forKey: key)
         }
         NotificationManager.shared.cancelSmartNotifications()
+        NotificationManager.shared.cancelWeeklyRecapReminder()
         SmartNotificationHistoryStore.clear()
     }
 
@@ -97,6 +98,7 @@ final class AppState {
         "glp1PlannedDoseMg",
         "doseCardDismissedDay",
         NotificationManager.smartCoachingEnabledKey,
+        NotificationManager.weeklyRecapEnabledKey,
         NotificationManager.smartSuppressedDayKey,
         SmartNotificationPreferences.workoutKey,
         SmartNotificationPreferences.proteinKey,

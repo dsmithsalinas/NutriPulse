@@ -48,6 +48,7 @@ struct ProfileView: View {
                 Task {
                     await vm.refreshRemindersState()
                     await vm.refreshSmartCoachingState()
+                    await vm.refreshWeeklyRecapState()
                     await NotificationManager.shared.reconcileSmartNotificationHistory()
                 }
             }
@@ -102,7 +103,7 @@ struct ProfileView: View {
                 }
                 Button("Not now", role: .cancel) { }
             } message: {
-                Text("Turn on notifications for Footing in Settings to get shot-day reminders.")
+                Text("Turn on notifications for Footing in Settings to get shot-day reminders and your Monday recap.")
             }
             .alert("Notifications are off", isPresented: $vm.showSmartNotificationDeniedAlert) {
                 Button("Open Settings") {
@@ -385,6 +386,13 @@ struct ProfileView: View {
                 Label("Smart coaching", systemImage: "bell.and.waves.left.and.right")
             }
 
+            Toggle(isOn: Binding(
+                get: { vm.weeklyRecapOn },
+                set: { value in Task { await vm.setWeeklyRecap(value) } }
+            )) {
+                Label("Monday recap", systemImage: "calendar.badge.clock")
+            }
+
             NavigationLink {
                 SmartNotificationSettingsView()
             } label: {
@@ -400,7 +408,7 @@ struct ProfileView: View {
         } header: {
             Text("Pulse notifications")
         } footer: {
-            Text("At most one coaching notification a day, only when Footing has a specific next step. Shot-day reminders are separate.")
+            Text("At most one coaching notification a day, only when Footing has a specific next step. The Monday recap and shot-day reminders are separate.")
         }
     }
 

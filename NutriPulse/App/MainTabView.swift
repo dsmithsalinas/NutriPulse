@@ -60,10 +60,15 @@ struct MainTabView: View {
         .task {
             handleQuickAction()
             handleSmartNotificationRoute()
+            handlePulseRoute()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             handleQuickAction()
             handleSmartNotificationRoute()
+            handlePulseRoute()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openPulseRequested)) { _ in
+            handlePulseRoute()
         }
     }
 
@@ -85,6 +90,13 @@ struct MainTabView: View {
         case .logDose:
             appState.pendingQuickAction = .logDose
         }
+    }
+
+    // Monday recap tap → Pulse. Selecting the tab is enough: CoachView generates the recap
+    // when it becomes active.
+    private func handlePulseRoute() {
+        guard PulseRouteStore.consume() else { return }
+        selectedTab = .pulse
     }
 
     private func handleSmartNotificationRoute() {

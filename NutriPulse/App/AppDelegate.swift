@@ -54,6 +54,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
         let info = response.notification.request.content.userInfo
+        if info["kind"] as? String == NotificationManager.weeklyRecapKind {
+            PulseRouteStore.requestOpen()
+            return
+        }
         let sourceDate = (info["sourceDate"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let meal = (info["meal"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let kind = (info["kind"] as? String).flatMap(SmartNotificationKind.init(rawValue:))

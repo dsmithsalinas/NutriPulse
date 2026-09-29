@@ -63,6 +63,26 @@ struct AnalyticsRepository {
         }
     }
 
+    // Food names only, one per log row, for Pulse's "what does this person actually eat"
+    // context. Server-side rather than LocalStore because the local cache only reliably holds
+    // days the user has opened on this device.
+    func fetchLoggedFoodNames(from startDate: Date, through endDate: Date) async throws -> [String] {
+        struct Row: Decodable {
+            struct Item: Decodable { let name: String }
+            let foodItems: Item?
+            enum CodingKeys: String, CodingKey { case foodItems = "food_items" }
+        }
+        let cal = Calendar.current
+        let rows: [Row] = try await supabase
+            .from("food_logs")
+            .select("food_items(name)")
+            .gte("log_date", value: cal.startOfDay(for: startDate).isoDateString)
+            .lte("log_date", value: cal.startOfDay(for: endDate).isoDateString)
+            .execute()
+            .value
+        return rows.compactMap { $0.foodItems?.name }
+    }
+
     // Per-day workout rollup, zeros included — same full-axis contract as
     // fetchDailySummaries so the movement chart never has gaps in its x-axis.
     func fetchDailyMovement(days: Int) async throws -> [DailyMovement] {

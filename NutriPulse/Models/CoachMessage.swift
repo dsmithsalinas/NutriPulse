@@ -15,7 +15,7 @@ struct CoachMessage: Codable, Identifiable {
 
     var automaticContextLabel: String? {
         guard isAutomatic else { return nil }
-        let title = messageType == "weekly_summary" ? "Weekly summary" : "Check-in"
+        let title = messageType == "weekly_summary" ? "Weekly recap" : "Check-in"
         let date = createdAt.formatted(
             .dateTime
                 .month(.abbreviated)
