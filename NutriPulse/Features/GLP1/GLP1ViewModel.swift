@@ -12,6 +12,10 @@ final class GLP1ViewModel {
     enum ReminderState { case on, off, denied }
 
     var latest: GLP1Log?      = nil
+    var skippedDoses: [GLP1SkippedDose] = []
+    var doseScheduleLoaded = false
+    var doseSchedule: GLP1DoseSchedule { .init(latest: latest, skips: skippedDoses) }
+    var scheduleError: String?
     var proteinToday: Double  = 0
     var proteinGoal: Double   = 0
     var waterMl: Double       = 0
@@ -34,7 +38,7 @@ final class GLP1ViewModel {
 
         guard let userId = try? await supabase.auth.session.user.id else { return }
 
-        async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
+        async let glp1Task = glp1Repo.fetchDoseSchedule()
         async let checkInTask = shotCycleRepo.fetchRecent()
 
         // Today's protein and water come from the local cache (instant, matches Today).
@@ -50,7 +54,18 @@ final class GLP1ViewModel {
             waterGoalMl = goal.waterMlTarget
         }
 
-        latest = (try? await glp1Task)?.first
+        do {
+            let schedule = try await glp1Task
+            latest = schedule.latest
+            skippedDoses = schedule.skips
+            doseScheduleLoaded = true
+            scheduleError = nil
+            await NotificationManager.shared.reconcileGLP1Reminders(schedule: schedule)
+            await refreshReminderState()
+        } catch {
+            doseScheduleLoaded = false
+            scheduleError = "Couldn't refresh your shot schedule. Try again when you're connected."
+        }
         checkIns = (try? await checkInTask) ?? []
     }
 
@@ -103,8 +118,8 @@ final class GLP1ViewModel {
         return cal.dateComponents([.day], from: cal.startOfDay(for: injected), to: cal.startOfDay(for: .now)).day
     }
 
-    var nextDue: Date? { latest?.nextDueAt }
-    var isOverdue: Bool { nextDue.map { $0 < .now } ?? false }
+    var nextDue: Date? { doseScheduleLoaded ? doseSchedule.nextDue : nil }
+    var isOverdue: Bool { doseSchedule.isPastDueDay }
 
     var proteinPct: Double { proteinGoal > 0 ? min(proteinToday / proteinGoal, 1) : 0 }
     var proteinCleared: Bool { proteinGoal > 0 && proteinToday >= proteinGoal }
@@ -116,13 +131,13 @@ final class GLP1ViewModel {
     }
 
     var cyclePlan: ShotCyclePlan? {
-        guard let day = daysSinceShot else { return nil }
+        guard doseScheduleLoaded, !doseSchedule.cycleInterrupted, let day = daysSinceShot else { return nil }
         return ShotCyclePlanner.plan(cycleDay: max(day, 0), today: todayCheckIn, history: checkIns)
     }
 
     @discardableResult
     func saveCheckIn(_ draft: ShotCycleCheckInDraft) async -> Bool {
-        guard let day = daysSinceShot else { return false }
+        guard doseScheduleLoaded, !doseSchedule.cycleInterrupted, let day = daysSinceShot else { return false }
         do {
             let saved = try await shotCycleRepo.save(draft, cycleDay: day)
             checkIns.removeAll { $0.checkinDate == saved.checkinDate }
@@ -136,12 +151,12 @@ final class GLP1ViewModel {
         }
     }
 
-    // "Due Saturday · in 2 days" / "Due today" / "Overdue by N days"
+    // Date-based schedule copy; a passed date is never framed as a failure.
     var nextDoseText: String? {
         guard let due = nextDue else { return nil }
         let days = cal.dateComponents([.day], from: cal.startOfDay(for: .now), to: cal.startOfDay(for: due)).day ?? 0
         switch days {
-        case ..<0:  return "Overdue by \(-days) day\(-days == 1 ? "" : "s")"
+        case ..<0:  return "Planned for \(due.formatted(date: .abbreviated, time: .omitted))"
         case 0:     return "Due today"
         case 1:     return "Due tomorrow"
         default:
@@ -153,6 +168,10 @@ final class GLP1ViewModel {
     // Deterministic, schedule-aware guidance (no API call) — the injection cycle drives appetite,
     // and protein-first is the through-line. Framed to protect results, never to scold.
     var coachNote: String {
+        guard doseScheduleLoaded else { return "Your shot schedule is unavailable. Your nutrition goals are still here." }
+        if doseSchedule.cycleInterrupted {
+            return "Your skipped dose is recorded. Keep working with your nutrition goals and how you feel today."
+        }
         guard let days = daysSinceShot else {
             return "Log a dose and Pulse can time your protein around your cycle."
         }
@@ -169,6 +188,10 @@ final class GLP1ViewModel {
 
     // Prompt handed to Pulse when the user wants to go deeper from this screen.
     var askPulsePrompt: String {
+        guard doseScheduleLoaded else { return "Help me focus on my nutrition goals using my current logs. My shot schedule hasn't loaded." }
+        if doseSchedule.cycleInterrupted {
+            return "I've marked a scheduled shot as skipped. Help me focus on my nutrition goals using my actual logs and how I feel, without assuming my usual shot-cycle pattern."
+        }
         if let days = daysSinceShot {
             return "I'm on \(latest?.medication ?? "a GLP-1"), day \(days) after my last shot. What should I focus on eating today to protect my muscle and hit my protein?"
         }

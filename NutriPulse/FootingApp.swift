@@ -72,10 +72,12 @@ struct FootingApp: App {
     }
 
     init() {
-        CrashReporter.install()
+        if !AppStoreScreenshotMode.active { CrashReporter.install() }
         LocalStore.shared.configure(with: Self.modelContainer)
-        SyncEngine.shared.configure()
-        Telemetry.initialize()
+        if !AppStoreScreenshotMode.active {
+            SyncEngine.shared.configure()
+            Telemetry.initialize()
+        }
     }
 
     var body: some Scene {
@@ -88,7 +90,7 @@ struct FootingApp: App {
                 }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            if phase == .active && !AppStoreScreenshotMode.active {
                 Telemetry.appOpened()
                 Task { await SyncEngine.shared.syncNow() }
             }

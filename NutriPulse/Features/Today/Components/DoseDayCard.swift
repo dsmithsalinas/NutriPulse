@@ -54,12 +54,12 @@ struct DoseDayCard: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
                 PulseDot()
-                Text(overdue ? "DOSE OVERDUE" : "IT\u{2019}S DOSE DAY")
+                Text(overdue ? "SHOT PLANNED" : "IT\u{2019}S DOSE DAY")
                     .font(.system(size: 12, weight: .bold)).tracking(0.6)
             }
             .foregroundStyle(.white.opacity(0.92))
 
-            Text(overdue ? "Log your missed shot" : "Time for your shot")
+            Text(overdue ? "Your shot log" : "Time for your shot")
                 .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundStyle(.white).padding(.top, 8)
             Text("\(medication) \u{00B7} \(doseText)")

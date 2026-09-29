@@ -6,5 +6,8 @@
   "description": "One-off tooling scripts (demo data seeding, etc.)",
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
   }
 }

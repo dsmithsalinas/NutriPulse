@@ -1,5 +1,69 @@
 import Foundation
 
+// A skipped scheduled dose is not an injection. Keeping it separate preserves dose charts,
+// site rotation, and the actual number of days since the last shot.
+struct GLP1SkippedDose: Codable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    let injectionId: UUID
+    let scheduledAt: Date
+    let nextReminderAt: Date
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case injectionId = "injection_id"
+        case scheduledAt = "scheduled_at"
+        case nextReminderAt = "next_reminder_at"
+        case createdAt = "created_at"
+    }
+}
+
+struct GLP1DoseSchedule {
+    let latest: GLP1Log?
+    let skips: [GLP1SkippedDose]
+    var now: Date = .now
+    var calendar: Calendar = .current
+
+    var relevantSkips: [GLP1SkippedDose] {
+        skips.filter { $0.injectionId == latest?.id }.sorted { $0.scheduledAt < $1.scheduledAt }
+    }
+
+    // Advance only through explicitly skipped dates. Passing time alone is not a skip.
+    var nextDue: Date? {
+        guard var due = latest?.nextDueAt else { return nil }
+        for skip in relevantSkips {
+            if abs(skip.scheduledAt.timeIntervalSince(due)) < 1, skip.nextReminderAt > due {
+                due = skip.nextReminderAt
+            }
+        }
+        return due
+    }
+
+    var latestSkip: GLP1SkippedDose? { relevantSkips.last }
+    var skippedThisWeek: GLP1SkippedDose? {
+        guard let skip = latestSkip, let due = nextDue,
+              calendar.startOfDay(for: due) > calendar.startOfDay(for: now),
+              abs(due.timeIntervalSince(skip.nextReminderAt)) < 1 else { return nil }
+        return skip
+    }
+
+    var cycleInterrupted: Bool {
+        relevantSkips.contains {
+            calendar.startOfDay(for: $0.scheduledAt) <= calendar.startOfDay(for: now)
+        }
+    }
+
+    var isPastDueDay: Bool {
+        nextDue.map { calendar.startOfDay(for: $0) < calendar.startOfDay(for: now) } ?? false
+    }
+}
+
+extension Notification.Name {
+    static let glp1DoseHistoryChanged = Notification.Name("glp1DoseHistoryChanged")
+}
+
 struct GLP1Log: Codable, Identifiable {
     let id: UUID
     let userId: UUID

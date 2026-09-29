@@ -16,6 +16,11 @@ struct FoodLoggingView: View {
         self.selectedDate = selectedDate
         self.initialTab = initialTab
         _vm = State(initialValue: FoodLoggingViewModel(selectedTab: initialTab))
+        #if DEBUG
+        if AppStoreScreenshotMode.active {
+            _talkVM = State(initialValue: AppStoreScreenshotPreview.foodModel())
+        }
+        #endif
     }
 
     var body: some View {
@@ -69,7 +74,9 @@ struct FoodLoggingView: View {
                 Text(vm.errorMessage ?? "")
             }
             .onAppear {
-                Telemetry.logIntentStarted(source: vm.selectedTab.telemetrySource)
+                if !AppStoreScreenshotMode.active {
+                    Telemetry.logIntentStarted(source: vm.selectedTab.telemetrySource)
+                }
             }
         }
         .tint(Theme.Colors.primary)

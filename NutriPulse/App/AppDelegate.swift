@@ -54,6 +54,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
         let info = response.notification.request.content.userInfo
+        if notificationID == StrongWeekReminder.identifier,
+           response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let rawId = info["userId"] as? String, let userId = UUID(uuidString: rawId) {
+            StrongWeekReminder.saveRoute(userId: userId)
+            NotificationCenter.default.post(name: .strongWeekReminderOpened, object: nil)
+            return
+        }
         let sourceDate = (info["sourceDate"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let meal = (info["meal"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let kind = (info["kind"] as? String).flatMap(SmartNotificationKind.init(rawValue:))

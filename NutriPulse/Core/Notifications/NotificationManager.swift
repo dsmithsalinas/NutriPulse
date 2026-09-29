@@ -21,7 +21,61 @@ final class NotificationManager {
     static let mealCategory = "smart-meal"
     static let appetiteCategory = "smart-appetite"
 
-    // Reminders fire at 9am local time.
+    private var weeklyUserId: UUID?
+    private var weeklyScheduleRevision = 0
+
+    func setWeeklyReminderAccount(_ userId: UUID?) {
+        guard weeklyUserId != userId || userId == nil else { return }
+        weeklyUserId = userId
+        weeklyScheduleRevision += 1
+        center.removePendingNotificationRequests(withIdentifiers: [StrongWeekReminder.identifier])
+        center.removeDeliveredNotifications(withIdentifiers: [StrongWeekReminder.identifier])
+    }
+
+    // Never prompt from launch/foreground. Existing notification permission is enough;
+    // users without permission can enable this explicitly from Profile.
+    @discardableResult
+    func reconcileWeeklyReminder() async -> Bool {
+        weeklyScheduleRevision += 1
+        let revision = weeklyScheduleRevision
+        guard let userId = weeklyUserId else { return false }
+        let settings = await center.notificationSettings()
+        guard revision == weeklyScheduleRevision, userId == weeklyUserId else { return false }
+        guard StrongWeekReminder.enabled(userId: userId),
+              settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+            center.removePendingNotificationRequests(withIdentifiers: [StrongWeekReminder.identifier])
+            center.removeDeliveredNotifications(withIdentifiers: [StrongWeekReminder.identifier])
+            return false
+        }
+        do {
+            try await center.add(StrongWeekReminder.request(userId: userId))
+            // Account or opt-out may have changed while Notification Center accepted it.
+            if revision != weeklyScheduleRevision {
+                _ = await reconcileWeeklyReminderAfterRace()
+                return false
+            }
+            return true
+        } catch { return false }
+    }
+
+    private func reconcileWeeklyReminderAfterRace() async -> Bool {
+        center.removePendingNotificationRequests(withIdentifiers: [StrongWeekReminder.identifier])
+        guard weeklyUserId != nil else { return false }
+        return await reconcileWeeklyReminder()
+    }
+
+    @discardableResult
+    func setWeeklyReminderEnabled(_ enabled: Bool, userId: UUID) async -> Bool {
+        guard weeklyUserId == userId else { return false }
+        if enabled {
+            guard await requestPermissionIfNeeded(), weeklyUserId == userId else { return false }
+        }
+        UserDefaults.standard.set(enabled, forKey: StrongWeekReminder.preferenceKey(userId: userId))
+        let scheduled = await reconcileWeeklyReminder()
+        return !enabled || scheduled
+    }
+
+    // Shot reminders fire at 9am local time.
     private static let reminderHour = 9
 
     // Every identifier this type ever schedules. Cancelling by an exhaustive list is what
@@ -90,6 +144,18 @@ final class NotificationManager {
 
     func cancelGLP1Reminders() {
         center.removePendingNotificationRequests(withIdentifiers: Self.allIdentifiers)
+        center.removeDeliveredNotifications(withIdentifiers: Self.allIdentifiers)
+    }
+
+    // Reconcile a changed schedule without turning notifications back on for someone who
+    // disabled them. Used for skips, undo, history edits, and cross-device refreshes.
+    func reconcileGLP1Reminders(schedule: GLP1DoseSchedule) async {
+        let pending = await center.pendingNotificationRequests()
+        let wasEnabled = pending.contains(where: { $0.identifier.hasPrefix("glp1-") })
+        cancelGLP1Reminders()
+        if wasEnabled, let due = schedule.nextDue {
+            await scheduleGLP1Reminders(nextDueAt: due)
+        }
     }
 
     // MARK: - Smart coaching notifications
@@ -172,6 +238,12 @@ final class NotificationManager {
             return
         }
 
+        // These automatic nudges cannot interpret free-text constraints. A tailored week
+        // takes their place; shot reminders and the user's notification settings are unchanged.
+        guard let week = try? await StrongWeekRepository().context(), !week.needsTailoredSuggestions else {
+            cancelSmartNotifications()
+            return
+        }
         let preferences = SmartNotificationPreferences.load()
         guard preferences.enabledKinds.contains(opportunity.kind),
               !preferences.isQuiet(at: opportunity.fireDate) else {

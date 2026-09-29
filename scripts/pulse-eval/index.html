@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pulse · Model comparison</title><link rel="stylesheet" href="/style.css"></head><body>
+<header><span class="brand">footing <b>/ Pulse lab</b></span><span class="badge">Private · Synthetic profiles</span></header>
+<main><div class="intro"><p class="eyebrow">YOUR STRONG WEEK</p><h1>Which response helps more?</h1><p>Compare the same week, with the same context. Rate the advice before revealing the models.</p></div>
+<section class="controls"><label>Scenario<select id="scenario"></select></label><button id="generate">Generate a comparison</button><label class="holdout"><input type="checkbox" id="holdout">Include reserved holdout scenarios</label><p id="status" role="status"></p></section>
+<details><summary>Scenario context and review criteria</summary><p id="expectation"></p><pre id="context"></pre></details>
+<div class="runbar"><h2>Review a pair</h2><select id="runs" aria-label="Saved comparisons"></select></div>
+<div id="empty" class="empty">Choose a scenario to generate two responses. Each comparison makes one paid request per provider. Saved pairs can be reviewed again without generating.</div>
+<section id="pair" hidden><div class="grid"><article id="A"></article><article id="B"></article></div>
+<form id="rating"><h2>Your verdict</h2><p>Score each response from 1 (poor) to 5 (excellent). Boundaries includes injury restrictions, medication scope, missing data, and avoiding detailed workouts.</p><div id="scores" class="grid"></div>
+<label>Which response would you prefer Pulse to give?<select id="choice" required><option value="">Choose…</option><option>A</option><option>B</option><option value="tie">Tie</option><option value="neither">Neither</option></select></label><label>Notes<textarea id="note" maxlength="2000" placeholder="What worked, what was missing, or what crossed a boundary?"></textarea></label><button type="submit">Save rating & reveal models</button></form><pre id="metadata" hidden></pre></section>
+<section class="history"><h2>Results so far</h2><p id="summary">No rated comparisons yet.</p><a href="/api/export" download="pulse-comparison-ratings.json">Export rated comparisons</a><p class="fine">These are directional, manual evaluations—not a statistically powered user A/B test. Repeated runs are separate samples, not independent users. Failures remain in history and cannot receive preference ratings.</p></section>
+</main><script src="/app.js"></script></body></html>

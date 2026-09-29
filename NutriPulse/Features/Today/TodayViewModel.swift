@@ -18,6 +18,10 @@ final class TodayViewModel {
     // Most recent GLP-1 injection, for the dose-day chip in the header. Fetched on load; the
     // chip only surfaces on today, and only when a dose is due today or overdue.
     var latestGLP1: GLP1Log? = nil
+    var skippedDoses: [GLP1SkippedDose] = []
+    var doseScheduleLoaded = false
+    var strongWeekContext: StrongWeekContext?
+    var doseSchedule: GLP1DoseSchedule { .init(latest: latestGLP1, skips: skippedDoses) }
     var shotCycleCheckIns: [ShotCycleCheckIn] = []
     var shotCycleCheckInError: String? = nil
 
@@ -75,7 +79,7 @@ final class TodayViewModel {
     }
 
     var recoveryOpportunity: RecoveryOpportunity? {
-        guard isToday else { return nil }
+        guard isToday, strongWeekContext?.needsTailoredSuggestions != true else { return nil }
         return RecoveryCoach.opportunity(
             workouts: workouts,
             goal: dailyGoal,
@@ -85,7 +89,7 @@ final class TodayViewModel {
     }
 
     var lowAppetitePreparation: LowAppetitePreparation? {
-        guard isToday, let injectedAt = latestGLP1?.injectedAt else { return nil }
+        guard isToday, strongWeekContext?.needsTailoredSuggestions != true, doseScheduleLoaded, !doseSchedule.cycleInterrupted, let injectedAt = latestGLP1?.injectedAt else { return nil }
         let currentDay = Calendar.current.dateComponents(
             [.day],
             from: Calendar.current.startOfDay(for: injectedAt),
@@ -172,12 +176,12 @@ final class TodayViewModel {
     struct DoseStatus { let text: String; let urgent: Bool }
 
     var doseStatus: DoseStatus? {
-        guard isToday, let log = latestGLP1, let due = log.nextDueAt else { return nil }
+        guard isToday, doseScheduleLoaded, let log = latestGLP1, let due = doseSchedule.nextDue else { return nil }
         let cal = Calendar.current
         let days = cal.dateComponents([.day],
                                       from: cal.startOfDay(for: .now),
                                       to: cal.startOfDay(for: due)).day ?? 0
-        if days < 0 { return DoseStatus(text: "Dose overdue · \(log.medication)", urgent: true) }
+        if days < 0 { return DoseStatus(text: "Shot planned · \(log.medication)", urgent: true) }
         if days == 0 { return DoseStatus(text: "Dose day · \(log.medication)", urgent: false) }
         return nil
     }
@@ -206,7 +210,7 @@ final class TodayViewModel {
     }
 
     var scheduledShotCycleCheckInDue: Bool {
-        ShotCycleCheckInSchedule.isDue(
+        doseScheduleLoaded && !doseSchedule.cycleInterrupted && ShotCycleCheckInSchedule.isDue(
             cycleDay: currentShotCycleDay,
             hasTodayCheckIn: todayShotCycleCheckIn != nil
         )
@@ -214,7 +218,7 @@ final class TodayViewModel {
 
     @discardableResult
     func saveShotCycleCheckIn(_ draft: ShotCycleCheckInDraft) async -> Bool {
-        guard let cycleDay = currentShotCycleDay else { return false }
+        guard doseScheduleLoaded, !doseSchedule.cycleInterrupted, let cycleDay = currentShotCycleDay else { return false }
         do {
             let saved = try await shotCycleRepo.save(draft, cycleDay: cycleDay)
             shotCycleCheckIns.removeAll { $0.checkinDate == saved.checkinDate }
@@ -242,7 +246,7 @@ final class TodayViewModel {
     // On a day with a logged workout the copy becomes workout-aware and the protein trigger
     // reaches a little higher — see buildNudge.
     var nudge: DayNudge? {
-        guard isToday, let goal = dailyGoal else { return nil }
+        guard strongWeekContext?.needsTailoredSuggestions != true, isToday, let goal = dailyGoal else { return nil }
         return Self.buildNudge(
             goal: goal,
             totalProteinG: totalProteinG,
@@ -357,7 +361,8 @@ final class TodayViewModel {
         defer { isLoading = false }
 
         async let bodyCompTask = buildBodyCompData()
-        async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
+        async let weekContextTask = StrongWeekRepository().context()
+        async let glp1Task = glp1Repo.fetchDoseSchedule()
         async let shotCycleTask = shotCycleRepo.fetchRecent(days: 84)
 
         do {
@@ -417,7 +422,17 @@ final class TodayViewModel {
             ))
         }
 
-        latestGLP1 = (try? await glp1Task)?.first
+        do {
+            let schedule = try await glp1Task
+            latestGLP1 = schedule.latest
+            skippedDoses = schedule.skips
+            doseScheduleLoaded = true
+            await NotificationManager.shared.reconcileGLP1Reminders(schedule: schedule)
+        } catch {
+            doseScheduleLoaded = false
+            errorMessage = "Couldn't refresh your shot schedule. Try again when you're connected."
+        }
+        if let context = try? await weekContextTask { strongWeekContext = context }
         shotCycleCheckIns = (try? await shotCycleTask) ?? []
         bodyComp = await bodyCompTask
         latestWaistCm = ((try? await measurementRepo.fetchLatestPerSite()) ?? [:])[.waist]?.valueCm
@@ -881,6 +896,7 @@ final class TodayViewModel {
     // "Connect Apple Health" button was then permanently a no-op. Asking now belongs to
     // the onboarding step and to an explicit tap; see requestHealthAuthorization().
     func loadHealthData() async {
+        guard !AppStoreScreenshotMode.active else { return }
         let hk = HealthKitManager.shared
         guard hk.isAvailable else { return }
         // Scope upgrade (e.g. v2 added workouts + steps): users who already granted the

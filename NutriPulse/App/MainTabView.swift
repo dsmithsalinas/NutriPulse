@@ -60,11 +60,29 @@ struct MainTabView: View {
         .task {
             handleQuickAction()
             handleSmartNotificationRoute()
+            handleWeeklyReminderRoute()
+            await NotificationManager.shared.reconcileWeeklyReminder()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .strongWeekReminderOpened)) { _ in
+            handleWeeklyReminderRoute()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            Task { await NotificationManager.shared.reconcileWeeklyReminder() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             handleQuickAction()
             handleSmartNotificationRoute()
+            handleWeeklyReminderRoute()
+            Task { await NotificationManager.shared.reconcileWeeklyReminder() }
         }
+    }
+
+    private func handleWeeklyReminderRoute() {
+        guard let userId = appState.session?.user.id,
+              StrongWeekReminder.consumeRoute(userId: userId) else { return }
+        selectedTab = .today
+        showLogger = false
+        appState.pendingStrongWeekReminder = true
     }
 
     private func handleQuickAction() {
