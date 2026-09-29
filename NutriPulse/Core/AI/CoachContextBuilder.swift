@@ -17,6 +17,10 @@ struct CoachContextBundle: Encodable {
     let healthDataQuality: HealthDataQualityContext
     let glp1: GLP1Context?
     let activeGoals: [PersonalGoalContext]
+    // Only for the Monday recap (nil otherwise, and omitted from the JSON). The rolling
+    // seven-day window ends today — on a Monday morning that's six days of last week plus an
+    // empty day — so the recap was summarizing the wrong week.
+    var lastWeek: LastWeekContext? = nil
 
     struct UserContext: Encodable {
         let name: String
@@ -101,6 +105,41 @@ struct CoachContextBundle: Encodable {
         // Movement across the window — sessions and total minutes, both sources.
         let workoutSessions: Int
         let workoutMinutes: Int
+        // Foods logged more than once this week — "Greek yogurt (4×)". Lets Pulse suggest
+        // from the user's real routine instead of generic advice. nil when nothing repeats.
+        let frequentFoods: [String]?
+    }
+
+    struct LastWeekContext: Encodable {
+        let range: String
+        let daysLogged: Int
+        let proteinFloorDays: Int?
+        let avgCalories: Int?
+        let avgProteinG: Int?
+        let workoutSessions: Int
+        let workoutMinutes: Int
+        let weightChange: String?
+        let frequentFoods: [String]
+        let days: [Day]
+        let priorWeek: PriorWeek?
+
+        struct Day: Encodable {
+            let day: String
+            let logged: Bool
+            let calories: Int?
+            let proteinG: Int?
+            // nil when the day wasn't logged or there's no goal: unknown, not a miss.
+            let proteinFloorHit: Bool?
+            let workoutMinutes: Int?
+            let cycleDay: Int?
+            let appetite: Int?
+        }
+
+        struct PriorWeek: Encodable {
+            let daysLogged: Int
+            let proteinFloorDays: Int?
+            let avgProteinG: Int?
+        }
     }
 
     struct WeightTrendContext: Encodable {
@@ -189,7 +228,7 @@ struct CoachContextBuilder {
     private let goalRepo = GoalRepository()
     private let glp1Repo = GLP1Repository()
 
-    func build(profile: UserProfile?) async -> CoachContextBundle {
+    func build(profile: UserProfile?, includeLastWeek: Bool = false) async -> CoachContextBundle {
         // HealthKitManager.shared is @MainActor — capture it on main actor first
         let hk = await MainActor.run { HealthKitManager.shared }
 
@@ -205,6 +244,11 @@ struct CoachContextBuilder {
         async let hrTask = hk.fetchRestingHeartRate(for: .now)
         async let hrvTask = hk.fetchHRV(for: .now)
         async let healthQualityTask = recentHealthQuality(hk: hk, days: 7)
+        async let foodNamesTask = analyticsRepo.fetchLoggedFoodNames(
+            from: Calendar.current.date(byAdding: .day, value: -6, to: .now)!,
+            through: .now
+        )
+        async let lastWeekTask = buildLastWeek(if: includeLastWeek)
 
         // Today is local-first so it can include a meal the user just logged while
         // offline. Pulse must use that same snapshot or the two tabs can tell
@@ -238,6 +282,8 @@ struct CoachContextBuilder {
         let hr = await hrTask
         let hrv = await hrvTask
         let healthQuality = await healthQualityTask
+        let foodNames = (try? await foodNamesTask) ?? []
+        let lastWeek = await lastWeekTask
 
         // Workouts come from LocalStore, not Supabase: a HealthKit import made seconds
         // ago is still pendingCreate locally, and the coach should know about the
@@ -249,7 +295,7 @@ struct CoachContextBuilder {
             }
         }
 
-        return await assemble(
+        var bundle = await assemble(
             profile: profile,
             logs: logs,
             summaries: summaries,
@@ -263,7 +309,44 @@ struct CoachContextBuilder {
             sleep: sleep,
             hr: hr,
             hrv: hrv,
-            healthQuality: healthQuality
+            healthQuality: healthQuality,
+            foodNames: foodNames
+        )
+        bundle.lastWeek = lastWeek
+        return bundle
+    }
+
+    // Everything the Monday recap needs about the completed Mon–Sun week, fetched together.
+    // Any piece that fails is left empty rather than failing the recap: Pulse is told to say
+    // so when there isn't enough data, which beats not sending a recap at all.
+    private func buildLastWeek(if include: Bool) async -> CoachContextBundle.LastWeekContext? {
+        guard include else { return nil }
+        return await buildLastWeek()
+    }
+
+    private func buildLastWeek() async -> CoachContextBundle.LastWeekContext {
+        let interval = WeeklyRecapSchedule.lastWeek(before: .now)
+        async let summariesTask = analyticsRepo.fetchDailySummaries(from: interval.priorStart, through: interval.end)
+        async let movementTask = analyticsRepo.fetchDailyMovement(from: interval.start, through: interval.end)
+        async let weightTask = analyticsRepo.fetchWeightLogs(from: interval.start, through: interval.end)
+        async let checkInTask = ShotCycleRepository().fetchRecent(days: 14)
+        async let foodNamesTask = analyticsRepo.fetchLoggedFoodNames(from: interval.start, through: interval.end)
+
+        let userId = try? await supabase.auth.session.user.id
+        var goal: DailyGoal?
+        if let userId {
+            goal = await MainActor.run { try? LocalStore.shared.fetchGoal(for: .now, userId: userId) }
+        }
+        if goal == nil { goal = try? await goalRepo.fetchGoal(for: .now) }
+
+        return WeeklyRecapDigest.build(
+            interval: interval,
+            summaries: (try? await summariesTask) ?? [],
+            movement: (try? await movementTask) ?? [],
+            weightLogs: (try? await weightTask) ?? [],
+            checkIns: (try? await checkInTask) ?? [],
+            foodNames: (try? await foodNamesTask) ?? [],
+            proteinGoal: goal?.proteinG
         )
     }
 
@@ -283,7 +366,8 @@ struct CoachContextBuilder {
         sleep: Double?,
         hr: Double?,
         hrv: Double?,
-        healthQuality: [MetricQualityAssessment]
+        healthQuality: [MetricQualityAssessment],
+        foodNames: [String]
     ) async -> CoachContextBundle {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d, yyyy, h:mm a"
@@ -428,7 +512,11 @@ struct CoachContextBuilder {
             caloriesVsGoal: loggedDays.isEmpty ? nil : pct(avgCal, goal?.calories),
             proteinVsGoal:  loggedDays.isEmpty ? nil : pct(avgPro, goal?.proteinG),
             workoutSessions: workouts.count,
-            workoutMinutes: Int(workouts.reduce(0) { $0 + $1.durationMinutes }.rounded())
+            workoutMinutes: Int(workouts.reduce(0) { $0 + $1.durationMinutes }.rounded()),
+            frequentFoods: {
+                let foods = WeeklyRecapDigest.frequentFoods(foodNames)
+                return foods.isEmpty ? nil : foods
+            }()
         )
 
         // Weight trend

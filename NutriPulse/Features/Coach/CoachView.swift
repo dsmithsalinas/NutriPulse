@@ -60,9 +60,16 @@ struct CoachView: View {
             guard active else { return }
             Task {
                 await vm.loadIfNeeded()
+                await vm.refreshAutoMessages()
                 await vm.refreshSuggestedPrompts()
                 await consumePendingPrompt()
             }
+        }
+        // Footing often comes back from the background days later with Pulse still the
+        // selected tab — the Monday recap notification lands exactly there.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            guard isActive else { return }
+            Task { await vm.refreshAutoMessages() }
         }
         .onChange(of: appState.pendingCoachPrompt) { _, prompt in
             guard isActive, prompt != nil else { return }

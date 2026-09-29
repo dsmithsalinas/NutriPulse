@@ -91,6 +91,7 @@ struct FootingApp: App {
             if phase == .active {
                 Telemetry.appOpened()
                 Task { await SyncEngine.shared.syncNow() }
+                Task { await NotificationManager.shared.syncWeeklyRecapReminder() }
             }
         }
     }

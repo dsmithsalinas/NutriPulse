@@ -19,6 +19,10 @@ final class CoachViewModel {
 
     private(set) var profile: UserProfile?
     private var hasInitialized = false
+    // Whether `messages` reflects a successful history fetch. Auto-messages gate on the
+    // newest message, so they must never run against a failed (empty) load.
+    private var historyIsCurrent = false
+    private var isGeneratingAutoMessages = false
 
     private let repo = CoachRepository()
     private let contextBuilder = CoachContextBuilder()
@@ -42,6 +46,7 @@ final class CoachViewModel {
     // calls billed, both persisted.
     func reload() async {
         hasInitialized = true
+        historyIsCurrent = false
         messages = []
         await loadAndInitialize()
     }
@@ -55,8 +60,31 @@ final class CoachViewModel {
         // so an empty history clears it and bills a duplicate Claude call for a check-in that
         // may already exist. Without a known-good history we can't tell, so don't guess.
         guard historyLoaded else { return }
-        await maybeGenerateCheckin()
+        await generateDueAutoMessages()
+    }
+
+    // Called every time the Pulse tab is shown and whenever Footing returns to the foreground
+    // with Pulse on screen. Check-ins and the Monday recap used to be evaluated only inside
+    // loadIfNeeded — once per process. iOS keeps Footing alive in memory for days, so a user
+    // who last cold-launched on Friday opened Pulse on Monday and got neither: that is why
+    // the Monday recap "never came". Both generators are self-gated, so calling this often
+    // costs nothing when nothing is due.
+    func refreshAutoMessages() async {
+        guard hasInitialized, historyIsCurrent else { return }
+        await generateDueAutoMessages()
+    }
+
+    // The recap goes first and stands in for that visit's check-in: once it's saved it is the
+    // newest message, so the check-in's 8-hour cutoff skips. Two automatic messages back to
+    // back read like a notification feed, not a coach.
+    private func generateDueAutoMessages() async {
+        // Not while a user message is in flight: generateAutoMessage owns `isLoading` too and
+        // would clear it underneath sendMessage.
+        guard !isGeneratingAutoMessages, !isLoading else { return }
+        isGeneratingAutoMessages = true
+        defer { isGeneratingAutoMessages = false }
         await maybeGenerateWeeklySummary()
+        await maybeGenerateCheckin()
     }
 
     // Retry entry point for the offline/error state.
@@ -125,9 +153,11 @@ final class CoachViewModel {
             // A full page means there is probably more behind it.
             canLoadOlder = messages.count == Self.historyPageSize
             historyLoadFailed = false
+            historyIsCurrent = true
             return true
         } catch {
             historyLoadFailed = true
+            historyIsCurrent = false
             return false
         }
     }
@@ -164,19 +194,24 @@ final class CoachViewModel {
     }
 
     private func maybeGenerateWeeklySummary() async {
-        let weekday = Calendar.current.component(.weekday, from: .now)
-        guard weekday == 1 || weekday == 2 else { return }
-        if let lastDate = try? await repo.lastWeeklySummaryDate() {
-            let days = Calendar.current.dateComponents([.day], from: lastDate, to: .now).day ?? 0
-            guard days >= 6 else { return }
+        // Cheap local check first so the other six-ish days of the week don't hit the network.
+        guard WeeklyRecapSchedule.isDue(now: .now, lastRecapAt: nil) else { return }
+        let lastRecap: Date?
+        do {
+            lastRecap = try await repo.lastWeeklySummaryDate()
+        } catch {
+            // `try?` here used to turn a failed lookup into "no recap yet" and bill a
+            // duplicate. Unknown is not "never" — try again next visit.
+            return
         }
-        await generateAutoMessage(type: "weekly_summary", trigger: "Weekly summary.")
+        guard WeeklyRecapSchedule.isDue(now: .now, lastRecapAt: lastRecap) else { return }
+        await generateAutoMessage(type: "weekly_summary", trigger: "Weekly recap for last week.")
     }
 
     private func generateAutoMessage(type: String, trigger: String) async {
         isLoading = true
         await ensureProfileLoaded()
-        let context = await contextBuilder.build(profile: profile)
+        let context = await contextBuilder.build(profile: profile, includeLastWeek: type == "weekly_summary")
         let historyItems = messages.suffix(15).map { ChatRequest.HistoryItem(role: $0.role, content: $0.content) }
         do {
             let userId = try await supabase.auth.session.user.id

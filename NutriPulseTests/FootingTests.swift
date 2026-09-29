@@ -2228,3 +2228,60 @@ final class ShotCyclePlannerTests: XCTestCase {
         ))
     }
 }
+
+final class WeeklyRecapTests: XCTestCase {
+    private let calendar = WeeklyRecapSchedule.isoCalendar(timeZone: TimeZone(identifier: "America/Los_Angeles")!)
+
+    private func date(_ day: Int, hour: Int = 9, month: Int = 9) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour))!
+    }
+
+    // Sep 28, 2026 is a Monday.
+    func testRecapIsDueMondayThroughWednesdayOnly() {
+        XCTAssertFalse(WeeklyRecapSchedule.isDue(now: date(27), lastRecapAt: nil, calendar: calendar), "Sunday is a partial week")
+        XCTAssertTrue(WeeklyRecapSchedule.isDue(now: date(28, hour: 7), lastRecapAt: nil, calendar: calendar))
+        XCTAssertTrue(WeeklyRecapSchedule.isDue(now: date(30), lastRecapAt: nil, calendar: calendar))
+        XCTAssertFalse(WeeklyRecapSchedule.isDue(now: date(1, month: 10), lastRecapAt: nil, calendar: calendar), "Thursday is too late")
+    }
+
+    func testRecapIsOncePerWeek() {
+        let thisMonday = date(28, hour: 8)
+        XCTAssertFalse(WeeklyRecapSchedule.isDue(now: date(29), lastRecapAt: thisMonday, calendar: calendar))
+        // A recap from last week (even last Wednesday, under six days by the old rule's
+        // arithmetic on a Monday morning) doesn't block this week's.
+        XCTAssertTrue(WeeklyRecapSchedule.isDue(now: date(28, hour: 6), lastRecapAt: date(23, hour: 20), calendar: calendar))
+    }
+
+    func testLastWeekIsTheCompletedMondayToSunday() {
+        let interval = WeeklyRecapSchedule.lastWeek(before: date(29), calendar: calendar)
+        XCTAssertEqual(interval.start, calendar.startOfDay(for: date(21)))
+        XCTAssertEqual(interval.end, calendar.startOfDay(for: date(27)))
+        XCTAssertEqual(interval.priorStart, calendar.startOfDay(for: date(14)))
+    }
+
+    func testFrequentFoodsKeepsOnlyRepeatsMostFrequentFirst() {
+        let foods = WeeklyRecapDigest.frequentFoods([
+            "Greek yogurt", "greek yogurt ", "Greek yogurt", "Protein shake", "Protein shake",
+            "Salmon", "Unknown food", "Unknown food",
+        ])
+        XCTAssertEqual(foods, ["Greek yogurt (3×)", "Protein shake (2×)"])
+    }
+
+    func testDigestTreatsUnloggedDaysAsUnknownNotMisses() {
+        let interval = WeeklyRecapSchedule.lastWeek(before: date(29), calendar: calendar)
+        let summaries = (0..<7).map { offset in
+            let day = calendar.date(byAdding: .day, value: offset, to: interval.start)!
+            let logged = offset < 3
+            return DailySummary(date: day, calories: logged ? 1600 : 0, proteinG: logged ? 130 : 0, carbsG: 0, fatG: 0, fiberG: 0)
+        }
+        let digest = WeeklyRecapDigest.build(
+            interval: interval, summaries: summaries, movement: [], weightLogs: [],
+            checkIns: [], foodNames: [], proteinGoal: 120, calendar: calendar
+        )
+        XCTAssertEqual(digest.daysLogged, 3)
+        XCTAssertEqual(digest.proteinFloorDays, 3)
+        XCTAssertEqual(digest.days.count, 7)
+        XCTAssertNil(digest.days[5].proteinFloorHit)
+        XCTAssertNil(digest.priorWeek)
+    }
+}

@@ -21,6 +21,7 @@ final class ProfileViewModel {
     var remindersOn              = false
     var showReminderDeniedAlert  = false
     var smartCoachingOn          = false
+    var weeklyRecapOn            = false
     var showSmartNotificationDeniedAlert = false
 
     // Sheet presentation flags
@@ -103,6 +104,7 @@ final class ProfileViewModel {
         }
         await refreshRemindersState()
         await refreshSmartCoachingState()
+        await refreshWeeklyRecapState()
     }
 
     // MARK: - Shot-day reminders
@@ -145,6 +147,22 @@ final class ProfileViewModel {
         }
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         smartCoachingOn = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+    }
+
+    // "On" = the user hasn't turned it off AND notifications are actually allowed.
+    func refreshWeeklyRecapState() async {
+        guard NotificationManager.weeklyRecapEnabled else {
+            weeklyRecapOn = false
+            return
+        }
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        weeklyRecapOn = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+    }
+
+    func setWeeklyRecap(_ on: Bool) async {
+        let accepted = await NotificationManager.shared.setWeeklyRecapEnabled(on)
+        weeklyRecapOn = on && accepted
+        if on && !accepted { showReminderDeniedAlert = true }
     }
 
     func setSmartCoaching(_ on: Bool) async {
