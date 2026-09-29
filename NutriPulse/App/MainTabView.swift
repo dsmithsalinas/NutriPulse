@@ -60,16 +60,29 @@ struct MainTabView: View {
         .task {
             handleQuickAction()
             handleSmartNotificationRoute()
-            handlePulseRoute()
+            handleWeeklyReminderRoute()
+            await NotificationManager.shared.reconcileWeeklyReminder()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .strongWeekReminderOpened)) { _ in
+            handleWeeklyReminderRoute()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            Task { await NotificationManager.shared.reconcileWeeklyReminder() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             handleQuickAction()
             handleSmartNotificationRoute()
-            handlePulseRoute()
+            handleWeeklyReminderRoute()
+            Task { await NotificationManager.shared.reconcileWeeklyReminder() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openPulseRequested)) { _ in
-            handlePulseRoute()
-        }
+    }
+
+    private func handleWeeklyReminderRoute() {
+        guard let userId = appState.session?.user.id,
+              StrongWeekReminder.consumeRoute(userId: userId) else { return }
+        selectedTab = .today
+        showLogger = false
+        appState.pendingStrongWeekReminder = true
     }
 
     private func handleQuickAction() {
@@ -90,13 +103,6 @@ struct MainTabView: View {
         case .logDose:
             appState.pendingQuickAction = .logDose
         }
-    }
-
-    // Monday recap tap → Pulse. Selecting the tab is enough: CoachView generates the recap
-    // when it becomes active.
-    private func handlePulseRoute() {
-        guard PulseRouteStore.consume() else { return }
-        selectedTab = .pulse
     }
 
     private func handleSmartNotificationRoute() {

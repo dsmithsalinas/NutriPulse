@@ -1,4 +1,6 @@
 import XCTest
+import Supabase
+import UserNotifications
 import SwiftData
 @testable import Footing
 
@@ -2283,5 +2285,314 @@ final class WeeklyRecapTests: XCTestCase {
         XCTAssertEqual(digest.days.count, 7)
         XCTAssertNil(digest.days[5].proteinFloorHit)
         XCTAssertNil(digest.priorWeek)
+    }
+}
+
+final class GLP1SkippedDoseTests: XCTestCase {
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .gregorian)
+        value.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        return value
+    }
+    private func date(_ text: String) -> Date { ISO8601DateFormatter().date(from: text)! }
+    private var injection: GLP1Log {
+        GLP1Log(id: UUID(), userId: UUID(), injectedAt: date("2026-09-01T16:00:00Z"),
+                medication: "Zepbound", doseMg: 5, site: "Left Abdomen",
+                nextDueAt: date("2026-09-08T16:00:00Z"))
+    }
+    private func skip(_ log: GLP1Log, due: Date? = nil) -> GLP1SkippedDose {
+        let scheduled = due ?? log.nextDueAt!
+        return GLP1SkippedDose(id: UUID(), userId: log.userId, injectionId: log.id,
+            scheduledAt: scheduled, nextReminderAt: calendar.date(byAdding: .day, value: 7, to: scheduled)!,
+            createdAt: scheduled)
+    }
+
+    func testSkipAdvancesReminderWithoutChangingActualInjectionOrSite() {
+        let log = injection
+        let skipped = skip(log)
+        let schedule = GLP1DoseSchedule(latest: log, skips: [skipped], now: date("2026-09-09T16:00:00Z"), calendar: calendar)
+        XCTAssertEqual(schedule.nextDue, skipped.nextReminderAt)
+        XCTAssertEqual(schedule.skippedThisWeek?.id, skipped.id)
+        XCTAssertEqual(schedule.latest?.injectedAt, log.injectedAt)
+        XCTAssertEqual(schedule.latest?.site, log.site)
+        XCTAssertTrue(schedule.cycleInterrupted)
+        XCTAssertFalse(schedule.isPastDueDay)
+    }
+
+    func testFutureSkipDoesNotInterruptActualCurrentCycle() {
+        let log = injection
+        let schedule = GLP1DoseSchedule(latest: log, skips: [skip(log)], now: date("2026-09-03T16:00:00Z"), calendar: calendar)
+        XCTAssertNotNil(schedule.skippedThisWeek)
+        XCTAssertFalse(schedule.cycleInterrupted)
+    }
+
+    func testRepeatedSkipsAndUndoResolveOnlyExplicitDecisions() {
+        let log = injection
+        let first = skip(log)
+        let second = skip(log, due: first.nextReminderAt)
+        var schedule = GLP1DoseSchedule(latest: log, skips: [second, first], now: date("2026-09-16T16:00:00Z"), calendar: calendar)
+        XCTAssertEqual(schedule.nextDue, second.nextReminderAt)
+        schedule = GLP1DoseSchedule(latest: log, skips: [first], now: schedule.now, calendar: calendar)
+        XCTAssertEqual(schedule.nextDue, first.nextReminderAt)
+        XCTAssertNil(schedule.skippedThisWeek)
+        schedule = GLP1DoseSchedule(latest: log, skips: [], now: schedule.now, calendar: calendar)
+        XCTAssertEqual(schedule.nextDue, log.nextDueAt)
+        XCTAssertFalse(schedule.cycleInterrupted)
+    }
+
+    func testUndoEarlierSkipDoesNotSilentlySkipAnUnrecordedWeek() {
+        let log = injection
+        let later = skip(log, due: date("2026-09-15T16:00:00Z"))
+        let schedule = GLP1DoseSchedule(latest: log, skips: [later], now: date("2026-09-16T16:00:00Z"), calendar: calendar)
+        XCTAssertEqual(schedule.nextDue, log.nextDueAt)
+        XCTAssertNil(schedule.skippedThisWeek)
+    }
+
+    func testNewInjectionResumesCycleAndIgnoresPriorSkips() {
+        let oldLog = injection
+        let newLog = injection
+        let schedule = GLP1DoseSchedule(latest: newLog, skips: [skip(oldLog)])
+        XCTAssertEqual(schedule.nextDue, newLog.nextDueAt)
+        XCTAssertTrue(schedule.relevantSkips.isEmpty)
+        XCTAssertFalse(schedule.cycleInterrupted)
+    }
+
+    func testPassingTimeDoesNotInventSkipsOrResetCycle() {
+        let log = injection
+        let schedule = GLP1DoseSchedule(latest: log, skips: [skip(log)], now: date("2026-10-01T16:00:00Z"), calendar: calendar)
+        XCTAssertNil(schedule.skippedThisWeek)
+        XCTAssertEqual(schedule.nextDue, date("2026-09-15T16:00:00Z"))
+        XCTAssertTrue(schedule.cycleInterrupted)
+        XCTAssertTrue(schedule.isPastDueDay)
+    }
+
+    func testDueTodayIsNotPastDueEvenAfterReminderHour() {
+        let schedule = GLP1DoseSchedule(latest: injection, skips: [], now: date("2026-09-08T23:00:00Z"), calendar: calendar)
+        XCTAssertFalse(schedule.isPastDueDay)
+    }
+
+    func testMissingScheduleRemainsUnknown() {
+        XCTAssertNil(GLP1DoseSchedule(latest: nil, skips: []).nextDue)
+        let log = GLP1Log(id: UUID(), userId: UUID(), injectedAt: .now,
+            medication: "Zepbound", doseMg: 5, site: nil, nextDueAt: nil)
+        XCTAssertNil(GLP1DoseSchedule(latest: log, skips: []).nextDue)
+    }
+
+    func testReminderKeepsLocalTimeAcrossDaylightSaving() {
+        let log = injection
+        let skipped = skip(log, due: date("2026-10-27T16:00:00Z"))
+        XCTAssertEqual(skipped.nextReminderAt, date("2026-11-03T17:00:00Z"))
+        XCTAssertEqual(calendar.component(.hour, from: skipped.nextReminderAt), 9)
+    }
+}
+
+final class StrongWeekTests: XCTestCase {
+    private func date(_ value: String) -> Date { ISO8601DateFormatter().date(from: value)! }
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .gregorian)
+        value.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        value.firstWeekday = 1
+        return value
+    }
+    private func week(_ start: String, ongoing: Bool = false, note: String = "Traveling") -> StrongWeek {
+        .init(id: UUID(), userId: UUID(), weekStart: start, circumstances: [.travel], note: note,
+              activityRestrictions: "", ongoing: ongoing, contextRevision: UUID(), outlook: nil, generatedAt: nil, updatedAt: .now)
+    }
+    func testLocalMondayBoundaryIgnoresLocaleFirstWeekdayAndHandlesDST() {
+        XCTAssertEqual(StrongWeekWindow.key(for: date("2026-09-21T06:59:59Z"), calendar: calendar), "2026-09-14")
+        XCTAssertEqual(StrongWeekWindow.key(for: date("2026-09-21T07:00:00Z"), calendar: calendar), "2026-09-21")
+        XCTAssertEqual(StrongWeekWindow.key(for: date("2026-11-02T07:59:59Z"), calendar: calendar), "2026-10-26")
+        XCTAssertEqual(StrongWeekWindow.key(for: date("2026-11-02T08:00:00Z"), calendar: calendar), "2026-11-02")
+    }
+    func testWeekKeysRemainGregorianForOtherDeviceCalendars() {
+        var buddhist = Calendar(identifier: .buddhist)
+        buddhist.timeZone = calendar.timeZone
+        XCTAssertEqual(StrongWeekWindow.key(for: date("2026-09-16T12:00:00Z"), calendar: buddhist), "2026-09-14")
+    }
+    func testNothingDifferentClearsOldRestrictionsAndOngoingFlag() {
+        var draft = StrongWeekDraft(circumstances: [.injury], note: "Knee", activityRestrictions: "No running", ongoing: true)
+        draft.toggle(.usual)
+        XCTAssertEqual(draft.circumstances, [.usual])
+        XCTAssertTrue(draft.note.isEmpty)
+        XCTAssertTrue(draft.activityRestrictions.isEmpty)
+        XCTAssertFalse(draft.ongoing)
+        draft.toggle(.travel)
+        XCTAssertEqual(draft.circumstances, [.travel])
+    }
+    func testDraftBoundsTextAndRemovesConflictingUsualSelection() {
+        let draft = StrongWeekDraft(circumstances: [.usual], note: String(repeating: "a", count: 1100), activityRestrictions: String(repeating: "b", count: 600)).normalized
+        XCTAssertEqual(draft.note.count, 1000)
+        XCTAssertEqual(draft.activityRestrictions.count, 500)
+        XCTAssertFalse(draft.circumstances.contains(.usual))
+    }
+    func testTemporaryContextExpiresRatherThanLeakingIntoTheNextWeek() {
+        let now = date("2026-09-23T12:00:00Z")
+        let old = week("2026-09-14")
+        let context = StrongWeekContext.make(current: old, previous: old, now: now)
+        XCTAssertEqual(context.status, "not_provided")
+        XCTAssertTrue(context.note.isEmpty)
+        XCTAssertFalse(context.needsTailoredSuggestions)
+    }
+    func testOngoingContextRequiresConfirmationAndDoesNotCarryOldOutlook() {
+        let old = week("2026-09-14", ongoing: true, note: "Injured")
+        let context = StrongWeekContext.make(current: nil, previous: old, now: date("2026-09-23T12:00:00Z"))
+        XCTAssertEqual(context.status, "needs_confirmation")
+        XCTAssertEqual(context.note, "Injured")
+        XCTAssertNil(context.outlook)
+        XCTAssertTrue(context.needsTailoredSuggestions)
+    }
+    func testCurrentWeekReplacesOlderOngoingContext() {
+        let context = StrongWeekContext.make(current: week("2026-09-21", note: "Busy"), previous: week("2026-09-14", ongoing: true, note: "Old"), now: date("2026-09-23T12:00:00Z"))
+        XCTAssertEqual(context.status, "current")
+        XCTAssertEqual(context.note, "Busy")
+    }
+    func testUnloggedDaysAreNotZeroCalorieDays() {
+        let days = [
+            DailySummary(date: .now, calories: 1800, proteinG: 100, carbsG: 0, fatG: 0, fiberG: 0),
+            DailySummary(date: .now, calories: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0)
+        ]
+        let result = StrongWeekEvidence.nutrition(days, expectedDays: 7, target: 90)
+        XCTAssertEqual(result.loggedDays, 1)
+        XCTAssertEqual(result.expectedDays, 7)
+        XCTAssertEqual(result.averageLoggedCalories, 1800)
+        XCTAssertEqual(result.daysAtCurrentProteinTarget, 1)
+        XCTAssertNil(StrongWeekEvidence.nutrition([], expectedDays: 7, target: nil).averageLoggedCalories)
+    }
+    func testSparseRecoveryDoesNotClaimComparableTrends() {
+        let sparse = StrongWeekEvidence.comparison(metric: "sleepHours", recent: [6, 7], baseline: Array(repeating: 8, count: 10))
+        XCTAssertFalse(sparse.comparisonAvailable)
+        XCTAssertEqual(sparse.recentObservedDays, 2)
+        let usable = StrongWeekEvidence.comparison(metric: "sleepHours", recent: [6, 7, 8], baseline: Array(repeating: 8, count: 7))
+        XCTAssertTrue(usable.comparisonAvailable)
+        XCTAssertEqual(usable.recentAverage, 7)
+        XCTAssertNil(StrongWeekEvidence.comparison(metric: "sleepHours", recent: [.nan], baseline: []).recentAverage)
+    }
+    func testMissingWorkoutsRemainEmptyEvidenceNotAPlannedRestWeek() {
+        let movement = StrongWeekEvidence.movement([], expectedDays: 7)
+        XCTAssertEqual(movement.daysWithLoggedActivity, 0)
+        XCTAssertTrue(movement.activities.isEmpty)
+        XCTAssertEqual(movement.expectedDays, 7)
+    }
+}
+
+final class PulsePreferenceTests: XCTestCase {
+    private func week(ongoing: Bool = false) -> StrongWeek {
+        .init(id: UUID(), userId: UUID(), weekStart: "2026-09-14", circumstances: [.injury], note: "Ankle injury",
+              activityRestrictions: "No weight bearing", ongoing: ongoing, contextRevision: UUID(), outlook: nil,
+              generatedAt: nil, updatedAt: .now, adjustments: [.simpler, .lessActivity])
+    }
+    func testAdjustmentPreservesInjuryAndClinicianRestrictions() {
+        var draft = week().draft
+        draft.adjustments = [.moreFoodIdeas, .lessActivity]
+        let value = draft.normalized
+        XCTAssertEqual(value.circumstances, [.injury])
+        XCTAssertEqual(value.note, "Ankle injury")
+        XCTAssertEqual(value.activityRestrictions, "No weight bearing")
+        XCTAssertEqual(value.adjustments, [.moreFoodIdeas, .lessActivity])
+    }
+    func testAdjustmentExpiresEvenWhenInjuryNeedsConfirmation() {
+        let now = ISO8601DateFormatter().date(from: "2026-09-23T12:00:00Z")!
+        let context = StrongWeekContext.make(current: nil, previous: week(ongoing: true), now: now)
+        XCTAssertEqual(context.status, "needs_confirmation")
+        XCTAssertEqual(context.activityRestrictions, "No weight bearing")
+        XCTAssertTrue(context.adjustments.isEmpty)
+    }
+    func testLessActivityPausesGenericSuggestionsWithoutInventingAnInjury() {
+        var context = StrongWeekContext(weekStart: "2026-09-14", status: "current", circumstances: [], note: "", activityRestrictions: "", outlook: nil)
+        context.adjustments = [WeekAdjustment.lessActivity.rawValue]
+        XCTAssertTrue(context.needsTailoredSuggestions)
+        XCTAssertTrue(context.circumstances.isEmpty)
+    }
+    func testLegacyWeekDecodesWithoutAdjustmentColumn() throws {
+        let encoder = JSONEncoder()
+        let record = week()
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoder.encode(record)) as? [String: Any])
+        json.removeValue(forKey: "adjustments")
+        let decoded = try JSONDecoder().decode(StrongWeek.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertNil(decoded.adjustments)
+        XCTAssertTrue(decoded.draft.adjustments.isEmpty)
+    }
+    func testFoodPreferencesNormalizeAndDistinguishMissingFromUnavailable() {
+        let draft = FoodAccessDraft(choices: [.rarelyCook, .budgetFriendly], note: "  " + String(repeating: "a", count: 700) + "  ").normalized
+        XCTAssertEqual(draft.note.count, 500)
+        XCTAssertEqual(draft.choices.count, 2)
+        XCTAssertEqual(FoodAccessContext.make(nil).status, "not_provided")
+        XCTAssertEqual(FoodAccessContext.unavailable.status, "unavailable")
+        let cleared = FoodAccessPreferences(userId: UUID(), choices: [], note: "", updatedAt: .now)
+        XCTAssertEqual(FoodAccessContext.make(cleared).status, "saved")
+        XCTAssertTrue(FoodAccessContext.make(cleared).choices.isEmpty)
+    }
+    @MainActor func testConfirmingPreviousWeekDoesNotCarryResponseAdjustments() {
+        let vm = StrongWeekViewModel()
+        vm.previous = week(ongoing: true)
+        vm.confirmPrevious()
+        XCTAssertTrue(vm.didConfirmPrevious)
+        XCTAssertTrue(vm.draft.adjustments.isEmpty)
+        XCTAssertEqual(vm.draft.activityRestrictions, "No weight bearing")
+    }
+}
+
+@MainActor
+final class StrongWeekReminderTests: XCTestCase {
+    func testRepeatingRequestHasFloatingMondayEightAMSchedule() throws {
+        let userId = UUID()
+        let request = StrongWeekReminder.request(userId: userId)
+        let trigger = try XCTUnwrap(request.trigger as? UNCalendarNotificationTrigger)
+        XCTAssertTrue(trigger.repeats)
+        XCTAssertEqual(trigger.dateComponents.weekday, 2)
+        XCTAssertEqual(trigger.dateComponents.hour, 8)
+        XCTAssertEqual(trigger.dateComponents.minute, 0)
+        XCTAssertNil(trigger.dateComponents.timeZone)
+        XCTAssertNil(trigger.dateComponents.year)
+        XCTAssertEqual(request.content.userInfo["userId"] as? String, userId.uuidString)
+        XCTAssertEqual(request.content.userInfo["destination"] as? String, "strong_week")
+        XCTAssertFalse(request.identifier.hasPrefix(NotificationManager.smartIdentifierPrefix))
+    }
+    func testMondayLocalTimeAcrossDSTAndTravelZones() throws {
+        for zone in ["America/Los_Angeles", "America/New_York", "Asia/Kolkata", "Australia/Sydney"] {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = try XCTUnwrap(TimeZone(identifier: zone))
+            for date in ["2026-03-07T12:00:00Z", "2026-10-31T12:00:00Z"] {
+                let start = try XCTUnwrap(ISO8601DateFormatter().date(from: date))
+                let next = try XCTUnwrap(calendar.nextDate(after: start, matching: StrongWeekReminder.components, matchingPolicy: .nextTime))
+                XCTAssertEqual(calendar.component(.weekday, from: next), 2)
+                XCTAssertEqual(calendar.component(.hour, from: next), 8)
+                XCTAssertEqual(calendar.component(.minute, from: next), 0)
+            }
+        }
+    }
+    func testOptOutIsAccountScopedAndRoutesCannotCrossAccounts() throws {
+        let suite = "StrongWeekReminderTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let user = UUID(), other = UUID()
+        XCTAssertTrue(StrongWeekReminder.enabled(userId: user, defaults: defaults))
+        defaults.set(false, forKey: StrongWeekReminder.preferenceKey(userId: user))
+        XCTAssertFalse(StrongWeekReminder.enabled(userId: user, defaults: defaults))
+        XCTAssertTrue(StrongWeekReminder.enabled(userId: other, defaults: defaults))
+        StrongWeekReminder.saveRoute(userId: user, defaults: defaults)
+        XCTAssertFalse(StrongWeekReminder.consumeRoute(userId: other, defaults: defaults))
+        XCTAssertFalse(StrongWeekReminder.consumeRoute(userId: user, defaults: defaults))
+        StrongWeekReminder.saveRoute(userId: user, defaults: defaults)
+        XCTAssertTrue(StrongWeekReminder.consumeRoute(userId: user, defaults: defaults))
+        XCTAssertFalse(StrongWeekReminder.consumeRoute(userId: user, defaults: defaults))
+    }
+}
+
+final class StrongWeekFeedbackTests: XCTestCase {
+    func testFeedbackUsesTheSameTimestampForStorageAndLookup() throws {
+        let date = Date(timeIntervalSince1970: 1_789_621_234.123456)
+        let feedback = StrongWeekFeedback(userId: UUID(), strongWeekId: UUID(), contextRevision: UUID(),
+            generatedAt: date, outlook: .init(observation: "A busy week", foodFocus: "Familiar meals", movementFocus: "A walk"),
+            rating: .notHelpful, reasons: [.tooVague, .moreFoodIdeas], updatedAt: date)
+        let encoded = try PostgrestClient.Configuration.jsonEncoder.encode(feedback)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        XCTAssertEqual(json["generated_at"] as? String, date.ISO8601Format(.init(includingFractionalSeconds: true)))
+        XCTAssertEqual(json["rating"] as? String, "not_helpful")
+        XCTAssertEqual(json["reasons"] as? [String], ["too_vague", "more_food_ideas"])
+        let decoded = try PostgrestClient.Configuration.jsonDecoder.decode(StrongWeekFeedback.self, from: encoded)
+        XCTAssertEqual(decoded.outlook, feedback.outlook)
+        XCTAssertEqual(decoded.strongWeekId, feedback.strongWeekId)
+        XCTAssertEqual(decoded.generatedAt.timeIntervalSince1970, date.timeIntervalSince1970, accuracy: 0.001)
     }
 }

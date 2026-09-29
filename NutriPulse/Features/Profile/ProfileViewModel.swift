@@ -13,6 +13,9 @@ final class ProfileViewModel {
     // edit-stats recalc runs. nil (or junk) falls back to Mifflin inside GoalCalculator.
     var latestBodyFatPct: Double? = nil
     var glp1Logs: [GLP1Log]      = []
+    var skippedDoses: [GLP1SkippedDose] = []
+    var doseScheduleLoaded = false
+    var doseSchedule: GLP1DoseSchedule { .init(latest: mostRecentInjection, skips: skippedDoses) }
     var isLoading                = false
     var errorMessage: String?    = nil
     var isDeletingAccount        = false
@@ -20,8 +23,10 @@ final class ProfileViewModel {
     // Shot-day reminders
     var remindersOn              = false
     var showReminderDeniedAlert  = false
+    var weeklyReminderOn = false
+    var weeklyReminderBusy = false
+    var showWeeklyReminderDeniedAlert = false
     var smartCoachingOn          = false
-    var weeklyRecapOn            = false
     var showSmartNotificationDeniedAlert = false
 
     // Sheet presentation flags
@@ -51,7 +56,7 @@ final class ProfileViewModel {
     var mostRecentInjection: GLP1Log? { glp1Logs.first }
 
     // A log with no next_due_at simply has no countdown, rather than breaking the screen.
-    var nextInjectionDue: Date? { mostRecentInjection?.nextDueAt }
+    var nextInjectionDue: Date? { doseScheduleLoaded ? doseSchedule.nextDue : nil }
 
     var nextInjectionCountdown: String? {
         guard let due = nextInjectionDue else { return nil }
@@ -60,7 +65,7 @@ final class ProfileViewModel {
             from: cal.startOfDay(for: .now),
             to:   cal.startOfDay(for: due)).day ?? 0
         switch days {
-        case ..<0: return "Overdue by \(-days) day\(-days == 1 ? "" : "s")"
+        case ..<0: return "Planned for \(due.formatted(date: .abbreviated, time: .omitted))"
         case 0:    return "Due today"
         case 1:    return "Due tomorrow"
         default:   return "Due in \(days) days"
@@ -69,7 +74,7 @@ final class ProfileViewModel {
 
     var isInjectionOverdue: Bool {
         guard let due = nextInjectionDue else { return false }
-        return due < .now
+        return Calendar.current.startOfDay(for: due) < Calendar.current.startOfDay(for: .now)
     }
 
     // Round-robin suggestion based on the last used site
@@ -93,18 +98,23 @@ final class ProfileViewModel {
             async let goalTask   = goalRepo.fetchGoal(for: .now)
             async let weightTask = fetchLatestWeight()
             async let glp1Task   = glp1Repo.fetchRecentLogs(limit: 5)
+            async let skipsTask = glp1Repo.fetchSkippedDoses()
             async let bodyCompTask = BodyCompositionRepository().fetchLatest()
-            let (g, w, logs) = try await (goalTask, weightTask, glp1Task)
+            let (g, w, logs, skips) = try await (goalTask, weightTask, glp1Task, skipsTask)
             goal         = g
             latestWeight = w
             glp1Logs     = logs
+            skippedDoses = skips
+            doseScheduleLoaded = true
+            await NotificationManager.shared.reconcileGLP1Reminders(schedule: doseSchedule)
             latestBodyFatPct = (try? await bodyCompTask)?.bodyFatPct
         } catch {
+            doseScheduleLoaded = false
             errorMessage = error.localizedDescription
         }
         await refreshRemindersState()
         await refreshSmartCoachingState()
-        await refreshWeeklyRecapState()
+        await refreshWeeklyReminderState()
     }
 
     // MARK: - Shot-day reminders
@@ -139,6 +149,26 @@ final class ProfileViewModel {
         }
     }
 
+    func refreshWeeklyReminderState() async {
+        guard let userId = try? await supabase.auth.session.user.id else { weeklyReminderOn = false; return }
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        weeklyReminderOn = StrongWeekReminder.enabled(userId: userId)
+            && (settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional)
+    }
+
+    func setWeeklyReminder(_ enabled: Bool) async {
+        guard !weeklyReminderBusy, let userId = try? await supabase.auth.session.user.id else { return }
+        weeklyReminderBusy = true
+        defer { weeklyReminderBusy = false }
+        let succeeded = await NotificationManager.shared.setWeeklyReminderEnabled(enabled, userId: userId)
+        await refreshWeeklyReminderState()
+        if !succeeded {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            if settings.authorizationStatus == .denied { showWeeklyReminderDeniedAlert = true }
+            else { errorMessage = "Couldn't schedule your weekly reminder. Please try again." }
+        }
+    }
+
     func refreshSmartCoachingState() async {
         let enabled = UserDefaults.standard.bool(forKey: NotificationManager.smartCoachingEnabledKey)
         guard enabled else {
@@ -147,22 +177,6 @@ final class ProfileViewModel {
         }
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         smartCoachingOn = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
-    }
-
-    // "On" = the user hasn't turned it off AND notifications are actually allowed.
-    func refreshWeeklyRecapState() async {
-        guard NotificationManager.weeklyRecapEnabled else {
-            weeklyRecapOn = false
-            return
-        }
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        weeklyRecapOn = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
-    }
-
-    func setWeeklyRecap(_ on: Bool) async {
-        let accepted = await NotificationManager.shared.setWeeklyRecapEnabled(on)
-        weeklyRecapOn = on && accepted
-        if on && !accepted { showReminderDeniedAlert = true }
     }
 
     func setSmartCoaching(_ on: Bool) async {
@@ -336,9 +350,10 @@ final class ProfileViewModel {
         // with past-dated ones that never fire.
         glp1Logs.append(saved)
         glp1Logs.sort { $0.injectedAt > $1.injectedAt }
-        if let latestDue = glp1Logs.first?.nextDueAt {
+        if let latestDue = doseSchedule.nextDue {
             await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: latestDue)
         }
+        NotificationCenter.default.post(name: .glp1DoseHistoryChanged, object: nil)
     }
 
     // MARK: - Feedback

@@ -17,9 +17,12 @@ struct CoachContextBundle: Encodable {
     let healthDataQuality: HealthDataQualityContext
     let glp1: GLP1Context?
     let activeGoals: [PersonalGoalContext]
-    // Only for the Monday recap (nil otherwise, and omitted from the JSON). The rolling
-    // seven-day window ends today — on a Monday morning that's six days of last week plus an
-    // empty day — so the recap was summarizing the wrong week.
+    var strongWeek: StrongWeekContext? = nil
+    var weeklyEvidence: StrongWeekEvidence? = nil
+    var foodAccess: FoodAccessContext? = nil
+    // Only for Pulse's weekly summary message (nil otherwise, and omitted from the JSON). The
+    // rolling seven-day window ends today — on a Monday morning that's six days of last week
+    // plus an empty day — so the summary was describing the wrong week.
     var lastWeek: LastWeekContext? = nil
 
     struct UserContext: Encodable {
@@ -186,6 +189,12 @@ struct CoachContextBundle: Encodable {
         // from a missing one — it isn't allowed to advise on dosing or timing anyway.
         let nextDue: String?
         let overdue: Bool
+        // Reminders are app settings, not a recommended medication restart date.
+        let nextReminder: String?
+        let doseStatus: String
+        let skipHistoryAvailable: Bool
+        let skippedDoseDates: [String]
+        let cycleInterrupted: Bool
         let cycleDay: Int
         let scheduledCheckInDue: Bool
         let todayExperience: Experience?
@@ -228,14 +237,21 @@ struct CoachContextBuilder {
     private let goalRepo = GoalRepository()
     private let glp1Repo = GLP1Repository()
 
-    func build(profile: UserProfile?, includeLastWeek: Bool = false) async -> CoachContextBundle {
+    func build(
+        profile: UserProfile?,
+        includeWeeklyEvidence: Bool = false,
+        includeLastWeek: Bool = false
+    ) async -> CoachContextBundle {
         // HealthKitManager.shared is @MainActor — capture it on main actor first
         let hk = await MainActor.run { HealthKitManager.shared }
 
         // 30 days so CelebrationEngine can see streaks longer than a week;
         // the "7-day history" narrative below just slices the tail of this.
+        async let foodAccessTask = FoodAccessRepository().fetch()
+        async let strongWeekTask = StrongWeekRepository().context()
         async let summariesTask = analyticsRepo.fetchDailySummaries(days: 30)
         async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
+        async let skippedDosesTask = glp1Repo.fetchSkippedDoses()
         async let shotCheckInTask = ShotCycleRepository().fetchRecent(days: 7)
         async let weightTask = analyticsRepo.fetchWeightLogs(days: 7)
         async let bodyGoalsTask = BodyGoalsRepository().fetch()
@@ -295,12 +311,13 @@ struct CoachContextBuilder {
             }
         }
 
-        var bundle = await assemble(
+        var context = await assemble(
             profile: profile,
             logs: logs,
             summaries: summaries,
             goal: goal,
             glp1Log: glp1Logs.first,
+            skippedDoses: try? await skippedDosesTask,
             shotCheckIn: shotCheckIns.first { $0.checkinDate == Date.now.isoDateString },
             weightLogs: weightLogs,
             bodyGoals: bodyGoals,
@@ -312,8 +329,14 @@ struct CoachContextBuilder {
             healthQuality: healthQuality,
             foodNames: foodNames
         )
-        bundle.lastWeek = lastWeek
-        return bundle
+        context.strongWeek = try? await strongWeekTask
+        do { context.foodAccess = .make(try await foodAccessTask) }
+        catch { context.foodAccess = .unavailable }
+        if includeWeeklyEvidence {
+            context.weeklyEvidence = await StrongWeekEvidenceBuilder().build(proteinTarget: goal?.proteinG)
+        }
+        context.lastWeek = lastWeek
+        return context
     }
 
     // Everything the Monday recap needs about the completed Mon–Sun week, fetched together.
@@ -358,6 +381,7 @@ struct CoachContextBuilder {
         summaries: [DailySummary],
         goal: DailyGoal?,
         glp1Log: GLP1Log?,
+        skippedDoses: [GLP1SkippedDose]?,
         shotCheckIn: ShotCycleCheckIn?,
         weightLogs: [WeightLog],
         bodyGoals: BodyGoals?,
@@ -563,14 +587,15 @@ struct CoachContextBuilder {
             let df = DateFormatter()
             df.dateFormat = "MMMM d"
             let lastStr = "\(rel.localizedString(for: log.injectedAt, relativeTo: .now)) (\(df.string(from: log.injectedAt)))"
-            // next_due_at is nullable. Absent means "we don't know when the next dose is" —
-            // which is emphatically not "overdue".
-            let isOverdue = log.nextDueAt.map { $0 < .now } ?? false
-            let nextStr = log.nextDueAt.map { due in
-                isOverdue
-                    ? "overdue since \(df.string(from: due))"
-                    : "\(rel.localizedString(for: due, relativeTo: .now)) (\(df.string(from: due)))"
-            }
+            let schedule = GLP1DoseSchedule(latest: log, skips: skippedDoses ?? [])
+            let skipHistoryAvailable = skippedDoses != nil
+            let isOverdue = skipHistoryAvailable && schedule.isPastDueDay
+            let nextStr = skipHistoryAvailable && schedule.latestSkip == nil
+                ? schedule.nextDue.map { df.string(from: $0) } : nil
+            let reminderStr = skipHistoryAvailable ? schedule.nextDue.map { df.string(from: $0) } : nil
+            let doseStatus = !skipHistoryAvailable || schedule.nextDue == nil ? "unknown"
+                : schedule.skippedThisWeek != nil ? "skipped"
+                : isOverdue ? "unrecorded" : "planned"
             let cycleDay = max(Calendar.current.dateComponents(
                 [.day],
                 from: Calendar.current.startOfDay(for: log.injectedAt),
@@ -582,8 +607,13 @@ struct CoachContextBuilder {
                 lastInjected: lastStr,
                 nextDue: nextStr,
                 overdue: isOverdue,
+                nextReminder: reminderStr,
+                doseStatus: doseStatus,
+                skipHistoryAvailable: skipHistoryAvailable,
+                skippedDoseDates: schedule.relevantSkips.suffix(12).map { df.string(from: $0.scheduledAt) },
+                cycleInterrupted: schedule.cycleInterrupted,
                 cycleDay: cycleDay,
-                scheduledCheckInDue: ShotCycleCheckInSchedule.isDue(
+                scheduledCheckInDue: skipHistoryAvailable && !schedule.cycleInterrupted && ShotCycleCheckInSchedule.isDue(
                     cycleDay: cycleDay,
                     hasTodayCheckIn: shotCheckIn != nil
                 ),

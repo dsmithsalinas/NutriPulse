@@ -5,6 +5,9 @@ xcuserdata/
 DerivedData/
 /build/
 .env
+.env.local
+.env.pulse-eval
+/scripts/pulse-eval/results/
 .env.status-report
 # Supabase credentials — copy Secrets.xcconfig.template → Secrets.xcconfig locally
 Configurations/Secrets.xcconfig

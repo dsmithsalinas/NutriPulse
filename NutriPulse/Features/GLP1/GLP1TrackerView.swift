@@ -17,6 +17,14 @@ struct GLP1TrackerView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.md) {
                     doseCard
+                    if vm.doseScheduleLoaded, vm.nextDue != nil {
+                        DoseSkipControl(schedule: vm.doseSchedule) { await vm.load() }
+                            .padding(Theme.Spacing.md).card()
+                    }
+                    if let error = vm.scheduleError {
+                        Text(error).font(.footnote).foregroundStyle(.secondary)
+                        Button("Try again") { Task { await vm.load() } }
+                    }
                     if let plan = vm.cyclePlan {
                         ShotCyclePlanCard(
                             plan: plan,
@@ -44,6 +52,9 @@ struct GLP1TrackerView: View {
         }
         .tint(Theme.Colors.primary)
         .task { await vm.load() }
+        .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
+            Task { await vm.load() }
+        }
         .sheet(isPresented: $showCheckIn) {
             ShotCycleCheckInSheet(
                 cycleDay: max(vm.daysSinceShot ?? 0, 0),
@@ -80,7 +91,7 @@ struct GLP1TrackerView: View {
                     Text("\(log.medication) · \(log.doseMg.glp1DoseString) mg")
                         .font(.system(size: 16, weight: .bold))
                     if let next = vm.nextDoseText {
-                        Text("Next dose · \(next)")
+                        Text("\(vm.doseSchedule.latestSkip == nil ? "Next dose" : "Next reminder") · \(next)")
                             .font(.subheadline)
                             .foregroundStyle(vm.isOverdue ? .orange : .secondary)
                     }
@@ -132,7 +143,7 @@ struct GLP1TrackerView: View {
             .fixedSize()
         }
         .buttonStyle(.plain)
-        .disabled(vm.isBusyReminders)
+        .disabled(vm.isBusyReminders || !vm.doseScheduleLoaded)
     }
 
     private var reminderActive: Bool { vm.reminderState == .on }
@@ -288,6 +299,72 @@ struct GLP1TrackerView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Theme.Colors.primary.opacity(0.28), lineWidth: 1)
+        }
+    }
+}
+
+// Shared by Today and GLP-1. A single tap records the choice; Undo is always available.
+struct DoseSkipControl: View {
+    let schedule: GLP1DoseSchedule
+    var onChange: () async -> Void
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let skip = schedule.skippedThisWeek {
+                Text("Shot marked as skipped")
+                    .font(.subheadline.weight(.semibold))
+                Text("Planned for \(skip.scheduledAt.formatted(date: .abbreviated, time: .omitted)). Reminders for this dose are off.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("Undo skip") { update(undo: skip) }
+            } else if let due = schedule.nextDue {
+                Button("Skip this week’s shot") { update(undo: nil) }
+                Text("Applies to the dose planned for \(due.formatted(date: .abbreviated, time: .omitted)).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let due = schedule.nextDue, schedule.skippedThisWeek != nil {
+                Text("Next reminder date: \(due.formatted(date: .abbreviated, time: .omitted)). Your weekly reminder cadence stays the same.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if isSaving { ProgressView().controlSize(.small) }
+        }
+        .buttonStyle(.borderless)
+        .disabled(isSaving)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .alert("Couldn't update your shot", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: { Text(errorMessage ?? "") }
+    }
+
+    private func update(undo skip: GLP1SkippedDose?) {
+        guard !isSaving else { return }
+        isSaving = true
+        Task { @MainActor in
+            defer { isSaving = false }
+            let repo = GLP1Repository()
+            do {
+                var updated = schedule.skips
+                if let skip {
+                    try await repo.undoSkip(id: skip.id)
+                    updated.removeAll { $0.id == skip.id }
+                } else if let latest = schedule.latest, let due = schedule.nextDue {
+                    let saved = try await repo.skipDose(injection: latest, scheduledAt: due)
+                    updated.removeAll { $0.id == saved.id }
+                    updated.append(saved)
+                } else { return }
+                // Reconcile immediately from the committed result, even if the next read fails.
+                await NotificationManager.shared.reconcileGLP1Reminders(
+                    schedule: .init(latest: schedule.latest, skips: updated)
+                )
+                await onChange()
+                NotificationCenter.default.post(name: .glp1DoseHistoryChanged, object: nil)
+            } catch {
+                errorMessage = "Check your connection and try again. Your shot hasn't been marked as taken."
+            }
         }
     }
 }

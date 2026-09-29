@@ -9,7 +9,10 @@ struct ProfileView: View {
     @State private var showClearHistoryConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var showGLP1Tracker = false
+    @State private var showFoodPreferences = false
     @State private var isSeedingHealth = false
+    @State private var isReconnectingHealth = false
+    @State private var showHealthPermissionsHelp = false
     @State private var showSmartNotificationExplainer = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -43,12 +46,15 @@ struct ProfileView: View {
             .task {
                 await vm.loadData(profile: appState.profile)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
+                Task { await vm.loadData(profile: appState.profile) }
+            }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 Task {
                     await vm.refreshRemindersState()
                     await vm.refreshSmartCoachingState()
-                    await vm.refreshWeeklyRecapState()
+                    await vm.refreshWeeklyReminderState()
                     await NotificationManager.shared.reconcileSmartNotificationHistory()
                 }
             }
@@ -87,6 +93,7 @@ struct ProfileView: View {
             .sheet(isPresented: $vm.showLogInjection) {
                 LogInjectionSheet(vm: vm)
             }
+            .sheet(isPresented: $showFoodPreferences) { FoodAccessPreferencesView() }
             .sheet(isPresented: $showGLP1Tracker) {
                 GLP1TrackerView()
             }
@@ -94,6 +101,14 @@ struct ProfileView: View {
                 SmartNotificationExplainerSheet {
                     await vm.setSmartCoaching(true)
                 }
+            }
+            .alert("Notifications are off", isPresented: $vm.showWeeklyReminderDeniedAlert) {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                }
+                Button("Not now", role: .cancel) { }
+            } message: {
+                Text("Turn on notifications for Footing in Settings to receive Your strong week on Mondays at 8 AM.")
             }
             .alert("Notifications are off", isPresented: $vm.showReminderDeniedAlert) {
                 Button("Open Settings") {
@@ -103,7 +118,7 @@ struct ProfileView: View {
                 }
                 Button("Not now", role: .cancel) { }
             } message: {
-                Text("Turn on notifications for Footing in Settings to get shot-day reminders and your Monday recap.")
+                Text("Turn on notifications for Footing in Settings to get shot-day reminders.")
             }
             .alert("Notifications are off", isPresented: $vm.showSmartNotificationDeniedAlert) {
                 Button("Open Settings") {
@@ -117,6 +132,12 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $vm.showSendFeedback) {
                 SendFeedbackSheet(vm: vm)
+            }
+            .alert("Manage Apple Health access", isPresented: $showHealthPermissionsHelp) {
+                Button("Open Health") { openHealthApp() }
+                Button("Not now", role: .cancel) { }
+            } message: {
+                Text("Your permission choices are already saved on this iPhone. To change them, open Health → Summary → your profile picture → Apps and Services → Footing, then enable the categories you want to share.")
             }
             .alert("Error", isPresented: Binding(
                 get: { vm.errorMessage != nil },
@@ -317,7 +338,7 @@ struct ProfileView: View {
                 if let countdown = vm.nextInjectionCountdown,
                    let due = vm.nextInjectionDue {
                     HStack {
-                        Label("Next dose", systemImage: "calendar")
+                        Label(vm.doseSchedule.latestSkip == nil ? "Next dose" : "Next reminder", systemImage: "calendar")
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(countdown)
@@ -330,12 +351,17 @@ struct ProfileView: View {
                     }
                 }
 
+                if vm.doseScheduleLoaded, vm.nextInjectionDue != nil {
+                    DoseSkipControl(schedule: vm.doseSchedule) { await vm.loadData(profile: appState.profile) }
+                }
+
                 Toggle(isOn: Binding(
                     get: { vm.remindersOn },
                     set: { newValue in Task { await vm.setReminders(newValue) } }
                 )) {
                     Label("Shot-day reminders", systemImage: "bell.badge")
                 }
+                .disabled(!vm.doseScheduleLoaded)
 
                 Button {
                     vm.showLogInjection = true
@@ -374,6 +400,17 @@ struct ProfileView: View {
     private var notificationsSection: some View {
         Section {
             Toggle(isOn: Binding(
+                get: { vm.weeklyReminderOn },
+                set: { enabled in Task { await vm.setWeeklyReminder(enabled) } }
+            )) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Your strong week")
+                    Text("Mondays at 8 AM · your local time")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }.disabled(vm.weeklyReminderBusy)
+
+            Toggle(isOn: Binding(
                 get: { vm.smartCoachingOn },
                 set: { value in
                     if value {
@@ -384,13 +421,6 @@ struct ProfileView: View {
                 }
             )) {
                 Label("Smart coaching", systemImage: "bell.and.waves.left.and.right")
-            }
-
-            Toggle(isOn: Binding(
-                get: { vm.weeklyRecapOn },
-                set: { value in Task { await vm.setWeeklyRecap(value) } }
-            )) {
-                Label("Monday recap", systemImage: "calendar.badge.clock")
             }
 
             NavigationLink {
@@ -408,7 +438,7 @@ struct ProfileView: View {
         } header: {
             Text("Pulse notifications")
         } footer: {
-            Text("At most one coaching notification a day, only when Footing has a specific next step. The Monday recap and shot-day reminders are separate.")
+            Text("Smart coaching sends at most one timely suggestion a day. Your Monday outlook reminder and shot-day reminders are separate.")
         }
     }
 
@@ -427,7 +457,7 @@ struct ProfileView: View {
                         Label("Connected", systemImage: "heart.fill")
                             .foregroundStyle(.red)
                     } else if HealthKitManager.shared.hasRequestedAuthorization {
-                        Label("Access not granted", systemImage: "heart.slash")
+                        Label("Permissions requested", systemImage: "heart")
                             .foregroundStyle(.secondary)
                     } else {
                         Label("Not connected", systemImage: "heart.slash")
@@ -436,15 +466,23 @@ struct ProfileView: View {
                     Spacer()
                     // Health permissions live in the Health app, not this app's Settings page.
                     Button("Health App") {
-                        if let health = URL(string: "x-apple-health://"), UIApplication.shared.canOpenURL(health) {
-                            UIApplication.shared.open(health)
-                        } else if let settings = URL(string: UIApplication.openSettingsURLString) {
-                            UIApplication.shared.open(settings)
-                        }
+                        openHealthApp()
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 }
+                Button {
+                    guard !isReconnectingHealth else { return }
+                    isReconnectingHealth = true
+                    Task { await reconnectHealth() }
+                } label: {
+                    HStack {
+                        Label("Reconnect Apple Health", systemImage: "arrow.clockwise")
+                        Spacer()
+                        if isReconnectingHealth { ProgressView() }
+                    }
+                }
+                .disabled(isReconnectingHealth)
             } else {
                 Label("Not available on this device", systemImage: "heart.slash")
                     .foregroundStyle(.secondary)
@@ -452,10 +490,32 @@ struct ProfileView: View {
         }
     }
 
+    private func openHealthApp() {
+        if let health = URL(string: "x-apple-health://"), UIApplication.shared.canOpenURL(health) {
+            UIApplication.shared.open(health)
+        } else if let settings = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settings)
+        }
+    }
+
+    @MainActor
+    private func reconnectHealth() async {
+        defer { isReconnectingHealth = false }
+        do {
+            let didRequest = try await HealthKitManager.shared.reconnect()
+            showHealthPermissionsHelp = !didRequest
+        } catch {
+            vm.errorMessage = "Could not request Apple Health access. \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Coach
 
     private var coachSection: some View {
         Section("Pulse Coach") {
+            Button { showFoodPreferences = true } label: {
+                Label("Food preferences", systemImage: "fork.knife")
+            }
             Button("Clear Chat History", role: .destructive) {
                 showClearHistoryConfirm = true
             }
