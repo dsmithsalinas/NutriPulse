@@ -65,6 +65,7 @@ final class InjectionRitualViewModel {
             UserDefaults.standard.set(updateGoingForward ? doseMg : defaultAtLoad,
                                       forKey: Self.plannedDoseKey)
             await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
+            NotificationCenter.default.post(name: .glp1DoseHistoryChanged, object: nil)
             return saved
         } catch {
             errorMessage = "Couldn't log your dose. Try again."

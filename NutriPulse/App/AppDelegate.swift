@@ -54,8 +54,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
         let info = response.notification.request.content.userInfo
-        if info["kind"] as? String == NotificationManager.weeklyRecapKind {
-            PulseRouteStore.requestOpen()
+        if notificationID == StrongWeekReminder.identifier,
+           response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let rawId = info["userId"] as? String, let userId = UUID(uuidString: rawId) {
+            StrongWeekReminder.saveRoute(userId: userId)
+            NotificationCenter.default.post(name: .strongWeekReminderOpened, object: nil)
             return
         }
         let sourceDate = (info["sourceDate"] as? String).flatMap { $0.isEmpty ? nil : $0 }

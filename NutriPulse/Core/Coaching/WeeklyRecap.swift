@@ -1,15 +1,12 @@
 import Foundation
 
-// The Monday recap reviews the week that just ended, Monday through Sunday. Weeks here are
-// ISO weeks (Monday first) regardless of the device's locale, because the recap is a Monday
-// ritual everywhere — a US-locale Calendar would start the week on Sunday and put Sunday's
-// data in the wrong week.
+// Pulse's weekly summary reviews the week that just ended, Monday through Sunday. Weeks here
+// are ISO weeks (Monday first) regardless of the device's locale — a US-locale Calendar would
+// start the week on Sunday and put Sunday's data in the wrong week. The Monday notification
+// belongs to Your Strong Week (StrongWeekReminder); this only decides when Pulse writes the
+// summary once the user opens the Pulse tab.
 enum WeeklyRecapSchedule {
-    // Monday, 8am local — the notification slot. Before a typical 9pm–7am quiet window ends
-    // it would be rude; much later and the week has already started without it.
-    static let notificationWeekday = 2   // Calendar weekday: Sunday = 1, Monday = 2
-    static let notificationHour = 8
-
+    static let firstRecapWeekday = 2     // Calendar weekday: Sunday = 1, Monday = 2
     // A recap stays useful for the first few days of the week. Someone who doesn't open
     // Footing until Wednesday still gets last week's recap; by Thursday it's stale, and the
     // next one is only days away.
@@ -33,7 +30,7 @@ enum WeeklyRecapSchedule {
     static func isDue(now: Date, lastRecapAt: Date?, calendar: Calendar = isoCalendar()) -> Bool {
         let weekday = calendar.component(.weekday, from: now)
         // Calendar weekday numbering is fixed (Sunday = 1) even on the ISO calendar.
-        guard weekday >= notificationWeekday, weekday <= lastRecapWeekday else { return false }
+        guard weekday >= firstRecapWeekday, weekday <= lastRecapWeekday else { return false }
         guard let lastRecapAt else { return true }
         return lastRecapAt < startOfWeek(containing: now, calendar: calendar)
     }

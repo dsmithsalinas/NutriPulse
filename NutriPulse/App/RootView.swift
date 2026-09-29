@@ -9,7 +9,11 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if isGoalBuilderPreview {
+            if AppStoreScreenshotMode.active {
+                storeScreenshotPreview
+            } else if isStrongWeekPreview {
+                strongWeekPreview
+            } else if isGoalBuilderPreview {
                 CreateGoalView(
                     vm: GoalsViewModel(),
                     initialDraft: GoalDraft(template: .protein)
@@ -40,8 +44,32 @@ struct RootView: View {
         // when the view appears and automatically cancels it when the view disappears.
         // No manual cleanup needed — Swift's structured concurrency handles it.
         .task {
-            await appState.startObservingAuth()
+            if !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
         }
+    }
+
+    @ViewBuilder private var storeScreenshotPreview: some View {
+        #if DEBUG
+        AppStoreScreenshotPreview()
+        #else
+        EmptyView()
+        #endif
+    }
+
+    private var isStrongWeekPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--strong-week-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var strongWeekPreview: some View {
+        #if DEBUG
+        StrongWeekPreview()
+        #else
+        EmptyView()
+        #endif
     }
 
     private var isGoalsPreview: Bool {

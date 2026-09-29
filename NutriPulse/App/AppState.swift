@@ -28,6 +28,7 @@ final class AppState {
     // it and clears it. Keeps the deep-link one-directional and stateless.
     var pendingCoachPrompt: String? = nil
     var pendingQuickAction: FootingQuickAction? = nil
+    var pendingStrongWeekReminder = false
     var pendingSmartNotificationRoute: SmartNotificationRoute? = nil
 
     func askPulse(_ prompt: String) {
@@ -47,6 +48,7 @@ final class AppState {
     func startObservingAuth() async {
         for await (event, session) in supabase.auth.authStateChanges {
             self.session = session
+            NotificationManager.shared.setWeeklyReminderAccount(session?.user.id)
 
             if event == .passwordRecovery {
                 isPasswordRecoveryFlow = true
@@ -66,6 +68,7 @@ final class AppState {
             }
 
             self.isLoading = false
+            if session != nil { await NotificationManager.shared.reconcileWeeklyReminder() }
         }
     }
 
@@ -85,8 +88,10 @@ final class AppState {
         for key in Self.accountScopedDefaultsKeys {
             UserDefaults.standard.removeObject(forKey: key)
         }
+        NotificationManager.shared.setWeeklyReminderAccount(nil)
+        pendingStrongWeekReminder = false
+        UserDefaults.standard.removeObject(forKey: StrongWeekReminder.routeKey)
         NotificationManager.shared.cancelSmartNotifications()
-        NotificationManager.shared.cancelWeeklyRecapReminder()
         SmartNotificationHistoryStore.clear()
     }
 
@@ -98,7 +103,6 @@ final class AppState {
         "glp1PlannedDoseMg",
         "doseCardDismissedDay",
         NotificationManager.smartCoachingEnabledKey,
-        NotificationManager.weeklyRecapEnabledKey,
         NotificationManager.smartSuppressedDayKey,
         SmartNotificationPreferences.workoutKey,
         SmartNotificationPreferences.proteinKey,

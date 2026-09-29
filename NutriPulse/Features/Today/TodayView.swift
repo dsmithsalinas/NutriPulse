@@ -8,6 +8,8 @@ struct TodayView: View {
     // False while the logging sheet is up or another tab is showing. The protein win is
     // latched until this goes true, so the celebration always plays to a watching user.
     var isFrontmost: Bool = true
+    @State private var strongWeek = StrongWeekViewModel()
+    @State private var showStrongWeek = false
     @State private var showBodyCompSheet = false
     @State private var showBodyHub = false
     @State private var showWorkoutSheet = false
@@ -99,6 +101,12 @@ struct TodayView: View {
                         // Pulse gets one adaptive slot. A single, ranked next step keeps Today
                         // calm even when dose, recovery, pacing, and target signals coexist.
                         pulsePriorityCard
+                        if vm.isToday {
+                            StrongWeekCard(vm: strongWeek) {
+                                showStrongWeek = true
+                                Task { await strongWeek.load() }
+                            }
+                        }
 
                         if HealthKitManager.shared.isAvailable {
                             HealthStatsCard(
@@ -279,6 +287,9 @@ struct TodayView: View {
                     }
                 )
             }
+            .sheet(isPresented: $showStrongWeek, onDismiss: { strongWeek.editing = false }) {
+                StrongWeekView(vm: strongWeek, profile: appState.profile)
+            }
             .sheet(item: $repeatedMealRoute) { route in
                 if let sourceDate = route.sourceDate, let meal = route.meal {
                     RepeatedMealConfirmationSheet(
@@ -289,9 +300,18 @@ struct TodayView: View {
                 }
             }
             .task(id: vm.selectedDate) {
+                #if DEBUG
+                if AppStoreScreenshotMode.active {
+                    strongWeek.isLoading = false
+                    strongWeek.current = AppStoreScreenshotPreview.week
+                    return
+                }
+                #endif
                 // The drift check inside loadData needs the user's stats.
                 vm.profile = appState.profile
                 await vm.loadData()
+                if vm.isToday { await strongWeek.load() }
+                openWeeklyReminderIfNeeded()
             }
             .onChange(of: vm.justClosedAllRings) { _, justClosed in
                 guard vm.isToday, justClosed else { return }
@@ -306,11 +326,15 @@ struct TodayView: View {
                 proteinCelebrationPending = true
                 playProteinCelebrationIfVisible()
             }
-            .onChange(of: isFrontmost) { _, _ in
+            .onChange(of: isFrontmost) { _, frontmost in
+                if frontmost { Task { await strongWeek.load() } }
                 playProteinCelebrationIfVisible()
             }
             .onChange(of: showRecoveryLogger) { _, _ in
                 playProteinCelebrationIfVisible()
+            }
+            .onChange(of: appState.pendingStrongWeekReminder) { _, pending in
+                if pending { openWeeklyReminderIfNeeded() }
             }
             .onChange(of: appState.pendingQuickAction) { _, action in
                 guard action == .logDose else { return }
@@ -355,25 +379,53 @@ struct TodayView: View {
             )) { _ in
                 vm.snapToTodayIfDayChanged()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .foodAccessChanged)) { _ in
+                strongWeek.foodPreferencesChanged()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .strongWeekChanged)) { _ in
+                Task { await vm.loadData() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
+                strongWeek.changedSinceGeneration = true
+                Task { await vm.loadData() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .smartCoachingSettingsChanged)) { _ in
                 Task { await vm.refreshSmartNotifications() }
             }
         }
     }
 
+    private func openWeeklyReminderIfNeeded() {
+        guard appState.pendingStrongWeekReminder else { return }
+        appState.pendingStrongWeekReminder = false
+        showStrongWeek = true
+        Task { await strongWeek.load() }
+    }
+
     @ViewBuilder
     private var pulsePriorityCard: some View {
         if doseCardDismissedDay != Date.now.isoDateString, let log = vm.latestGLP1,
            !vm.injectionLoggedToday, vm.doseStatus != nil {
-            DoseDayCard(
-                medication: log.medication,
-                doseText: "\(log.doseMg.glp1DoseString) mg",
-                overdue: vm.doseStatus?.urgent ?? false,
-                completed: false,
-                onTap: { showRitual = true },
-                onDismiss: { doseCardDismissedDay = Date.now.isoDateString }
-            )
+            VStack(spacing: Theme.Spacing.sm) {
+                DoseDayCard(
+                    medication: log.medication,
+                    doseText: "\(log.doseMg.glp1DoseString) mg",
+                    overdue: vm.doseStatus?.urgent ?? false,
+                    completed: false,
+                    onTap: { showRitual = true },
+                    onDismiss: { doseCardDismissedDay = Date.now.isoDateString }
+                )
+                DoseSkipControl(schedule: vm.doseSchedule) { await vm.loadData() }
+                    .padding(Theme.Spacing.md).card()
+            }
             .transition(.opacity.combined(with: .move(edge: .top)))
+        } else if vm.isToday, vm.doseScheduleLoaded, vm.doseSchedule.skippedThisWeek != nil {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+                DoseSkipControl(schedule: vm.doseSchedule) { await vm.loadData() }
+                Button("Log a shot instead") { showRitual = true }
+                    .buttonStyle(.borderless)
+            }
+            .padding(Theme.Spacing.md).card()
         } else if dismissedShotCheckInDay != Date.now.isoDateString,
                   vm.scheduledShotCycleCheckInDue,
                   let cycleDay = vm.currentShotCycleDay {

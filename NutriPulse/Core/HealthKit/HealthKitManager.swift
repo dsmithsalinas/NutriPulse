@@ -91,6 +91,17 @@ final class HealthKitManager {
         HKSampleType.quantityType(forIdentifier: .dietaryWater)!,
     ]
 
+    // Consult this device, not the request flag that may have arrived in a backup.
+    // `unnecessary` means choices already exist, not that read access was granted.
+    // Return false when the user needs to edit those choices in the Health app.
+    func reconnect() async throws -> Bool {
+        guard isAvailable else { throw HKError(.errorHealthDataUnavailable) }
+        let status = try await store.statusForAuthorizationRequest(toShare: writeTypes, read: readTypes)
+        guard status != .unnecessary else { return false }
+        try await requestAuthorization()
+        return true
+    }
+
     func requestAuthorization() async throws {
         guard isAvailable else { return }
         try await store.requestAuthorization(toShare: writeTypes, read: readTypes)
