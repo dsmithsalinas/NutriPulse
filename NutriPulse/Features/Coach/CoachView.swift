@@ -226,12 +226,13 @@ struct CoachView: View {
                     // Opens "What Pulse knows" — the one place to see and edit everything
                     // Pulse has been told (docs/daylight-redesign.md, step 8).
                     Button { showAboutYou = true } label: {
-                        HStack(spacing: 4) {
+                        // Stacked, not side by side: beside the line, the link squeezed it onto two.
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(canSeeLine)
                                 .font(Theme.Fonts.body(15))
                                 .foregroundStyle(Theme.Colors.textSecondary)
                             Text("What I know about you ›")
-                                .font(Theme.Fonts.body(13, .semibold))
+                                .font(Theme.Fonts.body(14, .semibold))
                                 .foregroundStyle(Theme.Colors.primaryText)
                         }
                         .multilineTextAlignment(.leading)
@@ -912,6 +913,7 @@ private struct RememberSuggestionCard: View {
                             }
                             .font(Theme.Fonts.body(13, .bold))
                             .foregroundStyle(.white)
+                            .fixedSize()
                             .padding(.horizontal, 16)
                             .frame(minHeight: 44)
                             .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

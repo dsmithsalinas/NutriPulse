@@ -214,9 +214,9 @@ struct AboutYouView: View {
             AddChipField(placeholder: "Add another", text: $vm.newAllergyText, onAdd: vm.addAllergy)
                 .accessibilityLabel("Add another allergy or intolerance")
 
-            if !vm.draft.allergies.isEmpty {
+            if !CommonAllergen.custom(in: vm.draft.allergies).isEmpty {
                 FlowLayout(spacing: 8, lineSpacing: 8) {
-                    ForEach(vm.draft.allergies, id: \.self) { item in
+                    ForEach(CommonAllergen.custom(in: vm.draft.allergies), id: \.self) { item in
                         RemovableChip(title: item) { vm.removeAllergy(item) }
                     }
                 }

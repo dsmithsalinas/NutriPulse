@@ -634,7 +634,7 @@ extension CoachViewModel {
                 messageType: "chat", createdAt: yesterday.addingTimeInterval(7220),
                 payload: CoachMessagePayload(
                     foods: nil,
-                    followUps: ["Something else?", "What's for dinner?"],
+                    followUps: ["Give me another idea", "Plan my dinner"],
                     recap: nil,
                     remember: [.init(kind: .avoid, value: "Cilantro")]
                 )

@@ -24,6 +24,13 @@ enum EatingPattern: String, Codable, CaseIterable, Identifiable {
 /// Common allergens offered as one-tap chips; anything else is added as free text.
 enum CommonAllergen {
     static let all = ["Peanuts", "Tree nuts", "Dairy", "Eggs", "Wheat / gluten", "Soy", "Fish", "Shellfish", "Sesame"]
+
+    /// The ones the user typed in themselves. Common allergens toggle as chips of their own, so
+    /// listing them again as removable chips would show each twice.
+    static func custom(in allergies: [String]) -> [String] {
+        let common = Set(all.map { $0.lowercased() })
+        return allergies.filter { !common.contains($0.lowercased()) }
+    }
 }
 
 /// The editable part: what the user has told Pulse.

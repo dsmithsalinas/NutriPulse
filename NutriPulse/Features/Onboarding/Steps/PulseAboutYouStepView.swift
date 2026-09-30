@@ -28,9 +28,9 @@ struct PulseAboutYouStepView: View {
                         }
                     }
                     addAllergyField
-                    if !vm.pulseAllergies.isEmpty {
+                    if !CommonAllergen.custom(in: vm.pulseAllergies).isEmpty {
                         FlowLayout(spacing: 8, lineSpacing: 8) {
-                            ForEach(vm.pulseAllergies, id: \.self) { item in
+                            ForEach(CommonAllergen.custom(in: vm.pulseAllergies), id: \.self) { item in
                                 removableChip(item) { vm.pulseAllergies.removeAll { $0 == item } }
                             }
                         }
