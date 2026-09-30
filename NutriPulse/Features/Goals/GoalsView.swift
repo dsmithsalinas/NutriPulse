@@ -258,27 +258,33 @@ struct GoalsView: View {
 
     // Frames the intervention goal's own daily check-in as "the experiment" — an experiment
     // is just that goal on a timer, so its Yes/Not-today buttons are the goal's real check-in.
+    // A running experiment takes priority; once none is running, the most recently finished one
+    // gets a brief spot here too, pointing at its result rather than a check-in.
     private var experimentCardData: ExperimentCardData? {
-        guard let running = experiments.first(where: { $0.status == .running }),
-              let goalState = vm.active.first(where: { $0.id == running.interventionGoalId }),
-              let start = Self.parseISODate(running.interventionStart)
+        #if DEBUG
+        let source = (DebugLaunch.has("--goals-preview") || DebugLaunch.has("--progress-preview"))
+            ? vm.previewExperiments
+            : experiments
+        #else
+        let source = experiments
+        #endif
+        let candidate = source.first(where: { $0.status == .running })
+            ?? source
+                .filter { $0.status == .completed }
+                .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+                .first
+        guard let candidate,
+              let goalState = (vm.active + vm.completed).first(where: { $0.id == candidate.interventionGoalId }),
+              let timeline = ExperimentTimelineCalculator.timeline(
+                  interventionStart: candidate.interventionStart, endDate: candidate.endDate
+              )
         else { return nil }
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: .now)
-        let dayIndex = max((calendar.dateComponents([.day], from: start, to: today).day ?? 0) + 1, 1)
-        let end = running.endDate.flatMap(Self.parseISODate)
-        let totalDays = end.map { (calendar.dateComponents([.day], from: start, to: $0).day ?? 0) + 1 }
-        let progress = totalDays.map { min(Double(dayIndex) / Double(max($0, 1)), 1) } ?? 0
         return ExperimentCardData(
-            experiment: running, goalState: goalState,
-            dayIndex: dayIndex, totalDays: totalDays, progress: progress
+            experiment: candidate, goalState: goalState,
+            dayIndex: timeline.dayIndex, totalDays: timeline.totalDays, progress: timeline.progress,
+            isFinished: candidate.status == .completed,
+            outcomeLabel: candidate.primaryOutcomeMeasurement?.metric.map { "Measuring: \($0.name.lowercased())" }
         )
-    }
-
-    private static func parseISODate(_ value: String) -> Date? {
-        let parts = value.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        return Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
     }
 
     private var experimentsRow: some View {
@@ -384,6 +390,10 @@ private struct ExperimentCardData {
     let dayIndex: Int
     let totalDays: Int?
     let progress: Double
+    let isFinished: Bool
+    /// "Measuring: sleep hours" — nil when the outcome metric couldn't be read; the tile still
+    /// renders without it.
+    let outcomeLabel: String?
 }
 
 // MARK: - Experiment tile
@@ -408,27 +418,39 @@ private struct ExperimentTile: View {
                 .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
                 .foregroundStyle(Theme.Colors.violetInk)
 
-            if data.totalDays != nil {
-                MeterBar(progress: data.progress, color: Theme.Colors.violetLabel, track: Theme.Colors.violet.opacity(0.5), height: 8, delay: 0.4)
+            if let outcomeLabel = data.outcomeLabel {
+                Text(outcomeLabel)
+                    .font(Theme.Fonts.body(13, .semibold))
+                    .foregroundStyle(Theme.Colors.violetLabel)
             }
 
-            if measurement?.sourceType == .manualBoolean {
-                Text(checkinQuestion)
+            if data.isFinished {
+                Text("This experiment has finished. Open Personal experiments to see how the outcome compared.")
                     .font(Theme.Fonts.body(14))
                     .foregroundStyle(Theme.Colors.violetInk)
-                HStack(spacing: 8) {
-                    Button("Yes", action: onYes)
-                        .buttonStyle(ExperimentButtonStyle(fill: Theme.Colors.violetLabel, foreground: .white))
-                    Button("Not today", action: onNotToday)
-                        .buttonStyle(ExperimentButtonStyle(fill: .white, foreground: Theme.Colors.violetInk))
+            } else {
+                if data.totalDays != nil {
+                    MeterBar(progress: data.progress, color: Theme.Colors.violetLabel, track: Theme.Colors.violet.opacity(0.5), height: 8, delay: 0.4)
                 }
-            }
 
-            Text(readableYet
-                 ? "Enough days measured to start reading this experiment."
-                 : "Too early to read — \(data.goalState.progress.measuredCount) \(data.goalState.progress.measuredCount == 1 ? "night" : "nights") measured so far.")
-                .font(Theme.Fonts.body(13))
-                .foregroundStyle(Theme.Colors.violetLabel)
+                if measurement?.sourceType == .manualBoolean {
+                    Text(checkinQuestion)
+                        .font(Theme.Fonts.body(14))
+                        .foregroundStyle(Theme.Colors.violetInk)
+                    HStack(spacing: 8) {
+                        Button("Yes", action: onYes)
+                            .buttonStyle(ExperimentButtonStyle(fill: Theme.Colors.violetLabel, foreground: .white))
+                        Button("Not today", action: onNotToday)
+                            .buttonStyle(ExperimentButtonStyle(fill: .white, foreground: Theme.Colors.violetInk))
+                    }
+                }
+
+                Text(readableYet
+                     ? "Enough days measured to start reading this experiment."
+                     : "Too early to read — \(data.goalState.progress.measuredCount) \(data.goalState.progress.measuredCount == 1 ? "night" : "nights") measured so far.")
+                    .font(Theme.Fonts.body(13))
+                    .foregroundStyle(Theme.Colors.violetLabel)
+            }
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -437,7 +459,8 @@ private struct ExperimentTile: View {
     }
 
     private var dayLabel: String {
-        data.totalDays.map { "Experiment · day \(data.dayIndex) of \($0)" } ?? "Experiment · day \(data.dayIndex)"
+        guard !data.isFinished else { return "Experiment · finished" }
+        return data.totalDays.map { "Experiment · day \(data.dayIndex) of \($0)" } ?? "Experiment · day \(data.dayIndex)"
     }
 
     private var checkinQuestion: String {

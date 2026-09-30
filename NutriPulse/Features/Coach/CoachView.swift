@@ -365,6 +365,11 @@ struct CoachView: View {
                 (fill, label, ink, shadow) = (Theme.Colors.violet, Theme.Colors.violetLabel, Theme.Colors.violetInk, false)
             case .meal:
                 (fill, label, ink, shadow) = (Theme.Colors.surfaceCard, Theme.Colors.textSecondary, Theme.Colors.textPrimary, true)
+            // Compile-only for now — CoachViewModel doesn't build this suggestion yet (that
+            // wiring is out of scope here; see the personal-experiments handoff notes).
+            // Violet matches the experiment tile elsewhere in the app.
+            case .experimentCheckIn:
+                (fill, label, ink, shadow) = (Theme.Colors.violet, Theme.Colors.violetLabel, Theme.Colors.violetInk, false)
             }
         }
     }

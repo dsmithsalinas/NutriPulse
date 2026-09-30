@@ -8,6 +8,7 @@ struct PulseStartSuggestion: Identifiable, Equatable {
         case shotCycle
         case mondayRecap
         case meal
+        case experimentCheckIn
     }
 
     let kind: Kind
@@ -17,6 +18,15 @@ struct PulseStartSuggestion: Identifiable, Equatable {
     let prompt: String
 
     var id: Kind { kind }
+}
+
+/// What `startSuggestions` needs to offer today's check-in for a running personal experiment.
+/// `hasCheckedInToday` hides the tile once it's done, the same way the protein-gap tile hides
+/// once the gap closes.
+struct ExperimentCheckInPrompt: Equatable {
+    let dayIndex: Int
+    let totalDays: Int?
+    let hasCheckedInToday: Bool
 }
 
 struct CoachSuggestionBuilder {
@@ -32,10 +42,18 @@ struct CoachSuggestionBuilder {
         cycleDay: Int?,
         recapDue: Bool,
         now: Date,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        experimentCheckIn: ExperimentCheckInPrompt? = nil
     ) -> [PulseStartSuggestion] {
         var tiles: [PulseStartSuggestion] = []
         let hour = calendar.component(.hour, from: now)
+
+        // Most actionable, most specific: a running experiment waiting on today's check-in.
+        if let experimentCheckIn, !experimentCheckIn.hasCheckedInToday {
+            let eyebrow = experimentCheckIn.totalDays.map { "Experiment · day \(experimentCheckIn.dayIndex) of \($0)" }
+                ?? "Experiment · day \(experimentCheckIn.dayIndex)"
+            tiles.append(.init(kind: .experimentCheckIn, eyebrow: eyebrow, prompt: "Log today's check-in"))
+        }
 
         if let goal = proteinGoalG, goal > 0 {
             let gap = Int((goal - totalProteinG).rounded())

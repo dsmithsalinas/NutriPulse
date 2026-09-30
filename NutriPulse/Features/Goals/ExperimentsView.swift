@@ -7,7 +7,10 @@ struct ExperimentsView: View {
     @Environment(\.dismiss) private var dismiss
     let activeGoals: [GoalCardState]
     @State private var experiments: [PersonalExperiment] = []
+    @State private var suggestions: [ExperimentSuggestion] = []
     @State private var showCreate = false
+    @State private var suggestionPrefill: ExperimentSuggestion?
+    @State private var selectedExperiment: PersonalExperiment?
     @State private var isLoading = true
     @State private var errorMessage: String?
 
@@ -43,6 +46,10 @@ struct ExperimentsView: View {
                     }
                 }
 
+                if !suggestions.isEmpty {
+                    suggestionsSection
+                }
+
                 Text("Experiment setup and conclusions use descriptive associations only. They do not establish causation or provide medical advice.")
                     .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -52,8 +59,19 @@ struct ExperimentsView: View {
         .background(Theme.Colors.ground.ignoresSafeArea())
         .presentationDragIndicator(.visible)
         .task { await load() }
+        .task { await loadSuggestions() }
         .sheet(isPresented: $showCreate) {
             CreateExperimentView(activeGoals: activeGoals) {
+                await load()
+            }
+        }
+        .sheet(item: $suggestionPrefill) { suggestion in
+            CreateExperimentView(activeGoals: activeGoals, prefill: suggestion) {
+                await load()
+            }
+        }
+        .sheet(item: $selectedExperiment) { experiment in
+            ExperimentDetailView(experiment: experiment) {
                 await load()
             }
         }
@@ -99,24 +117,86 @@ struct ExperimentsView: View {
     }
 
     private func experimentRow(_ experiment: PersonalExperiment) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
-                Text(experiment.question)
-                    .font(Theme.Fonts.body(15, .bold))
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Spacer(minLength: 8)
-                Text(experiment.status.rawValue.capitalized)
-                    .font(Theme.Fonts.body(12, .bold))
-                    .foregroundStyle(Theme.Colors.primaryText)
-                    .padding(.horizontal, 10)
-                    .frame(height: 26)
-                    .background(Theme.Colors.primarySoft, in: Capsule())
+        Button { selectedExperiment = experiment } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top) {
+                    Text(experiment.question)
+                        .font(Theme.Fonts.body(15, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    Spacer(minLength: 8)
+                    Text(experiment.status.rawValue.capitalized)
+                        .font(Theme.Fonts.body(12, .bold))
+                        .foregroundStyle(Theme.Colors.primaryText)
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .background(Theme.Colors.primarySoft, in: Capsule())
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.Colors.textFaint)
+                }
+                if let metric = experiment.primaryOutcomeMeasurement?.metric {
+                    Text("Measuring: \(metric.name.lowercased())")
+                        .font(Theme.Fonts.body(12, .semibold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                Text("\(experiment.interventionStart) through \(experiment.endDate ?? "ongoing")")
+                    .font(Theme.Fonts.body(12))
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
-            Text("\(experiment.interventionStart) through \(experiment.endDate ?? "ongoing")")
-                .font(Theme.Fonts.body(12))
-                .foregroundStyle(Theme.Colors.textSecondary)
+            .frame(minHeight: 44)
+            .tile()
         }
-        .tile()
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens this experiment's setup, progress, and result")
+    }
+
+    // MARK: - Starter experiments from the user's own data
+
+    private var suggestionsSection: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            Text("From your own data")
+                .font(Theme.Fonts.body(15, .bold))
+                .foregroundStyle(Theme.Colors.textPrimary)
+            ForEach(suggestions) { suggestion in
+                suggestionCard(suggestion)
+            }
+        }
+    }
+
+    private func suggestionCard(_ suggestion: ExperimentSuggestion) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TileEyebrow("Suggested experiment", color: Theme.Colors.violetLabel)
+            Text(suggestion.why)
+                .font(Theme.Fonts.body(14))
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Button("Try this") { suggestionPrefill = suggestion }
+                .buttonStyle(.brandPrimary)
+                .disabled(activeGoals.isEmpty)
+                .accessibilityHint("Pre-fills a new experiment with this question")
+        }
+        .tile(Theme.Colors.violet, shadow: false)
+    }
+
+    private func loadSuggestions() async {
+        #if DEBUG
+        if DebugLaunch.has("--goals-preview") || DebugLaunch.has("--progress-preview") {
+            suggestions = []
+            return
+        }
+        #endif
+        let analytics = AnalyticsRepository()
+        let summaries = (try? await analytics.fetchDailySummaries(days: 90)) ?? []
+        let hydration = (try? await analytics.fetchDailyHydration(days: 90)) ?? []
+        let movement = (try? await analytics.fetchDailyMovement(days: 90)) ?? []
+        let weightLogs = (try? await analytics.fetchWeightLogs(days: 90)) ?? []
+        let glp1 = (try? await analytics.fetchGLP1History()) ?? []
+        let checkIns = (try? await ShotCycleRepository().fetchRecent(days: 90)) ?? []
+        let insights = CycleAnalyticsEngine.build(
+            summaries: summaries, hydration: hydration, movement: movement,
+            weightLogs: weightLogs, checkIns: checkIns, injections: glp1
+        )
+        suggestions = ExperimentSuggestionEngine.suggestions(from: insights)
     }
 
     private var experimentPrimer: some View {
@@ -163,6 +243,7 @@ struct ExperimentsView: View {
 private struct CreateExperimentView: View {
     @Environment(\.dismiss) private var dismiss
     let activeGoals: [GoalCardState]
+    var prefill: ExperimentSuggestion? = nil
     let onCreated: () async -> Void
     @State private var selectedGoalId: UUID?
     @State private var selectedOutcomeId = ExperimentOutcomeTemplate.sleep.id
@@ -232,7 +313,14 @@ private struct CreateExperimentView: View {
                                   || selectedGoalId == nil || isSaving)
                 }
             }
-            .onAppear { selectedGoalId = selectedGoalId ?? activeGoals.first?.id }
+            .onAppear {
+                selectedGoalId = selectedGoalId ?? activeGoals.first?.id
+                if let prefill, question.isEmpty {
+                    question = prefill.suggestedQuestion
+                    selectedOutcomeId = prefill.outcome.id
+                    duration = prefill.suggestedDurationDays
+                }
+            }
             .alert("Couldn’t create experiment", isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }

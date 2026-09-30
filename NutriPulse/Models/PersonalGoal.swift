@@ -25,7 +25,7 @@ enum GoalMeasurementKind: String, Codable, CaseIterable {
     case habit, accumulation, frequency, average, target, threshold, subjective
 }
 
-enum GoalAggregation: String, Codable {
+enum GoalAggregation: String, Codable, Equatable {
     case latest, sum, count, average, rate
 }
 
@@ -36,14 +36,14 @@ enum GoalComparison: String, Codable {
     case reach, increase, decrease, none
 }
 
-enum GoalSourceType: String, Codable {
+enum GoalSourceType: String, Codable, Equatable {
     case manualBoolean = "manual_boolean"
     case manualNumber = "manual_number"
     case manualRating = "manual_rating"
     case automatic, combined
 }
 
-enum GoalSourceMetric: String, Codable, CaseIterable {
+enum GoalSourceMetric: String, Codable, CaseIterable, Equatable {
     case steps, workouts
     case workoutMinutes = "workout_minutes"
     case sleepDuration = "sleep_duration"
@@ -256,6 +256,11 @@ struct PersonalExperiment: Codable, Identifiable {
     let endDate: String?
     let createdAt: Date
     let completedAt: Date?
+    /// Filled in by `ExperimentRepository` after the base fetch, from `experiment_measurements`
+    /// joined to `experiment_metrics`. Not a `personal_experiments` column, so it's left out of
+    /// `CodingKeys`: decoding a plain row never touches it, and a failed follow-up read simply
+    /// leaves it nil instead of failing the whole experiment fetch.
+    var outcomeMeasurements: [ExperimentOutcomeMeasurement]? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, question, status
@@ -267,6 +272,42 @@ struct PersonalExperiment: Codable, Identifiable {
         case createdAt = "created_at"
         case completedAt = "completed_at"
     }
+
+    /// The measurement Footing shows as "Measuring: <name>" — the primary outcome when one is
+    /// tagged, otherwise whatever outcome measurement is available.
+    var primaryOutcomeMeasurement: ExperimentOutcomeMeasurement? {
+        outcomeMeasurements?.first(where: { $0.role == "primary_outcome" }) ?? outcomeMeasurements?.first
+    }
+}
+
+/// A lightweight, embeddable summary of an `experiment_metrics` row — just enough to label an
+/// outcome ("Sleep duration", "hours") without a second round trip for the common case.
+struct ExperimentMetricSummary: Codable, Equatable {
+    let name: String
+    let unit: String?
+}
+
+/// One row of `experiment_measurements`, with its `experiment_metrics` joined in.
+struct ExperimentOutcomeMeasurement: Codable, Equatable, Identifiable {
+    let measurementId: UUID
+    let role: String
+    let metric: ExperimentMetricSummary?
+    var id: UUID { measurementId }
+
+    enum CodingKeys: String, CodingKey {
+        case measurementId = "measurement_id"
+        case role
+        case metric = "experiment_metrics"
+    }
+}
+
+/// One `experiment_observations` row, reduced to a date and a single comparable number: the
+/// observed value for numeric/rating outcomes, or 1/0 for a boolean outcome. Built by
+/// `ExperimentRepository` from the raw row; not decoded directly (the raw row splits the value
+/// across `value_number`/`value_boolean`).
+struct ExperimentObservationValue: Equatable {
+    let localDate: String
+    let number: Double?
 }
 
 struct ExperimentMetric: Codable, Identifiable {
@@ -288,7 +329,7 @@ struct ExperimentMetric: Codable, Identifiable {
     }
 }
 
-struct ExperimentOutcomeTemplate: Identifiable {
+struct ExperimentOutcomeTemplate: Identifiable, Equatable {
     let id: String
     let name: String
     let aggregation: GoalAggregation
@@ -308,6 +349,10 @@ struct ExperimentOutcomeTemplate: Identifiable {
         id: "steps", name: "Daily steps", aggregation: .average,
         unit: "steps", sourceType: .automatic, sourceMetric: .steps
     )
+    static let protein = ExperimentOutcomeTemplate(
+        id: "protein", name: "Protein intake", aggregation: .average,
+        unit: "g", sourceType: .automatic, sourceMetric: .protein
+    )
 
-    static let all: [ExperimentOutcomeTemplate] = [.sleep, .energy, .steps]
+    static let all: [ExperimentOutcomeTemplate] = [.sleep, .energy, .steps, .protein]
 }

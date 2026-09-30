@@ -2,13 +2,82 @@ import Foundation
 import Supabase
 
 struct ExperimentRepository {
+    /// Experiments plus, best-effort, what each one is measuring — "Measuring: sleep hours" on
+    /// the tile and the experiment list. The outcome read is additive and separate from the
+    /// base fetch: if it fails, experiments still come back and simply show no outcome label.
     func fetchAll() async throws -> [PersonalExperiment] {
-        try await supabase
+        let experiments: [PersonalExperiment] = try await supabase
             .from("personal_experiments")
             .select()
             .order("created_at", ascending: false)
             .execute()
             .value
+        guard !experiments.isEmpty else { return experiments }
+        guard let outcomesByExperiment = try? await fetchOutcomeMeasurements(
+            for: experiments.map(\.id)
+        ) else { return experiments }
+        return experiments.map { experiment in
+            var experiment = experiment
+            experiment.outcomeMeasurements = outcomesByExperiment[experiment.id]
+            return experiment
+        }
+    }
+
+    /// `experiment_measurements` joined to `experiment_metrics`, grouped by experiment. A
+    /// separate query (rather than embedding on the main select) so a failure here never takes
+    /// down the experiment list itself.
+    private func fetchOutcomeMeasurements(
+        for experimentIds: [UUID]
+    ) async throws -> [UUID: [ExperimentOutcomeMeasurement]] {
+        struct Row: Decodable {
+            let experimentId: UUID
+            let measurementId: UUID
+            let role: String
+            let metric: ExperimentMetricSummary?
+            enum CodingKeys: String, CodingKey {
+                case experimentId = "experiment_id"
+                case measurementId = "measurement_id"
+                case role
+                case metric = "experiment_metrics"
+            }
+        }
+        let rows: [Row] = try await supabase
+            .from("experiment_measurements")
+            .select("experiment_id, measurement_id, role, experiment_metrics(name, unit)")
+            .in("experiment_id", values: experimentIds)
+            .execute()
+            .value
+        return Dictionary(grouping: rows, by: \.experimentId).mapValues { rows in
+            rows.map { ExperimentOutcomeMeasurement(measurementId: $0.measurementId, role: $0.role, metric: $0.metric) }
+        }
+    }
+
+    /// Daily values for one outcome measurement, oldest first — what `ExperimentComparisonEngine`
+    /// compares against the intervention goal's own check-ins.
+    func fetchOutcomeObservations(measurementId: UUID) async throws -> [ExperimentObservationValue] {
+        struct Row: Decodable {
+            let localDate: String
+            let valueNumber: Double?
+            let valueBoolean: Bool?
+            enum CodingKeys: String, CodingKey {
+                case localDate = "local_date"
+                case valueNumber = "value_number"
+                case valueBoolean = "value_boolean"
+            }
+        }
+        let rows: [Row] = try await supabase
+            .from("experiment_observations")
+            .select("local_date, value_number, value_boolean")
+            .eq("measurement_id", value: measurementId)
+            .order("local_date", ascending: true)
+            .execute()
+            .value
+        return rows.map { row in
+            ExperimentObservationValue(
+                localDate: row.localDate,
+                number: row.valueNumber ?? row.valueBoolean.map { $0 ? 1 : 0 }
+            )
+        }
     }
 
     func create(
