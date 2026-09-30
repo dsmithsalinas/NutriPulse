@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "marketing/site-v2", "--", "--port", "5173", "--strictPort"],
       "port": 5173
+    },
+    {
+      "name": "site-v2-prod",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd marketing/site-v2 && npx wrangler dev --port 8787 --ip 127.0.0.1"],
+      "port": 8787
     }
   ]
 }

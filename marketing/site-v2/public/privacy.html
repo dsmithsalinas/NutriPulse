@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy Policy — Footing</title>
-<meta name="description" content="What information Footing collects, how it's used, and who it's shared with.">
+<meta name="description" content="What Footing collects, how it’s used, and exactly who it reaches.">
 <meta name="robots" content="index, follow">
-<meta name="theme-color" content="#F6F5FC">
+<meta name="theme-color" content="#EEF1F6">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="canonical" href="https://tryfooting.app/privacy">
@@ -14,232 +14,148 @@
 <meta property="og:site_name" content="Footing">
 <meta property="og:url" content="https://tryfooting.app/privacy">
 <meta property="og:title" content="Privacy Policy — Footing">
-<meta property="og:description" content="What information Footing collects, how it's used, and who it's shared with.">
+<meta property="og:description" content="What Footing collects, how it’s used, and exactly who it reaches.">
 <meta property="og:image" content="https://tryfooting.app/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://tryfooting.app/og.png">
+<link rel="preload" href="/fonts/BricolageGrotesque-ExtraBold.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="/legal.css">
 </head>
-<!--
-  Ported from marketing/privacy.html (the v1 site) into the v2 legal shell.
-  The wording is VERBATIM — this was a presentation port, not a rewrite. When the
-  v2 site goes live on tryfooting.app, retire the old copy so there is only one
-  privacy policy to keep current.
-
-  This document is also the source of truth for the site's "Is my health data
-  private?" FAQ answer in src/sections/Close.tsx. If the practices here change,
-  change that answer in the same commit.
--->
 <body>
-
+<a class="skip" href="#main">Skip to content</a>
+<!--
+  Source of truth for the home page FAQ answer "Is my health data private?" (src/sections/Home.tsx).
+  If the practices here change, change that answer in the same commit.
+  Not legal advice: have it reviewed by counsel before relying on it for App Store or regulatory purposes.
+-->
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="/">
-      <svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true">
-        <defs>
-          <linearGradient id="bm" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#6366F1"/><stop offset="100%" stop-color="#8B5CF6"/>
-          </linearGradient>
-          <radialGradient id="bmg" cx="0.28" cy="0.12" r="0.9">
-            <stop offset="0%" stop-color="#fff" stop-opacity="0.3"/>
-            <stop offset="58%" stop-color="#fff" stop-opacity="0"/>
-          </radialGradient>
-        </defs>
-        <rect width="64" height="64" rx="14.32" fill="url(#bm)"/>
-        <rect width="64" height="64" rx="14.32" fill="url(#bmg)"/>
-        <g transform="translate(12.80, 12.80) scale(0.38)">
-          <circle cx="50" cy="50" r="33" stroke="#fff" stroke-width="6" fill="none" opacity="0.24"/>
-          <path d="M 50 17 A 33 33 0 1 1 18.99 61.29" stroke="#fff" stroke-width="6" stroke-linecap="round" fill="none"/>
-          <circle cx="18.99" cy="61.29" r="7.5" fill="#fff"/>
-        </g>
-      </svg>
-      <span>Footing</span>
-    </a>
-    <a class="top-back" href="/">← Back to footing</a>
+    <a class="brand" href="/"><span class="mark"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.3" stroke="#fff" stroke-opacity="0.28" stroke-width="3.2"/><path d="M12 3.7 A8.3 8.3 0 1 1 4.2 14.84" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><circle cx="4.2" cy="14.84" r="2.7" fill="#fff"/></svg></span><span class="word d">Footing</span></a>
+    <nav aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/privacy" aria-current="page">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/contact">Contact</a>
+      <a class="cta" href="https://testflight.apple.com/join/tGubSF3Z">Join the beta</a>
+    </nav>
   </div>
 </header>
-
-<main class="wrap">
-
-  <h1>Privacy Policy</h1>
-  <p class="updated">Last updated: August 1, 2026</p>
-
-  <p>
-    This policy explains what information Footing collects, how it's used, and who it's shared
-    with. Footing is a nutrition and wellness tracking app; some of what it handles — food
-    logs, weight, GLP-1 medication schedules, and optional Apple Health or Android Health
-    Connect data — is health information, so we've tried to be specific rather than generic here.
-  </p>
-
-  <h2><span class="n">1.</span> Information we collect</h2>
-  <div class="tbl-scroll">
-    <table>
-      <thead><tr><th>Category</th><th>What</th></tr></thead>
-      <tbody>
-        <tr>
-          <th>Account</th>
-          <td>Email address, and name/sex/date of birth/activity level if you complete onboarding.</td>
-        </tr>
-        <tr>
-          <th>Nutrition &amp; activity logs</th>
-          <td>Food and water entries (manual, searched, scanned, or described in your own words
-            to Pulse — typed or spoken), daily macro/calorie goals, and body weight you log.</td>
-        </tr>
-        <tr>
-          <th>Voice input (optional)</th>
-          <td>When you use voice input to speak a food log, your speech is transcribed by the
-            speech-recognition service on your device (Apple Speech Recognition on iOS or your
-            configured Android speech service). Footing doesn't record or store the audio — only
-            the resulting text becomes a log. This requires the permissions requested by that
-            service.</td>
-        </tr>
-        <tr>
-          <th>GLP-1 tracking</th>
-          <td>Medication, dose, injection site and timing — only if you choose to use this feature.</td>
-        </tr>
-        <tr>
-          <th>Apple Health / Health Connect (optional)</th>
-          <td>Depending on your device: steps, distance, exercise, sleep, heart rate, resting heart
-            rate, heart rate variability, active energy, weight, body-fat percentage, and lean
-            body mass. Footing reads only the categories you approve, to show them to you, import
-            selected records into your Footing account, and give Pulse context. When you approve
-            write access, Footing can also save workouts, weight, body fat, and lean mass that you
-            log in Footing back to Apple Health or Android Health Connect.</td>
-        </tr>
-        <tr>
-          <th>Pulse chat</th>
-          <td>Messages you send to the in-app AI coach, and the responses it gives.</td>
-        </tr>
-        <tr>
-          <th>Feedback</th>
-          <td>Anything you submit via the in-app &ldquo;Send Feedback&rdquo; form.</td>
-        </tr>
-        <tr>
-          <th>Usage analytics</th>
-          <td>Anonymous product-usage signals (e.g. a log was saved, a chat message was sent) —
-            never the content of what you logged or said.</td>
-        </tr>
-      </tbody>
-    </table>
+<main id="main">
+<div class="wrap">
+  <section class="title">
+    <p class="eb" style="color: var(--primary-text)">Legal</p>
+    <h1 class="d">Privacy Policy</h1>
+    <span class="date">Last updated: September 30, 2026</span>
+    <p class="intro">This policy explains what Footing collects, how it’s used, and who it reaches. A lot of what Footing handles is health information: food logs, weight, GLP-1 medication and how you feel on it, and optional Apple Health or Health Connect data. So we’ve been specific rather than generic.</p>
+  </section>
+  <section class="short" aria-label="The short version">
+    <p class="eb" style="color: var(--faint)">The short version</p>
+    <div class="short-grid">
+      <div class="t1"><b>We don’t sell your data.</b><span>Not to advertisers, not to anyone. It’s used to run Footing for you.</span></div>
+      <div class="t2"><b>Pulse asks first.</b><span>Nothing goes to our AI provider for Pulse until you agree, and you can turn Pulse off.</span></div>
+      <div class="t3"><b>You decide what Pulse knows.</b><span>Allergies, eating patterns and food likes are yours to add, change or clear.</span></div>
+      <div class="t4"><b>Delete it all, any time.</b><span>Profile → Delete Account removes your account and everything in it, immediately.</span></div>
+    </div>
+  </section>
+  <div class="doc">
+    <nav class="toc" aria-label="On this page">
+      <p class="eb">On this page</p>
+      <a href="#s1"><span>1</span>Information we collect</a>
+      <a href="#s2"><span>2</span>How we use it</a>
+      <a href="#s3"><span>3</span>Who we share it with</a>
+      <a href="#s4"><span>4</span>Keeping and deleting your data</a>
+      <a href="#s5"><span>5</span>Security</a>
+      <a href="#s6"><span>6</span>Age</a>
+      <a href="#s7"><span>7</span>Your choices and rights</a>
+      <a href="#s8"><span>8</span>Changes to this policy</a>
+      <a href="#s9"><span>9</span>Contact</a>
+    </nav>
+    <article>
+<section id="s1">
+<h2 class="d"><span>1.</span> Information we collect</h2>
+<dl class="rows">
+  <div class="head" aria-hidden="true"><span>Category</span><span>What</span></div>
+  <div><dt>Account and profile</dt><dd>Email address. If you complete onboarding: name, date of birth, sex, height, activity level and weight goal.</dd></div>
+  <div><dt>Food, water and goals</dt><dd>Food and water entries (typed, searched, scanned, or described in your own words, typed or spoken), favorites, your calorie, macro and protein-floor goals, and food-access choices such as “rarely cook” or “eat out often”.</dd></div>
+  <div><dt>Body</dt><dd>Weight, body fat, lean mass, BMI, body measurements you track (waist, hips, chest, upper arm, thigh), and body goals.</dd></div>
+  <div><dt>Workouts</dt><dd>Workouts you log, and ones imported from Apple Health or Health Connect.</dd></div>
+  <div><dt>GLP-1 tracking</dt><dd>Only if you use it: medication, dose, injection site and time, doses you mark as skipped, shot-cycle check-ins (appetite, fullness, nausea, energy, digestion and an optional note), and whether tracking is active, paused or stopped.</dd></div>
+  <div><dt>What Pulse knows</dt><dd>Optional: allergies and an allergy note, eating patterns (for example vegetarian or halal), foods you love and foods you’d rather skip. Pulse can suggest adding something you mention in chat, but nothing is saved until you tap Save, and it never guesses an allergy.</dd></div>
+  <div><dt>Goals and experiments</dt><dd>Personal goals and their daily check-ins, and personal experiments with their measurements and results.</dd></div>
+  <div><dt>Pulse</dt><dd>Messages you send and the replies, including suggested foods, follow-ups and weekly recap cards. Your Strong Week check-in answers (for example “traveling” or “injured”) and whether you found an outlook useful. Your Pulse settings: on or off, shown on Today, and when you agreed to AI data sharing.</dd></div>
+  <div><dt>Voice input</dt><dd>Optional. Your speech is turned into text by your device’s speech service (Apple Speech Recognition on iPhone, or your Android speech service). Footing doesn’t record or store audio, only the resulting text.</dd></div>
+  <div><dt>Apple Health / Health Connect</dt><dd>Optional, and only the categories you approve: steps, distance, exercise, sleep, heart rate, resting heart rate, heart rate variability, active energy, weight, body fat and lean mass. With write access, Footing can save the workouts, weight, body fat and lean mass you log back to Apple Health or Health Connect.</dd></div>
+  <div><dt>Feedback</dt><dd>Anything you send through Profile → Send Feedback.</dd></div>
+  <div><dt>Usage analytics</dt><dd>Anonymous product signals, like “a log was saved” or “a chat message was sent”. Never what you logged or said.</dd></div>
+</dl>
+</section>
+<section id="s2">
+<h2 class="d"><span>2.</span> How we use it</h2>
+<ul>
+  <li><span>To run Footing: tracking nutrition, showing your trends and goals, reminders you turn on, and Pulse.</span></li>
+  <li><span>To understand how Footing is used, in aggregate, so we know what to fix. We don’t read individual logs or conversations.</span></li>
+  <li><span>To answer feedback and support requests.</span></li>
+</ul>
+<h3>When Pulse is used</h3>
+<p>Pulse only runs after you agree. The first time you open Pulse, Footing shows what will be sent and asks. If you decline, or later turn Pulse off in Profile, nothing is sent to our AI provider for Pulse.</p>
+<p>When Pulse answers you, it receives your message plus a snapshot of what it needs to be specific: your first name and units, today’s log and totals, the last 7 days, your goals, weight trend and workouts, connected Health data, what Pulse knows about you, and your GLP-1 schedule and today’s check-in. <strong>GLP-1 details are left out entirely while tracking is paused or stopped.</strong> Monday Recap also uses last week’s daily totals, and Strong Week uses your check-in answers.</p>
+<p>Talking a meal into the log is separate from Pulse: it sends only the food description you typed or said.</p>
+</section>
+<section id="s3">
+<h2 class="d"><span>3.</span> Who we share it with</h2>
+<p>We don’t sell your data. It reaches only the providers that make Footing work, each limited to what it needs.</p>
+<dl class="rows">
+  <div class="head" aria-hidden="true"><span>Provider</span><span>Purpose and what they receive</span></div>
+  <div><dt>Supabase</dt><dd>Database, sign-in and server functions. Stores all the account and log data above.</dd></div>
+  <div><dt>Anthropic (Claude)</dt><dd>Powers Pulse and talk-to-log. Receives your message and the snapshot described in section 2, Strong Week check-in answers, and food descriptions for talk-to-log.</dd></div>
+  <div><dt>FatSecret</dt><dd>Food search and barcode lookup. Receives the food name or barcode you search for, not who you are.</dd></div>
+  <div><dt>TelemetryDeck</dt><dd>Anonymous usage analytics. Receives usage signals only: no log content, messages or personal details.</dd></div>
+  <div><dt>Apple</dt><dd>Sign in with Apple, HealthKit, notifications and speech recognition, under Apple’s own privacy terms.</dd></div>
+  <div><dt>Google / Android services</dt><dd>Google sign-in, Health Connect, notifications, barcode scanning and optional speech recognition on Android, under their own terms. Footing doesn’t send your Health Connect data to Google.</dd></div>
+</dl>
+</section>
+<section id="s4">
+<h2 class="d"><span>4.</span> Keeping and deleting your data</h2>
+<p>Your data is kept while your account exists. <strong>Profile → Delete Account</strong> permanently deletes your account and everything stored with it: logs, goals, body and weight history, GLP-1 records and check-ins, what Pulse knows about you, goals and experiments, chat history and feedback. It’s immediate and can’t be undone.</p>
+<p>You can also clear just your Pulse chat history from Profile, or remove anything Pulse knows from Profile → What Pulse knows. Records you asked Footing to write into Apple Health or Health Connect stay there; manage them in that app.</p>
+</section>
+<section id="s5">
+<h2 class="d"><span>5.</span> Security</h2>
+<p>Data is encrypted in transit and at rest with our database provider. Access is scoped to your account by row-level security, so no other user can read it, and Pulse only ever sees your own data.</p>
+</section>
+<section id="s6">
+<h2 class="d"><span>6.</span> Age</h2>
+<p>Footing is for adults 18 and over (see the <a href="/terms">Terms</a>). We don’t knowingly collect data from anyone under 18.</p>
+</section>
+<section id="s7">
+<h2 class="d"><span>7.</span> Your choices and rights</h2>
+<p>Everything Footing stores is visible in the app, and you can correct or delete it there. There’s no export button yet: email us and we’ll send you a copy of your data. For anything else we haven’t made self-serve, get in touch.</p>
+</section>
+<section id="s8">
+<h2 class="d"><span>8.</span> Changes to this policy</h2>
+<p>If this policy changes in a material way, we’ll update the date at the top and tell you in the app before the change takes effect.</p>
+</section>
+<section id="s9">
+<h2 class="d"><span>9.</span> Contact</h2>
+<p>Questions about this policy or your data: <a href="mailto:support@tryfooting.app">support@tryfooting.app</a>, or see the <a href="/contact">Contact</a> page.</p>
+</section>
+    </article>
   </div>
-
-  <h2><span class="n">2.</span> How we use it</h2>
-  <ul>
-    <li>To run the core features: tracking your nutrition, showing your trends, and powering
-      Pulse's coaching.</li>
-    <li>To give Pulse the context it needs to answer well — when you message Pulse, a snapshot
-      of your relevant data (today's log, recent history, goals, weight trend, connected Health
-      data, and GLP-1 schedule if applicable) is sent along with your message so it can respond
-      specifically to you, not generically.</li>
-    <li>To understand product usage in aggregate, so we know what's working — never at the level
-      of reading your individual logs or conversations.</li>
-    <li>To respond to feedback and support requests.</li>
-  </ul>
-
-  <h2><span class="n">3.</span> Who we share it with</h2>
-  <p>
-    We don't sell your data. It's shared only with the service providers that make the app work,
-    each limited to what they need to do their job:
-  </p>
-  <div class="tbl-scroll">
-    <table>
-      <thead><tr><th>Provider</th><th>Purpose</th><th>What they receive</th></tr></thead>
-      <tbody>
-        <tr>
-          <th>Supabase</th>
-          <td>Database, authentication, file/edge-function hosting</td>
-          <td>All account and log data described above — this is where it's stored.</td>
-        </tr>
-        <tr>
-          <th>Anthropic (Claude)</th>
-          <td>Powers the Pulse AI coach and natural-language food logging</td>
-          <td>Your message plus the data-context snapshot described above, and the food
-            description you type or speak when using talk-to-log.</td>
-        </tr>
-        <tr>
-          <th>FatSecret</th>
-          <td>Nutrition database for food search and barcode lookup</td>
-          <td>The food name or barcode you search for. Not your account identity.</td>
-        </tr>
-        <tr>
-          <th>TelemetryDeck</th>
-          <td>Anonymous product analytics</td>
-          <td>Anonymous usage signals only — no log content, no messages, no personal
-            identifiers.</td>
-        </tr>
-        <tr>
-          <th>Apple</th>
-          <td>Sign in with Apple, HealthKit, push notifications, Speech Recognition (voice food
-            logging)</td>
-          <td>Standard to those Apple frameworks; governed by Apple's own privacy terms. Spoken
-            food logs are transcribed by Apple's Speech Recognition.</td>
-        </tr>
-        <tr>
-          <th>Google / Android system services</th>
-          <td>Google sign-in, Health Connect, notifications, camera barcode scanning, and optional
-            Android speech recognition</td>
-          <td>Standard to the Android services you choose to use and the permissions you grant;
-            governed by the applicable provider's privacy terms. Footing does not send your
-            Health Connect data to Google on its own.</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <h2><span class="n">4.</span> Data retention &amp; deletion</h2>
-  <p>
-    Your data is kept for as long as your account exists. You can permanently delete your
-    account and all associated data at any time from <strong>Profile → Delete Account</strong>
-    in the app. This is immediate and irreversible — it removes your logs, goals, weight
-    history, GLP-1 records, chat history, and feedback stored with your Footing account. Records
-    that you asked Footing to write into Apple Health or Health Connect remain in that connected
-    health store and can be reviewed or deleted using its own controls.
-  </p>
-
-  <h2><span class="n">5.</span> Security</h2>
-  <p>
-    Data is encrypted in transit (TLS) and at rest in our database provider. Access to your data
-    is scoped to your account via row-level security — no other user can read it, and our AI
-    coach only ever sees your own data when responding to you.
-  </p>
-
-  <h2><span class="n">6.</span> Children's privacy</h2>
-  <p>
-    Footing is not directed at children under 13, and we don't knowingly collect data from them.
-  </p>
-
-  <h2><span class="n">7.</span> Your rights</h2>
-  <p>
-    You can access, correct, or export your data through the app itself (it's designed to always
-    show you exactly what's been logged), and delete your account and all data at any time as
-    described above. If you have a request we haven't made self-service yet, contact us using
-    the details below.
-  </p>
-
-  <h2><span class="n">8.</span> Changes to this policy</h2>
-  <p>
-    If this policy changes in a material way, we'll update the date at the top of this page.
-  </p>
-
-  <h2><span class="n">9.</span> Contact</h2>
-  <p>
-    Questions about this policy or your data:
-    <a href="mailto:support@tryfooting.app">support@tryfooting.app</a>
-  </p>
-
-  <footer>
-    <p>
-      Footing — this document is a factual description of current data practices, not legal
-      advice. Have it reviewed by counsel before relying on it for App Store submission or
-      regulatory compliance.
-    </p>
-    <p class="links">
-      <a href="/">Home</a>
-      <a href="/terms">Terms of Service</a>
-      <a href="mailto:support@tryfooting.app">Contact</a>
-    </p>
-  </footer>
-
+</div>
 </main>
+<footer class="foot">
+  <div class="wrap">
+    <div class="brandline">
+      <span class="word d">Footing</span>
+      <span class="tag">Coached, not scolded.</span>
+      <p>Footing is a personal nutrition and wellness tracker, not a medical device. It doesn’t diagnose, treat, or give dosing guidance. Always talk to your doctor about medication and health decisions.</p>
+    </div>
+    <nav aria-label="Legal">
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/contact">Contact</a>
+    </nav>
+  </div>
+</footer>
 </body>
 </html>
