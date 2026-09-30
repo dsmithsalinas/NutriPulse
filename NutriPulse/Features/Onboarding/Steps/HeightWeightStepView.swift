@@ -23,7 +23,7 @@ struct HeightWeightStepView: View {
                     MeasureField(label: "Height", value: formatImperialHeight(heightInches),
                                  onMinus: { setInches(heightInches - 1) },
                                  onPlus:  { setInches(heightInches + 1) })
-                    MeasureField(label: "Weight", value: "\(Int(weightLbs)) lb",
+                    MeasureField(label: "Weight", value: "\(Int(weightLbs)) lbs",
                                  onMinus: { setPounds(weightLbs - 1) },
                                  onPlus:  { setPounds(weightLbs + 1) })
                 } else {

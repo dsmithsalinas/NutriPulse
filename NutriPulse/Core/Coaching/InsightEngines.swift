@@ -209,10 +209,13 @@ struct BodyMilestone: Identifiable, Equatable {
 }
 
 enum BodyMilestoneEngine {
+    // `weight`/`leanMass` are stored kg, `waist` stored cm — `units` converts anything that
+    // lands in the copy the user reads, so an imperial user never sees a stray "cm".
     static func detect(
         weight: [(date: Date, value: Double)],
         leanMass: [(date: Date, value: Double)],
-        waist: [(date: Date, value: Double)]
+        waist: [(date: Date, value: Double)],
+        units: UnitSystem = .metric
     ) -> [BodyMilestone] {
         var results: [BodyMilestone] = []
         let weightDelta = BodyHubViewModel.delta(weight)
@@ -224,7 +227,8 @@ enum BodyMilestoneEngine {
             results.append(.init(title: "Lean mass held", detail: "Your weight moved down while lean mass stayed within its steady range."))
         }
         if let waistDelta, waistDelta <= -2 {
-            results.append(.init(title: "Waist trend moved", detail: "Your waist measurement is down \(String(format: "%.1f", abs(waistDelta))) cm across this view."))
+            let magnitude = units.formatLength(abs(waistDelta))
+            results.append(.init(title: "Waist trend moved", detail: "Your waist measurement is down \(magnitude) across this view."))
         }
         if let weightDelta, let baseline = weight.first?.value, baseline > 0,
            abs(weightDelta) / baseline <= 0.01, let waistDelta, waistDelta <= -1 {

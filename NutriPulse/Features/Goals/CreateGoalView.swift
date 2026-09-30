@@ -12,6 +12,13 @@ struct CreateGoalView: View {
     @State private var isSaving = false
     @State private var showActiveGoalCapNote = false
 
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
+
+    // A weight goal's target is always stored in kg; only the editor and review screens
+    // convert, so an imperial user enters and reviews it in lbs.
+    private var isWeightGoal: Bool { draft?.sourceMetric == .weight }
+
     init(vm: GoalsViewModel, initialDraft: GoalDraft? = nil) {
         self.vm = vm
         _draft = State(initialValue: initialDraft)
@@ -216,6 +223,8 @@ struct CreateGoalView: View {
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 140)
                     }
+                } else if isWeightGoal {
+                    LabeledContent("Unit", value: units.weightUnit)
                 } else if let unit = draft?.unit, !unit.isEmpty {
                     LabeledContent("Unit", value: unit)
                 }
@@ -424,8 +433,13 @@ struct CreateGoalView: View {
 
     private var displayTargetBinding: Binding<Double> {
         Binding(
-            get: { draft?.displayTargetValue ?? 0 },
-            set: { draft?.displayTargetValue = $0 }
+            get: {
+                let stored = draft?.displayTargetValue ?? 0
+                return isWeightGoal ? units.weightInput(from: stored) : stored
+            },
+            set: { newValue in
+                draft?.displayTargetValue = isWeightGoal ? units.kgFrom(newValue) : newValue
+            }
         )
     }
 
@@ -436,9 +450,14 @@ struct CreateGoalView: View {
 
     private var reviewTarget: String {
         guard let draft else { return "" }
-        let value = draft.displayTargetValue.formatted(.number.precision(.fractionLength(0...1)))
-        if draft.trackingSource == .manualBoolean { return "At least \(value)%" }
-        return "\(value) \(draft.unit)"
+        if draft.trackingSource == .manualBoolean {
+            let value = draft.displayTargetValue.formatted(.number.precision(.fractionLength(0...1)))
+            return "At least \(value)%"
+        }
+        let displayed = isWeightGoal ? units.weightInput(from: draft.displayTargetValue) : draft.displayTargetValue
+        let value = displayed.formatted(.number.precision(.fractionLength(0...1)))
+        let unit = isWeightGoal ? units.weightUnit : draft.unit
+        return "\(value) \(unit)"
     }
 
     private var reviewPeriod: String {

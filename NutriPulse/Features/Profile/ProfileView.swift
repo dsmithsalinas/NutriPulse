@@ -660,7 +660,7 @@ struct ProfileView: View {
         ) {
             Picker("Units", selection: $unitSystemRaw) {
                 Text("Metric (kg, cm, ml)").tag("metric")
-                Text("Imperial (lb, in, oz)").tag("imperial")
+                Text("Imperial (lbs, in, oz)").tag("imperial")
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 16)

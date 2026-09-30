@@ -175,11 +175,12 @@ final class BodyHubViewModel {
         )
     }
 
-    var milestones: [BodyMilestone] {
+    func milestones(units: UnitSystem) -> [BodyMilestone] {
         BodyMilestoneEngine.detect(
             weight: weightSeries,
             leanMass: leanSeries,
-            waist: siteSeries(.waist)
+            waist: siteSeries(.waist),
+            units: units
         )
     }
 }

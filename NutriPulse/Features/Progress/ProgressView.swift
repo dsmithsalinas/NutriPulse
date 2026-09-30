@@ -576,6 +576,10 @@ private struct AvgProteinStatTile: View {
 
 private struct WeightTrendStatTile: View {
     let weightLogs: [WeightLog]
+
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
+
     private var ordered: [WeightLog] { weightLogs.sorted { $0.loggedAt < $1.loggedAt } }
     private var change: Double? {
         guard ordered.count >= 2, let first = ordered.first, let last = ordered.last else { return nil }
@@ -599,14 +603,20 @@ private struct WeightTrendStatTile: View {
         .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
         .tile()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(change.map { "Weight trend, \(changeText($0))" } ?? "Weight trend, not enough data yet")
+        .accessibilityLabel(change.map { "Weight trend, \(spokenChangeText($0))" } ?? "Weight trend, not enough data yet")
     }
 
     private func changeText(_ value: Double) -> String {
-        let magnitude = abs(value).formatted(.number.precision(.fractionLength(1)))
-        if value < -0.05 { return "−\(magnitude) kg" }
-        if value > 0.05 { return "+\(magnitude) kg" }
-        return "Stable"
+        units.formatWeightChange(value)
+    }
+
+    // VoiceOver reads an abbreviated unit letter-by-letter ("k g", "l b s"), so the
+    // accessibility label spells it out instead of reusing `changeText`'s printed form.
+    private func spokenChangeText(_ value: Double) -> String {
+        guard abs(value) > 0.05 else { return "Stable" }
+        let magnitude = abs(units.weightInput(from: value)).formatted(.number.precision(.fractionLength(1)))
+        let direction = value < 0 ? "down" : "up"
+        return "\(direction) \(magnitude) \(units.spokenWeightUnit)"
     }
 }
 

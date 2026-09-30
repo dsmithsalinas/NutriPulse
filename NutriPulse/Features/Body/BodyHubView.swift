@@ -95,10 +95,10 @@ struct BodyHubView: View {
                     .popIn(order: 3 + vm.trackedSites.count)
                 }
 
-                if !vm.milestones.isEmpty {
+                if !vm.milestones(units: units).isEmpty {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                         TileEyebrow("Meaningful changes")
-                        ForEach(vm.milestones) { milestone in
+                        ForEach(vm.milestones(units: units)) { milestone in
                             HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                                 Image(systemName: "sparkles")
                                     .foregroundStyle(Theme.Colors.primary)
