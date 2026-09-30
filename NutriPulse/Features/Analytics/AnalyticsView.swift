@@ -30,6 +30,7 @@ struct AnalyticsView: View {
             // bare ProgressView. Keep the content mounted and overlay the spinner instead.
             ScrollView {
                 VStack(spacing: Theme.Spacing.md) {
+                    DaylightPageTitle("Analytics")
                     Picker("Range", selection: $vm.selectedRange) {
                         ForEach(AnalyticsViewModel.TimeRange.allCases) { range in
                             Text(range.label).tag(range)
@@ -98,9 +99,7 @@ struct AnalyticsView: View {
             .overlay {
                 if vm.isLoading { ProgressView() }
             }
-            .navigationTitle("Analytics")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
+            .daylightSubpage("Analytics")
             .task(id: vm.selectedRange) {
                 await vm.loadData()
             }
