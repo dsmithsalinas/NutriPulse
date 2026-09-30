@@ -68,16 +68,29 @@ async function requestOutlook(modelResponse: unknown) {
   const result = await handler(new Request('https://example.test/coach-chat',{method:'POST',headers:{Authorization:'Bearer test','Content-Type':'application/json'},body:JSON.stringify({message:'My week',messageType:'weekly_outlook',context:{strongWeek:{status:'current',circumstances:['busy']}}})}));
   return {result,modelRequest};
 }
-test('weekly endpoint requests the structured tool and returns the client contract',async()=>{
-  const {result,modelRequest}=await requestOutlook({stop_reason:'tool_use',content:call(good)});
+// Sonnet 5.5 rejects forced tool calls, so the outlook comes back as structured-output JSON.
+const json = (value: unknown, stop_reason = 'end_turn') => ({stop_reason, content:[{type:'thinking',thinking:''},{type:'text',text:JSON.stringify(value)}]});
+test('weekly endpoint requests structured output on Sonnet 5.5 and returns the client contract',async()=>{
+  const {result,modelRequest}=await requestOutlook(json(good));
   assert.equal(result.status,200);
-  assert.equal(modelRequest.model,'claude-sonnet-4-6');
-  assert.equal(modelRequest.tool_choice.name,'submit_weekly_outlook');
-  assert.equal(modelRequest.tools[0].input_schema.required.length,3);
+  assert.equal(modelRequest.model,'claude-sonnet-5-5');
+  assert.equal(modelRequest.tools,undefined);
+  assert.equal(modelRequest.tool_choice,undefined);
+  assert.equal(modelRequest.output_config.effort,'medium');
+  assert.equal(modelRequest.output_config.format.type,'json_schema');
+  assert.equal(modelRequest.output_config.format.schema.required.length,3);
   assert.deepEqual((await result.json()).outlook,good);
 });
 test('truncated model output fails visibly rather than returning an empty successful outlook',async()=>{
-  const {result}=await requestOutlook({stop_reason:'max_tokens',content:call(good)});
+  const {result}=await requestOutlook(json(good,'max_tokens'));
   assert.equal(result.status,502);
   assert.match((await result.json()).error,/saved context is kept/);
+});
+test('a structured outlook still passes the workout-prescription and length checks',async()=>{
+  for (const bad of [{...good,movementFocus:'Do 3 sets of squats.'},{...good,foodFocus:''}]) {
+    const {result}=await requestOutlook(json(bad));
+    assert.equal(result.status,502);
+  }
+  const declined=await requestOutlook({stop_reason:'refusal',content:[]});
+  assert.equal(declined.result.status,502);
 });

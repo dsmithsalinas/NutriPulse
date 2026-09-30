@@ -186,7 +186,13 @@ export const strongWeekTool = {
 export function parseStrongWeekOutlook(content: unknown): Record<string, string> | undefined {
   if (!Array.isArray(content)) return undefined
   const call = content.find((v) => o(v)?.type === 'tool_use' && o(v)?.name === strongWeekTool.name)
-  const input = o(o(call)?.input)
+  return parseStrongWeekFields(o(call)?.input)
+}
+
+// The outlook's fields, however they arrived: a forced tool call (GPT) or a structured-output
+// JSON object (Claude, which no longer accepts forced tool calls on Sonnet 5.5).
+export function parseStrongWeekFields(raw: unknown): Record<string, string> | undefined {
+  const input = o(raw)
   if (!input) return undefined
   const result: Record<string, string> = {}
   for (const key of ['observation', 'foodFocus', 'movementFocus']) {
@@ -195,6 +201,99 @@ export function parseStrongWeekOutlook(content: unknown): Record<string, string>
     // Reject common granular workout prescriptions rather than displaying an out-of-scope plan.
     if (/\b\d+\s*(?:sets?|reps?|repetitions)\b|\b\d+\s*[x×]\s*\d+\b/i.test(value)) return undefined
     result[key] = value.trim()
+  }
+  return result
+}
+
+// Structured Pulse replies (docs/daylight-redesign.md). The app renders cards from these
+// fields; `reply` always carries the full message as text, so older app versions, history and
+// any client that ignores the extras still read a complete answer. The app draws charts from
+// its own data; Pulse only writes words. No length or count constraints in the schemas —
+// structured outputs don't support them — so parsePulseReply clamps instead.
+const followUpsProperty = {
+  type: 'array',
+  description: 'Zero to three short follow-ups the user might tap next, written in the user\'s voice as requests (e.g. "Give me a dinner version"), never questions from you. Empty when nothing natural follows.',
+  items: { type: 'string' },
+}
+
+export const pulseReplySchema = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reply: { type: 'string', description: 'Your complete message to the user, exactly as you would write it with no cards.' },
+    foods: {
+      type: 'array',
+      description: 'Foods you suggested that the user can log in one tap. Zero to three, and only foods named in sevenDayHistory.frequentFoods or today\'s logged foods, spelled as they appear there without the (N×) count. Empty when you did not suggest a specific food they already eat.',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          name: { type: 'string', description: 'The food, as it appears in their log.' },
+          why: { type: 'string', description: 'A few words on why it fits right now, e.g. "30g, no cooking".' },
+        },
+        required: ['name', 'why'],
+      },
+    },
+    followUps: followUpsProperty,
+  },
+  required: ['reply', 'foods', 'followUps'],
+}
+
+export const pulseRecapSchema = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    reply: { type: 'string', description: 'The whole recap as a short note (the four points below in prose). Shown where the card cannot be.' },
+    recap: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        story: { type: 'string', description: 'Point 1: the story of the week in one line.' },
+        wentWell: { type: 'string', description: 'Point 2: one specific thing that went well.' },
+        pattern: { type: 'string', description: 'Point 3: one pattern worth noticing.' },
+        focus: { type: 'string', description: 'Point 4: one concrete focus for this week.' },
+      },
+      required: ['story', 'wentWell', 'pattern', 'focus'],
+    },
+    followUps: followUpsProperty,
+  },
+  required: ['reply', 'recap', 'followUps'],
+}
+
+export function pulseSchemaFor(messageType: string) {
+  return messageType === 'weekly_summary' ? pulseRecapSchema : pulseReplySchema
+}
+
+export type PulseReply = {
+  reply: string
+  foods?: { name: string; why: string }[]
+  followUps?: string[]
+  recap?: { story: string; wentWell: string; pattern: string; focus: string }
+}
+
+// Parses the model's JSON reply and clamps it to what the app will render. Plain text (a model
+// override without structured outputs) degrades to a text-only reply rather than failing.
+export function parsePulseReply(text: string, messageType: string): PulseReply | undefined {
+  let raw: unknown
+  try { raw = JSON.parse(text) } catch { return text.trim() ? { reply: text.trim() } : undefined }
+  const data = o(raw)
+  const reply = data && s(data.reply, 6000)?.trim()
+  if (!data || !reply) return undefined
+  const result: PulseReply = { reply }
+  const followUps = (Array.isArray(data.followUps) ? data.followUps : [])
+    .map((f) => s(f, 120)?.trim()).filter((f): f is string => !!f).slice(0, 3)
+  if (followUps.length) result.followUps = followUps
+  if (messageType === 'weekly_summary') {
+    const recap = o(data.recap)
+    const fields = ['story', 'wentWell', 'pattern', 'focus'] as const
+    const values = fields.map((k) => recap && s(recap[k], 600)?.trim())
+    if (values.every((v) => !!v)) {
+      result.recap = { story: values[0]!, wentWell: values[1]!, pattern: values[2]!, focus: values[3]! }
+    }
+  } else {
+    const foods = (Array.isArray(data.foods) ? data.foods : []).map((f) => {
+      const food = o(f)
+      const name = food && s(food.name, 120)?.replace(/\s*\(\d+\s*[x×]\)\s*$/i, '').trim()
+      const why = food && s(food.why, 120)?.trim()
+      return name ? { name, why: why ?? '' } : undefined
+    }).filter((f): f is { name: string; why: string } => !!f).slice(0, 3)
+    if (foods.length) result.foods = foods
   }
   return result
 }
@@ -446,6 +545,7 @@ Write the user's weekly recap of LAST WEEK using \`lastWeek\` in the user contex
 2. One specific thing that went well, tied to a day, food, or habit from \`lastWeek\` (compare with \`lastWeek.priorWeek\` when that makes the progress visible).
 3. One pattern worth noticing — which days were hardest and what they had in common (weekday vs weekend, cycle day, workouts, frequent foods).
 4. One concrete focus for this week, built from foods and routines they already have.
+Put each point in its \`recap\` field, and the same four points as a short note in \`reply\`.
 Use at most three numbers in the whole recap. If \`lastWeek.daysLogged\` is under 3, say there isn't enough logged to read the week and make logging a few days the focus — without judgment. Be honest and steady. Do not ask a question.`
   }
 
