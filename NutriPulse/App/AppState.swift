@@ -100,6 +100,11 @@ final class AppState {
 
             self.isLoading = false
             if session != nil { await NotificationManager.shared.reconcileWeeklyReminder() }
+            // The foreground sync skips while signed out (or before the keychain restores the
+            // session), so run it as soon as there's an account to sync.
+            if session != nil, event == .signedIn || event == .initialSession {
+                Task { await SyncEngine.shared.syncNow() }
+            }
         }
     }
 
@@ -115,6 +120,8 @@ final class AppState {
 
         try? LocalStore.shared.wipeAll()
         FavoritesStore.shared.reset()
+        SyncEngine.shared.clearFailure()
+        GLP1TrackingStore.shared.reset()
 
         for key in Self.accountScopedDefaultsKeys {
             UserDefaults.standard.removeObject(forKey: key)
@@ -166,6 +173,7 @@ final class AppState {
                 if let loaded = rows.first {
                     profile = loaded
                     profileLoadFailed = false
+                    GLP1TrackingStore.shared.apply(profile: loaded)
                     return
                 }
                 if attempt == 0 { try await Task.sleep(for: .milliseconds(300)) }

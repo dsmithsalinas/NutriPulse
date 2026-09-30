@@ -226,7 +226,10 @@ final class CoachViewModel {
         async let experimentCheckIn = experimentCheckInPrompt()
 
         var cycleDay: Int?
-        if let log = (try? await latestDose)?.first, let skips = try? await skips {
+        var cycleLength = 7
+        // Paused or stopped: no shot tile and no "your shot week" line.
+        if GLP1TrackingStore.shared.isTracking, let log = (try? await latestDose)?.first, let skips = try? await skips {
+            cycleLength = log.cycleLengthDays
             let schedule = GLP1DoseSchedule(latest: log, skips: skips)
             if !schedule.cycleInterrupted {
                 cycleDay = Calendar.current.dateComponents(
@@ -251,6 +254,7 @@ final class CoachViewModel {
             totalProteinG: logs.reduce(0) { $0 + $1.totalProteinG },
             proteinGoalG: goal?.proteinG,
             cycleDay: cycleDay,
+            cycleLength: cycleLength,
             recapDue: recapDue,
             now: .now,
             experimentCheckIn: await experimentCheckIn

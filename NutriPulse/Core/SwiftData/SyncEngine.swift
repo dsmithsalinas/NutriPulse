@@ -112,6 +112,11 @@ final class SyncEngine {
         monitor.start(queue: monitorQueue)
     }
 
+    /// Drops a stale failure from a previous account (called on sign-out).
+    func clearFailure() {
+        failedStage = nil
+    }
+
     func refreshPendingCount() {
         pendingCount = (try? LocalStore.shared.pendingCount()) ?? 0
     }
@@ -127,6 +132,13 @@ final class SyncEngine {
     func syncNow() async {
         guard !isSyncing, isOnline else {
             if isSyncing { needsAnotherPush = true }
+            return
+        }
+        // Signed out, or the session is still restoring from the keychain: there is nothing to
+        // sync yet, and running anyway failed the first account-scoped step (the workout pull),
+        // leaving a "Couldn't refresh" banner up after sign-in. AppState syncs once a session lands.
+        guard supabase.auth.currentSession != nil else {
+            failedStage = nil
             return
         }
         isSyncing = true

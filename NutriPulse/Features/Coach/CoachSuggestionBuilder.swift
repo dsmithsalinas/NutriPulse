@@ -34,12 +34,15 @@ struct CoachSuggestionBuilder {
     /// - Parameters:
     ///   - cycleDay: days since the last shot (0 = shot day); nil with no dose history or
     ///     when the cycle is interrupted by a skipped dose.
+    ///   - cycleLength: days between shots. At or past it the shot is due, so the tile says so
+    ///     instead of counting on ("Shot day 42").
     ///   - recapDue: `WeeklyRecapSchedule.isDue` against the last recap Pulse wrote, so the
     ///     Monday Recap tile disappears once this week's recap exists.
     static func startSuggestions(
         totalProteinG: Double,
         proteinGoalG: Double?,
         cycleDay: Int?,
+        cycleLength: Int = 7,
         recapDue: Bool,
         now: Date,
         calendar: Calendar = .current,
@@ -67,10 +70,11 @@ struct CoachSuggestionBuilder {
         }
 
         if let cycleDay {
+            let due = cycleDay >= cycleLength
             tiles.append(.init(
                 kind: .shotCycle,
-                eyebrow: cycleDay == 0 ? "Shot day" : "Shot day \(cycleDay)",
-                prompt: shotCyclePrompt(cycleDay: cycleDay)
+                eyebrow: cycleDay == 0 ? "Shot day" : due ? "Shot due" : "Shot day \(cycleDay)",
+                prompt: due ? "Help me plan around my next shot" : shotCyclePrompt(cycleDay: cycleDay)
             ))
         }
 
@@ -81,13 +85,19 @@ struct CoachSuggestionBuilder {
             tiles.append(.init(kind: .mondayRecap, eyebrow: "It's \(weekday)", prompt: "Monday Recap"))
         }
 
-        // Never an empty or lonely grid: pad with a meal idea for the time of day.
+        // Never an empty or lonely grid: pad with a meal idea for the time of day. When the
+        // protein tile already asks for this meal, pad with planning ahead instead, or the grid
+        // shows "easy breakfast to close my protein" beside "easy protein breakfast".
         if tiles.count < 2 {
-            tiles.append(.init(
-                kind: .meal,
-                eyebrow: mealName(hour: hour).capitalized,
-                prompt: mealPrompt(hour: hour)
-            ))
+            if tiles.contains(where: { $0.kind == .proteinGap }) {
+                tiles.append(.init(kind: .meal, eyebrow: "Plan ahead", prompt: "Help me plan tomorrow's meals"))
+            } else {
+                tiles.append(.init(
+                    kind: .meal,
+                    eyebrow: mealName(hour: hour).capitalized,
+                    prompt: mealPrompt(hour: hour)
+                ))
+            }
         }
 
         return Array(tiles.prefix(3))

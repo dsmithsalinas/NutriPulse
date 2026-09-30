@@ -1354,7 +1354,7 @@ final class CoachSuggestionTests: XCTestCase {
                 eyebrow: "70g to go",
                 prompt: "Give me an easy dinner to close my protein"
             ),
-            PulseStartSuggestion(kind: .meal, eyebrow: "Dinner", prompt: "Give me a dinner idea"),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Plan ahead", prompt: "Help me plan tomorrow's meals"),
         ])
     }
 
@@ -1377,7 +1377,7 @@ final class CoachSuggestionTests: XCTestCase {
                 eyebrow: "80g to go",
                 prompt: "Give me an easy breakfast to close my protein"
             ),
-            PulseStartSuggestion(kind: .meal, eyebrow: "Breakfast", prompt: "Give me an easy protein breakfast"),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Plan ahead", prompt: "Help me plan tomorrow's meals"),
         ])
     }
 
@@ -1492,6 +1492,38 @@ final class CoachSuggestionTests: XCTestCase {
             ),
             PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
         ])
+    }
+
+    // A lapsed schedule (last shot six weeks ago) read "Shot day 42 · Make the most of my
+    // appetite this week". Past the cycle length the tile says the shot is due instead.
+    func testShotTilePastCycleLengthSaysDue() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+        for cycleDay in [7, 42] {
+            let tile = CoachSuggestionBuilder.startSuggestions(
+                totalProteinG: 110, proteinGoalG: 120, cycleDay: cycleDay,
+                recapDue: false, now: now, calendar: calendar
+            ).first { $0.kind == .shotCycle }
+            XCTAssertEqual(tile?.eyebrow, "Shot due")
+            XCTAssertEqual(tile?.prompt, "Help me plan around my next shot")
+        }
+        let biweekly = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110, proteinGoalG: 120, cycleDay: 9, cycleLength: 14,
+            recapDue: false, now: now, calendar: calendar
+        ).first { $0.kind == .shotCycle }
+        XCTAssertEqual(biweekly?.eyebrow, "Shot day 9")
+    }
+
+    // With only the protein tile, the pad used to repeat it ("easy breakfast to close my
+    // protein" beside "easy protein breakfast").
+    func testPadTileDoesNotRepeatTheProteinTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 30, hour: 8, calendar: calendar)
+        let tiles = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 0, proteinGoalG: 200, cycleDay: nil, recapDue: false, now: now, calendar: calendar
+        )
+        XCTAssertEqual(tiles.map(\.kind), [.proteinGap, .meal])
+        XCTAssertEqual(tiles.last?.prompt, "Help me plan tomorrow's meals")
     }
 
     func testNilCycleDayShowsNoShotTile() {
@@ -1752,7 +1784,7 @@ final class CoachSuggestionTests: XCTestCase {
                 eyebrow: "70g to go",
                 prompt: "Give me an easy dinner to close my protein"
             ),
-            PulseStartSuggestion(kind: .meal, eyebrow: "Dinner", prompt: "Give me a dinner idea"),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Plan ahead", prompt: "Help me plan tomorrow's meals"),
         ])
     }
 }
@@ -4529,5 +4561,92 @@ final class ExperimentDateRangeTests: XCTestCase {
         XCTAssertFalse(ExperimentDateRange.label(start: "2026-09-23", end: "2026-10-13", calendar: calendar).contains("2026"))
         XCTAssertTrue(ExperimentDateRange.label(start: "2026-09-23", end: nil, calendar: calendar).hasPrefix("From "))
         XCTAssertEqual(ExperimentDateRange.label(start: "bad", end: nil, calendar: calendar), "From bad")
+    }
+}
+
+// Today's Body tile read the composition table while the Body page read weight_logs, so a
+// newer weigh-in showed 239.4 on Body and 239.0 on Today. Today now shows the newer one.
+@MainActor
+final class TodayNewerWeightTests: XCTestCase {
+    private let user = UUID()
+
+    private func weighIn(_ kg: Double, _ iso: String) -> WeightLog {
+        let json = #"{"id":"\#(UUID())","user_id":"\#(user)","logged_at":"\#(iso)","weight_kg":\#(kg),"source":"manual"}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try! decoder.decode(WeightLog.self, from: Data(json.utf8))
+    }
+
+    private func saved(_ kg: Double?, _ day: String) -> BodyCompositionLog {
+        BodyCompositionLog(id: UUID(), userId: user, logDate: day, weightKg: kg, bodyFatPct: 23.7,
+                           bmi: nil, leanBodyMassKg: nil, source: "manual", createdAt: .now)
+    }
+
+    func testNewerSourceWins() {
+        XCTAssertEqual(TodayViewModel.newerWeightKg(weighIn: weighIn(108.6, "2026-08-26T14:00:00Z"),
+                                                    saved: saved(108.4, "2026-08-24")), 108.6)
+        XCTAssertEqual(TodayViewModel.newerWeightKg(weighIn: weighIn(108.6, "2026-08-20T14:00:00Z"),
+                                                    saved: saved(108.4, "2026-08-24")), 108.4)
+    }
+
+    func testFallsBackToWhicheverExists() {
+        XCTAssertEqual(TodayViewModel.newerWeightKg(weighIn: nil, saved: saved(108.4, "2026-08-24")), 108.4)
+        XCTAssertEqual(TodayViewModel.newerWeightKg(weighIn: weighIn(108.6, "2026-08-20T14:00:00Z"),
+                                                    saved: saved(nil, "2026-08-28")), 108.6)
+        XCTAssertNil(TodayViewModel.newerWeightKg(weighIn: nil, saved: nil))
+    }
+}
+
+@MainActor
+final class GLP1TrackingStoreTests: XCTestCase {
+    private func freshDefaults() -> UserDefaults {
+        let name = "glp1-tracking-\(UUID())"
+        return UserDefaults(suiteName: name)!
+    }
+
+    private func profile(_ tracking: String?) -> UserProfile {
+        UserProfile(id: UUID(), email: "t@example.com", fullName: nil, dob: nil, sex: nil, heightCm: nil,
+                    activityLevel: nil, weightGoal: nil, dietaryPrefs: nil, createdAt: .now,
+                    glp1Tracking: tracking, glp1TrackingChangedAt: tracking == nil ? nil : .now)
+    }
+
+    func testDefaultsToTracking() {
+        XCTAssertTrue(GLP1TrackingStore(defaults: freshDefaults()).isTracking)
+    }
+
+    func testServerStatusIsAppliedAndCached() {
+        let defaults = freshDefaults()
+        let store = GLP1TrackingStore(defaults: defaults)
+        store.apply(profile: profile("paused"))
+        XCTAssertEqual(store.status, .paused)
+        XCTAssertFalse(store.isTracking)
+        // A new launch reads the cached value before the profile loads.
+        XCTAssertEqual(GLP1TrackingStore(defaults: defaults).status, .paused)
+    }
+
+    func testProfileWithoutTheColumnKeepsTheCachedValue() {
+        let defaults = freshDefaults()
+        let store = GLP1TrackingStore(defaults: defaults)
+        store.apply(profile: profile("stopped"))
+        store.apply(profile: profile(nil))
+        XCTAssertEqual(store.status, .stopped)
+    }
+
+    func testResetOnSignOutReturnsToTracking() {
+        let defaults = freshDefaults()
+        let store = GLP1TrackingStore(defaults: defaults)
+        store.apply(profile: profile("paused"))
+        store.reset()
+        XCTAssertTrue(store.isTracking)
+        XCTAssertTrue(GLP1TrackingStore(defaults: defaults).isTracking)
+    }
+
+    func testProfileDecodesTrackingColumns() throws {
+        let json = #"{"id":"\#(UUID())","email":"a@b.c","created_at":"2026-09-30T12:00:00Z","glp1_tracking":"stopped"}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertEqual(try decoder.decode(UserProfile.self, from: Data(json.utf8)).glp1Tracking, "stopped")
+        let old = #"{"id":"\#(UUID())","email":"a@b.c","created_at":"2026-09-30T12:00:00Z"}"#
+        XCTAssertNil(try decoder.decode(UserProfile.self, from: Data(old.utf8)).glp1Tracking)
     }
 }

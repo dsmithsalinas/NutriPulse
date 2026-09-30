@@ -310,8 +310,10 @@ struct DoseSkipControl: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
                 skipButton("Undo skip") { update(undo: skip) }
             } else if let due = schedule.nextDue {
-                skipButton("Skip this week’s shot") { update(undo: nil) }
-                Text("Applies to the dose planned for \(due.formatted(date: .abbreviated, time: .omitted)).")
+                // "This week's shot" only fits a dose that's today or ahead. Once the planned day
+                // has passed (weeks ago, for a lapsed schedule), name that dose instead.
+                skipButton(schedule.isPastDueDay ? "Mark it as skipped" : "Skip this week’s shot") { update(undo: nil) }
+                Text("\(schedule.isPastDueDay ? "For" : "Applies to") the dose planned for \(due.formatted(date: .abbreviated, time: .omitted)).")
                     .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }

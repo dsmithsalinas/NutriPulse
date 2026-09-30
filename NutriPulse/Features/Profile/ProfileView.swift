@@ -14,6 +14,9 @@ struct ProfileView: View {
     @State private var showClearHistoryConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var showGLP1Tracker = false
+    @State private var showGLP1PauseOptions = false
+    @State private var showGLP1ResumeConfirm = false
+    @State private var isSavingGLP1Tracking = false
     @State private var isSeedingHealth = false
     @State private var isReconnectingHealth = false
     @State private var showHealthPermissionsHelp = false
@@ -220,6 +223,27 @@ struct ProfileView: View {
                 Text("This permanently deletes all messages with Pulse.")
             }
             .confirmationDialog(
+                "Pause or stop GLP-1 tracking?",
+                isPresented: $showGLP1PauseOptions,
+                titleVisibility: .visible
+            ) {
+                Button("Pause for now") { setGLP1Tracking(.paused) }
+                Button("I've stopped taking it") { setGLP1Tracking(.stopped) }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Footing will hide your shot card, shot cycle, check-ins and shot reminders, and Pulse won't bring up your shot. Your dose history stays, and you can resume any time.")
+            }
+            .confirmationDialog(
+                "Resume GLP-1 tracking?",
+                isPresented: $showGLP1ResumeConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Resume tracking") { setGLP1Tracking(.active) }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Your shot card, shot cycle and check-ins come back, and Pulse can use your dose schedule again. Log your next shot when you take it.")
+            }
+            .confirmationDialog(
                 "Delete your account?",
                 isPresented: $showDeleteAccountConfirm,
                 titleVisibility: .visible
@@ -360,6 +384,8 @@ struct ProfileView: View {
         Button {
             if glp1Logs.isEmpty {
                 vm.showLogInjection = true
+            } else if !glp1Tracking.isTracking {
+                showGLP1ResumeConfirm = true
             } else {
                 showGLP1Tracker = true
             }
@@ -386,13 +412,17 @@ struct ProfileView: View {
         .accessibilityHint(glp1Logs.isEmpty ? "Set up GLP-1 tracking" : "Opens your GLP-1 tracker")
     }
 
+    private var glp1Tracking: GLP1TrackingStore { GLP1TrackingStore.shared }
+
     private var glp1QuickTitle: String {
         guard let last = vm.mostRecentInjection else { return "Set up tracking" }
+        if !glp1Tracking.isTracking { return glp1Tracking.status == .stopped ? "Tracking stopped" : "Tracking paused" }
         return "\(last.medication) \(last.doseMg.formatted())mg"
     }
 
     private var glp1QuickSubtitle: String {
         if glp1Logs.isEmpty { return "Track your weekly shot" }
+        if !glp1Tracking.isTracking { return "Tap to resume" }
         return vm.nextInjectionCountdown ?? "Dose history"
     }
 
@@ -466,7 +496,9 @@ struct ProfileView: View {
                 // These nudges come from Pulse, so with Pulse off they can't fire anyway.
                 disabled: !pulseStore.pulseEnabled
             )
-            if !glp1Logs.isEmpty {
+            // Hidden while GLP-1 tracking is paused or stopped: there are no shot reminders
+            // then, and resuming puts back whatever this was set to.
+            if !glp1Logs.isEmpty, glp1Tracking.isTracking {
                 hairline
                 toggleRow(
                     icon: "bell.badge",
@@ -499,17 +531,29 @@ struct ProfileView: View {
                     vm.showLogInjection = true
                 }
             } else {
-                actionRow(icon: "shield.lefthalf.filled", title: "Protein floor & today", showChevron: true) {
-                    showGLP1Tracker = true
+                if glp1Tracking.isTracking {
+                    actionRow(icon: "shield.lefthalf.filled", title: "Protein floor & today", showChevron: true) {
+                        showGLP1Tracker = true
+                    }
+                    hairline
+                } else {
+                    // Paused or stopped: say so, and make resuming the obvious next step.
+                    valueRow(icon: glp1Tracking.status == .stopped ? "stop.circle" : "pause.circle",
+                             label: glp1Tracking.status == .stopped ? "Tracking stopped" : "Tracking paused",
+                             value: glp1Tracking.changedAt.map { "since \($0.formatted(.dateTime.month(.abbreviated).day()))" } ?? "")
+                    hairline
+                    actionRow(icon: "play.circle", title: "Resume tracking", isLoading: isSavingGLP1Tracking) {
+                        showGLP1ResumeConfirm = true
+                    }
+                    hairline
                 }
-                hairline
 
                 if let last = vm.mostRecentInjection {
                     valueRow(icon: "pill", label: "Medication", value: "\(last.medication) \(last.doseMg.formatted())mg")
                     hairline
                 }
 
-                if let countdown = vm.nextInjectionCountdown, let due = vm.nextInjectionDue {
+                if glp1Tracking.isTracking, let countdown = vm.nextInjectionCountdown, let due = vm.nextInjectionDue {
                     HStack(spacing: 12) {
                         iconBadge("calendar", tint: vm.isInjectionOverdue ? Theme.Colors.danger : Theme.Colors.primary)
                         Text(vm.doseSchedule.latestSkip == nil ? "Next dose" : "Next reminder")
@@ -530,7 +574,7 @@ struct ProfileView: View {
                     hairline
                 }
 
-                if vm.doseScheduleLoaded, vm.nextInjectionDue != nil {
+                if glp1Tracking.isTracking, vm.doseScheduleLoaded, vm.nextInjectionDue != nil {
                     DoseSkipControl(schedule: vm.doseSchedule) { await vm.loadData(profile: appState.profile) }
                         .font(Theme.Fonts.body(13))
                         .tint(Theme.Colors.primary)
@@ -565,6 +609,27 @@ struct ProfileView: View {
                         GLP1HistoryView()
                     }
                 }
+
+                if glp1Tracking.isTracking {
+                    hairline
+                    actionRow(icon: "pause.circle", title: "Pause or stop tracking",
+                              tint: Theme.Colors.textSecondary, isLoading: isSavingGLP1Tracking) {
+                        showGLP1PauseOptions = true
+                    }
+                }
+            }
+        }
+    }
+
+    private func setGLP1Tracking(_ status: GLP1TrackingStatus) {
+        guard !isSavingGLP1Tracking else { return }
+        isSavingGLP1Tracking = true
+        Task {
+            defer { isSavingGLP1Tracking = false }
+            do {
+                try await glp1Tracking.set(status)
+            } catch {
+                vm.errorMessage = "Couldn't update GLP-1 tracking. Check your connection and try again."
             }
         }
     }

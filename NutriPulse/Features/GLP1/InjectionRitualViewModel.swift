@@ -67,6 +67,7 @@ final class InjectionRitualViewModel {
             )
             UserDefaults.standard.set(updateGoingForward ? doseMg : defaultAtLoad,
                                       forKey: Self.plannedDoseKey)
+            await GLP1TrackingStore.shared.doseLogged(at: now)
             await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
             NotificationCenter.default.post(name: .glp1DoseHistoryChanged, object: nil)
             return saved

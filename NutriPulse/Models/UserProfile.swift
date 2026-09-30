@@ -30,6 +30,9 @@ struct UserProfile: Codable, Identifiable {
     let weightGoal: String?
     let dietaryPrefs: [String]?
     let createdAt: Date
+    // "active" | "paused" | "stopped" (GLP1TrackingStore). nil before the column existed.
+    var glp1Tracking: String? = nil
+    var glp1TrackingChangedAt: Date? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -42,5 +45,7 @@ struct UserProfile: Codable, Identifiable {
         case weightGoal    = "weight_goal"
         case dietaryPrefs  = "dietary_prefs"
         case createdAt     = "created_at"
+        case glp1Tracking  = "glp1_tracking"
+        case glp1TrackingChangedAt = "glp1_tracking_changed_at"
     }
 }

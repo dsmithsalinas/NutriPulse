@@ -146,10 +146,12 @@ final class AnalyticsViewModel {
             hydration        = water
             weightLogs       = w
             bodyCompHistory  = bc
-            glp1History      = glp1
+            // Paused or stopped: no shot-cycle questions, dose tags or cycle insights.
+            let tracking = GLP1TrackingStore.shared.isTracking
+            glp1History      = tracking ? glp1 : []
             goalCalories     = g?.calories
             goalProteinG     = g?.proteinG
-            shotCycleCheckIns = checks
+            shotCycleCheckIns = tracking ? checks : []
             // LocalStore only, no network — safe to run after the guard above without racing
             // a second range switch. userId failing just means "no protein sources", not an error.
             if let userId = try? await supabase.auth.session.user.id {

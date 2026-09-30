@@ -198,8 +198,10 @@ struct ExperimentsView: View {
         let hydration = (try? await analytics.fetchDailyHydration(days: 90)) ?? []
         let movement = (try? await analytics.fetchDailyMovement(days: 90)) ?? []
         let weightLogs = (try? await analytics.fetchWeightLogs(days: 90)) ?? []
-        let glp1 = (try? await analytics.fetchGLP1History()) ?? []
-        let checkIns = (try? await ShotCycleRepository().fetchRecent(days: 90)) ?? []
+        // Paused or stopped: no shot-cycle experiment ideas.
+        let tracking = GLP1TrackingStore.shared.isTracking
+        let glp1 = tracking ? ((try? await analytics.fetchGLP1History()) ?? []) : []
+        let checkIns = tracking ? ((try? await ShotCycleRepository().fetchRecent(days: 90)) ?? []) : []
         let insights = CycleAnalyticsEngine.build(
             summaries: summaries, hydration: hydration, movement: movement,
             weightLogs: weightLogs, checkIns: checkIns, injections: glp1

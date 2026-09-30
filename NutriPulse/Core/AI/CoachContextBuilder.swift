@@ -297,8 +297,11 @@ struct CoachContextBuilder {
         }
 
         let summaries = (try? await summariesTask) ?? []
-        let glp1Logs = (try? await glp1Task) ?? []
-        let shotCheckIns = (try? await shotCheckInTask) ?? []
+        // Paused or stopped: Pulse isn't told about the shot at all (no medication, cycle day,
+        // dose status or check-ins), so it coaches as it would anyone not on GLP-1.
+        let tracking = await MainActor.run { GLP1TrackingStore.shared.isTracking }
+        let glp1Logs = tracking ? ((try? await glp1Task) ?? []) : []
+        let shotCheckIns = tracking ? ((try? await shotCheckInTask) ?? []) : []
         let weightLogs = (try? await weightTask) ?? []
         let bodyGoals = (try? await bodyGoalsTask) ?? nil
         let activeCal = await activeCalTask
@@ -325,7 +328,7 @@ struct CoachContextBuilder {
             summaries: summaries,
             goal: goal,
             glp1Log: glp1Logs.first,
-            skippedDoses: try? await skippedDosesTask,
+            skippedDoses: tracking ? try? await skippedDosesTask : nil,
             shotCheckIn: shotCheckIns.first { $0.checkinDate == Date.now.isoDateString },
             weightLogs: weightLogs,
             bodyGoals: bodyGoals,
@@ -387,7 +390,7 @@ struct CoachContextBuilder {
             summaries: (try? await summariesTask) ?? [],
             movement: (try? await movementTask) ?? [],
             weightLogs: (try? await weightTask) ?? [],
-            checkIns: (try? await checkInTask) ?? [],
+            checkIns: await MainActor.run { GLP1TrackingStore.shared.isTracking } ? ((try? await checkInTask) ?? []) : [],
             foodNames: (try? await foodNamesTask) ?? [],
             proteinGoal: goal?.proteinG,
             units: units

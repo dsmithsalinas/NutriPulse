@@ -88,8 +88,10 @@ struct ProteinFloorWidgetView: View {
                 HStack(spacing: 8) {
                     quickAction(.addWater, icon: "drop.fill", label: "Add water",
                                 fill: Theme.Colors.sky, ink: Theme.Colors.skyAction)
-                    quickAction(.logDose, icon: "syringe.fill", label: "Log dose",
-                                fill: Theme.Colors.surfaceCard, ink: Theme.Colors.hero)
+                    if snapshot.showsDose ?? true {
+                        quickAction(.logDose, icon: "syringe.fill", label: "Log dose",
+                                    fill: Theme.Colors.surfaceCard, ink: Theme.Colors.hero)
+                    }
                 }
                 .frame(maxHeight: .infinity)
             }

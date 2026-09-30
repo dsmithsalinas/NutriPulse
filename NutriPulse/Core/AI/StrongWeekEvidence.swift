@@ -77,7 +77,9 @@ struct StrongWeekEvidenceBuilder {
             await MainActor.run { try? LocalStore.shared.fetchRecentWorkoutLogs(days: 29, userId: userId) }
         } else { nil }
         let nutrition = try? await nutritionTask
-        let experiences = (try? await experiencesTask) ?? []
+        // Shot-cycle check-ins are shot information: left out while tracking is paused or stopped.
+        let tracking = await MainActor.run { GLP1TrackingStore.shared.isTracking }
+        let experiences = tracking ? ((try? await experiencesTask) ?? []) : []
         let recentWorkouts = (workouts ?? []).filter { $0.logDate >= recentStart.isoDateString && $0.logDate < end.isoDateString }
         let baselineWorkouts = (workouts ?? []).filter { $0.logDate >= baselineStart.isoDateString && $0.logDate < recentStart.isoDateString }
         return .init(windowEndExclusive: end.isoDateString, nutritionAvailable: nutrition != nil,

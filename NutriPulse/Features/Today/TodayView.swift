@@ -492,16 +492,7 @@ struct TodayView: View {
         MovedTile(workouts: vm.workouts) { showMovement = true }
     }
 
-    // Days between the last shot and the next one due, from the dose schedule; weekly otherwise.
-    private var shotCycleLength: Int {
-        guard let log = vm.latestGLP1, let due = log.nextDueAt else { return 7 }
-        let days = Calendar.current.dateComponents(
-            [.day],
-            from: Calendar.current.startOfDay(for: log.injectedAt),
-            to: Calendar.current.startOfDay(for: due)
-        ).day ?? 7
-        return (1...14).contains(days) ? days : 7
-    }
+    private var shotCycleLength: Int { vm.latestGLP1?.cycleLengthDays ?? 7 }
 
     private func openWeeklyReminderIfNeeded() {
         guard appState.pendingStrongWeekReminder else { return }
@@ -519,6 +510,7 @@ struct TodayView: View {
                     medication: log.medication,
                     doseText: "\(log.doseMg.glp1DoseString) mg",
                     overdue: vm.doseStatus?.urgent ?? false,
+                    plannedFor: vm.doseSchedule.nextDue,
                     completed: false,
                     onTap: { showRitual = true },
                     onDismiss: { doseCardDismissedDay = Date.now.isoDateString }

@@ -8,6 +8,8 @@ struct DoseDayCard: View {
     let medication: String
     let doseText: String       // e.g. "2.5 mg"
     var overdue: Bool = false
+    /// When the dose was planned, for the past-due wording ("Planned for Aug 26").
+    var plannedFor: Date? = nil
     var completed: Bool = false
     var onTap: () -> Void = {}
     var onDismiss: (() -> Void)? = nil
@@ -50,10 +52,11 @@ struct DoseDayCard: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
                 PulseDot()
-                TileEyebrow(overdue ? "Shot planned" : "It\u{2019}s dose day", color: Theme.Colors.limeLabel)
+                TileEyebrow(overdue ? plannedLabel : "It\u{2019}s dose day", color: Theme.Colors.limeLabel)
             }
 
-            Text(overdue ? "Your shot log" : "Time for your shot")
+            // Past the planned day: factual and calm, never "overdue" (same voice as Pulse).
+            Text(overdue ? "Log it when you\u{2019}ve taken it" : "Time for your shot")
                 .font(Theme.Fonts.display(24, .bold, relativeTo: .title3))
                 .foregroundStyle(Theme.Colors.limeInk)
                 .padding(.top, 8)
@@ -73,6 +76,12 @@ struct DoseDayCard: View {
             .padding(.top, 16)
         }
         .padding(20)
+    }
+
+    private var plannedLabel: String {
+        guard let plannedFor else { return "Shot planned" }
+        if Calendar.current.isDateInYesterday(plannedFor) { return "Planned for yesterday" }
+        return "Planned for \(plannedFor.formatted(.dateTime.month(.abbreviated).day()))"
     }
 
     private var completedContent: some View {

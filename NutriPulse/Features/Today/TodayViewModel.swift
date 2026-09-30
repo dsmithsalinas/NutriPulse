@@ -420,14 +420,18 @@ final class TodayViewModel {
             SharedStore.save(ProteinFloorSnapshot(
                 proteinToday: totalProteinG,
                 proteinGoal: dailyGoal?.proteinG ?? 0,
-                updatedAt: .now
+                updatedAt: .now,
+                showsDose: GLP1TrackingStore.shared.isTracking
             ))
         }
 
         do {
             let schedule = try await glp1Task
-            latestGLP1 = schedule.latest
-            skippedDoses = schedule.skips
+            // Paused or stopped: Today acts as if there's no shot at all (no dose card, cycle
+            // tile, check-ins, or appetite-window nudges). The history itself is untouched.
+            let tracking = GLP1TrackingStore.shared.isTracking
+            latestGLP1 = tracking ? schedule.latest : nil
+            skippedDoses = tracking ? schedule.skips : []
             doseScheduleLoaded = true
             await NotificationManager.shared.reconcileGLP1Reminders(schedule: schedule)
         } catch {
@@ -435,7 +439,7 @@ final class TodayViewModel {
             errorMessage = "Couldn't refresh your shot schedule. Try again when you're connected."
         }
         if let context = try? await weekContextTask { strongWeekContext = context }
-        shotCycleCheckIns = (try? await shotCycleTask) ?? []
+        shotCycleCheckIns = GLP1TrackingStore.shared.isTracking ? ((try? await shotCycleTask) ?? []) : []
         bodyComp = await bodyCompTask
         latestWaistCm = ((try? await measurementRepo.fetchLatestPerSite()) ?? [:])[.waist]?.valueCm
         await loadHealthData()
@@ -764,11 +768,21 @@ final class TodayViewModel {
         }
     }
 
+    nonisolated static func newerWeightKg(weighIn: WeightLog?, saved: BodyCompositionLog?,
+                                          calendar: Calendar = .current) -> Double? {
+        guard let weighIn else { return saved?.weightKg }
+        guard let savedKg = saved?.weightKg,
+              let savedDay = saved.flatMap({ Date.fromISODateString($0.logDate) }) else { return weighIn.weightKg }
+        return calendar.startOfDay(for: weighIn.loggedAt) >= calendar.startOfDay(for: savedDay)
+            ? weighIn.weightKg : savedKg
+    }
+
     private func buildBodyCompData() async -> BodyCompositionData {
         let hk = HealthKitManager.shared
         var data = BodyCompositionData()
 
         async let savedTask = try? bodyCompRepo.fetchLatest()
+        async let latestWeighInTask = try? AnalyticsRepository().fetchLatestWeightLog()
         var hkWeight: HealthKitManager.HKMeasurement? = nil
         var hkBodyFat: HealthKitManager.HKMeasurement? = nil
         var hkBMI: HealthKitManager.HKMeasurement? = nil
@@ -824,8 +838,14 @@ final class TodayViewModel {
                         .execute()
                 }
             }
-        } else if let w = saved?.weightKg {
-            data.weightKg     = w
+        } else {
+            // Weigh-ins land in weight_logs (which Body and Progress read) as well as the
+            // composition table, and the two can drift. Show the newer one so Today's Body tile
+            // and the Body page agree; on the same day the timestamped weigh-in wins.
+            data.weightKg = Self.newerWeightKg(
+                weighIn: await latestWeighInTask,
+                saved: saved
+            )
             data.weightFromHK = false
         }
 

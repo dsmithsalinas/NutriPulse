@@ -136,6 +136,8 @@ final class NotificationManager {
     // Cancels any previous GLP-1 reminders and schedules fresh ones for `nextDueAt`:
     // a day-before nudge, a day-of reminder, and three daily overdue follow-ups.
     func scheduleGLP1Reminders(nextDueAt: Date) async {
+        // Paused or stopped: no shot reminders at all (GLP1TrackingStore restores them on resume).
+        guard GLP1TrackingStore.shared.isTracking else { cancelGLP1Reminders(); return }
         guard await requestPermissionIfNeeded() else { return }
 
         cancelGLP1Reminders()
@@ -177,6 +179,10 @@ final class NotificationManager {
         }
     }
 
+    func hasGLP1RemindersScheduled() async -> Bool {
+        await center.pendingNotificationRequests().contains { $0.identifier.hasPrefix("glp1-") }
+    }
+
     func cancelGLP1Reminders() {
         center.removePendingNotificationRequests(withIdentifiers: Self.allIdentifiers)
         center.removeDeliveredNotifications(withIdentifiers: Self.allIdentifiers)
@@ -185,6 +191,7 @@ final class NotificationManager {
     // Reconcile a changed schedule without turning notifications back on for someone who
     // disabled them. Used for skips, undo, history edits, and cross-device refreshes.
     func reconcileGLP1Reminders(schedule: GLP1DoseSchedule) async {
+        guard GLP1TrackingStore.shared.isTracking else { cancelGLP1Reminders(); return }
         let pending = await center.pendingNotificationRequests()
         let wasEnabled = pending.contains(where: { $0.identifier.hasPrefix("glp1-") })
         cancelGLP1Reminders()

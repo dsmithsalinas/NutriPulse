@@ -40,7 +40,8 @@ final class ProgressSummaryViewModel {
 
             guard !Task.isCancelled else { return }
             summaries = loadedSummaries
-            shots = loadedShots
+            // Paused or stopped: summaries read without shot cycles.
+            shots = GLP1TrackingStore.shared.isTracking ? loadedShots : []
             proteinGoal = goal?.proteinG
         } catch {
             guard !Task.isCancelled else { return }

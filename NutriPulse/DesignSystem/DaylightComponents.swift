@@ -127,6 +127,7 @@ struct MeterBar: View {
 /// `MeterBar`'s draw-in. Under Reduce Motion it's simply shown.
 /// Usage: `Chart { ... }.chartDrawIn()`
 struct ChartDrawIn: ViewModifier {
+    private static let outset: CGFloat = 24
     var delay: Double = 0.1
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealed = false
@@ -134,8 +135,13 @@ struct ChartDrawIn: ViewModifier {
     func body(content: Content) -> some View {
         content
             .mask(alignment: .leading) {
+                // Outset past the frame: Swift Charts draws edge axis labels (the top y value)
+                // slightly outside the chart's bounds, and a mask cut exactly to size clipped them.
                 GeometryReader { geo in
-                    Rectangle().frame(width: geo.size.width * (revealed || reduceMotion ? 1 : 0))
+                    Rectangle()
+                        .frame(width: (geo.size.width + Self.outset * 2) * (revealed || reduceMotion ? 1 : 0),
+                               height: geo.size.height + Self.outset * 2)
+                        .offset(x: -Self.outset, y: -Self.outset)
                 }
             }
             .onAppear {
