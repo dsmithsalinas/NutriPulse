@@ -34,21 +34,25 @@ struct BodyCompositionCard: View {
                 chip(
                     value: data.weightKg.map { String(format: "%.1f", units.weightInput(from: $0)) },
                     label: "WEIGHT \(units.weightUnit.uppercased())",
+                    spokenUnit: units.spokenWeightUnit,
                     color: Theme.Colors.primary
                 )
                 chip(
                     value: data.bodyFatPct.map { String(format: "%.1f%%", $0) },
                     label: "BODY FAT",
+                    spokenUnit: "percent body fat",
                     color: Theme.Colors.accent
                 )
                 chip(
                     value: data.lbmKg.map { String(format: "%.1f", units.weightInput(from: $0)) },
                     label: "LEAN \(units.weightUnit.uppercased())",
+                    spokenUnit: "\(units.spokenWeightUnit) lean mass",
                     color: Theme.NutrientColor.fiber
                 )
                 chip(
                     value: waistCm.map { String(format: "%.1f", units.lengthInput(fromCm: $0)) },
                     label: "WAIST \(units.lengthUnit.uppercased())",
+                    spokenUnit: "\(units.spokenLengthUnit) waist",
                     color: Theme.NutrientColor.water
                 )
             }
@@ -67,7 +71,7 @@ struct BodyCompositionCard: View {
         .onTapGesture(perform: onOpen)
     }
 
-    private func chip(value: String?, label: String, color: Color) -> some View {
+    private func chip(value: String?, label: String, spokenUnit: String, color: Color) -> some View {
         VStack(spacing: 3) {
             Text(value ?? "\u{2014}")
                 .font(Theme.Fonts.number(14, .bold, relativeTo: .caption))
@@ -83,5 +87,7 @@ struct BodyCompositionCard: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(value.map { "\($0) \(spokenUnit)" } ?? "\(spokenUnit), no data")
     }
 }

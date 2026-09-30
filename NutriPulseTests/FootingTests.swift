@@ -521,6 +521,58 @@ final class GoalDraftTests: XCTestCase {
         draft.title = "Stretch after lunch"
         XCTAssertTrue(draft.isValid)
     }
+
+    // A weight goal always stores kg (its target is compared directly against weightKg log
+    // values by GoalProgressCalculator) — the unit system only converts at the display edge,
+    // in CreateGoalView and GoalsView.
+    func testWeightGoalDefaultsToKilogramStorage() {
+        var draft = GoalDraft()
+        draft.select(.bodyLogs)
+        XCTAssertEqual(draft.sourceMetric, .weight)
+        XCTAssertEqual(draft.targetValue, 75)
+        XCTAssertEqual(draft.unit, "kg")
+        XCTAssertEqual(draft.displayTargetValue, 75, accuracy: 0.0001)
+    }
+}
+
+// MARK: - GoalMeasurement display conversion (weight goals always store kg)
+
+final class GoalMeasurementUnitDisplayTests: XCTestCase {
+    private func weightMeasurement(target: Double = 75) -> GoalMeasurement {
+        GoalMeasurement(
+            id: UUID(), goalVersionId: UUID(), userId: UUID(), role: "primary",
+            name: "Reach a weight", kind: .target, aggregation: .latest,
+            comparison: .reach, targetValue: target, unit: "kg",
+            sourceType: .automatic, sourceMetric: .weight,
+            minimumCoverage: 0, createdAt: .now
+        )
+    }
+
+    func testWeightDisplayValueConvertsStoredKilogramsToPoundsForImperial() {
+        let measurement = weightMeasurement()
+        XCTAssertEqual(measurement.displayValue(75, units: .metric), 75, accuracy: 0.001)
+        XCTAssertEqual(measurement.displayValue(75, units: .imperial), 75 * 2.20462, accuracy: 0.01)
+    }
+
+    // The stored "kg" descriptor never reflects the user's choice — displayUnit always
+    // derives the label from `units` instead for a weight goal.
+    func testWeightDisplayUnitIgnoresTheStoredKgStringForImperial() {
+        let measurement = weightMeasurement()
+        XCTAssertEqual(measurement.displayUnit(.metric), "kg")
+        XCTAssertEqual(measurement.displayUnit(.imperial), "lbs")
+    }
+
+    func testNonWeightMeasurementPassesValueAndUnitThroughUnchanged() {
+        let sleep = GoalMeasurement(
+            id: UUID(), goalVersionId: UUID(), userId: UUID(), role: "primary",
+            name: "Sleep", kind: .average, aggregation: .average,
+            comparison: .atLeast, targetValue: 8, unit: "hours",
+            sourceType: .automatic, sourceMetric: .sleepDuration,
+            minimumCoverage: 0, createdAt: .now
+        )
+        XCTAssertEqual(sleep.displayValue(8, units: .imperial), 8)
+        XCTAssertEqual(sleep.displayUnit(.imperial), "hours")
+    }
 }
 
 // MARK: - Protein floor (built-in goal)
@@ -745,6 +797,27 @@ final class InsightEngineTests: XCTestCase {
             waist: []
         )
         XCTAssertTrue(milestones.contains { $0.title == "Lean mass held" })
+    }
+
+    // Defaults to metric so existing callers that don't pass `units` keep their old behavior.
+    func testBodyMilestoneWaistDetailDefaultsToCentimeters() {
+        let milestones = BodyMilestoneEngine.detect(
+            weight: [], leanMass: [],
+            waist: [(day(-30), 90), (day(0), 87)]
+        )
+        let waist = milestones.first { $0.title == "Waist trend moved" }
+        XCTAssertEqual(waist?.detail, "Your waist measurement is down 3.0 cm across this view.")
+    }
+
+    func testBodyMilestoneWaistDetailConvertsToInchesForImperial() {
+        let milestones = BodyMilestoneEngine.detect(
+            weight: [], leanMass: [],
+            waist: [(day(-30), 90), (day(0), 87)],
+            units: .imperial
+        )
+        let waist = milestones.first { $0.title == "Waist trend moved" }
+        // 3 cm is 1.18 in.
+        XCTAssertEqual(waist?.detail, "Your waist measurement is down 1.2 in across this view.")
     }
 }
 
@@ -2366,6 +2439,34 @@ final class HeightConversionTests: XCTestCase {
     }
 }
 
+// MARK: - Weight-change / spoken-unit formatting
+
+final class UnitSystemFormattingTests: XCTestCase {
+    func testFormatWeightChangeSignsAndConvertsForImperial() {
+        // 2.4 kg down ≈ 5.3 lbs down.
+        XCTAssertEqual(UnitSystem.imperial.formatWeightChange(-2.4), "\u{2212}5.3 lbs")
+        // 0.5 kg up ≈ 1.1 lbs up.
+        XCTAssertEqual(UnitSystem.imperial.formatWeightChange(0.5), "+1.1 lbs")
+    }
+
+    func testFormatWeightChangeStaysInKgForMetric() {
+        XCTAssertEqual(UnitSystem.metric.formatWeightChange(-2.4), "\u{2212}2.4 kg")
+        XCTAssertEqual(UnitSystem.metric.formatWeightChange(1.1), "+1.1 kg")
+    }
+
+    func testFormatWeightChangeCallsATinyDeltaStable() {
+        XCTAssertEqual(UnitSystem.metric.formatWeightChange(0.02), "Stable")
+        XCTAssertEqual(UnitSystem.imperial.formatWeightChange(-0.02), "Stable")
+    }
+
+    func testSpokenUnitsSpellOutTheAbbreviation() {
+        XCTAssertEqual(UnitSystem.metric.spokenWeightUnit, "kilograms")
+        XCTAssertEqual(UnitSystem.imperial.spokenWeightUnit, "pounds")
+        XCTAssertEqual(UnitSystem.metric.spokenLengthUnit, "centimeters")
+        XCTAssertEqual(UnitSystem.imperial.spokenLengthUnit, "inches")
+    }
+}
+
 // MARK: - GLP-1 decoding
 
 final class GLP1LogDecodingTests: XCTestCase {
@@ -3316,6 +3417,12 @@ final class BodyMeasurementTests: XCTestCase {
         // Metric is identity in both directions.
         XCTAssertEqual(UnitSystem.metric.cmFromLength(96.5), 96.5)
         XCTAssertEqual(UnitSystem.metric.lengthInput(fromCm: 96.5), 96.5)
+    }
+
+    func testFormatLengthUsesTheSelectedUnit() {
+        XCTAssertEqual(UnitSystem.metric.formatLength(96.5), "96.5 cm")
+        // 96.52 cm is 38.0 in.
+        XCTAssertEqual(UnitSystem.imperial.formatLength(96.52), "38.0 in")
     }
 
     func testUnknownSiteDecodesWithoutCrashing() throws {

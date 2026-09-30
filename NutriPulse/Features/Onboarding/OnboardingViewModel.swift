@@ -81,9 +81,9 @@ enum WeightGoal: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .lose:     return "500 kcal/day deficit (~1 lb/week)"
+        case .lose:     return "500 kcal/day deficit (~1 lbs/week)"
         case .maintain: return "Match your energy expenditure"
-        case .gain:     return "250 kcal/day surplus (~0.5 lb/week)"
+        case .gain:     return "250 kcal/day surplus (~0.5 lbs/week)"
         }
     }
 

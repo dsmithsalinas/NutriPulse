@@ -494,6 +494,9 @@ private struct GoalCompactRow: View {
     let state: GoalCardState
     let onTap: () -> Void
 
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
+
     private var measurement: GoalMeasurement? { state.measurement }
     private var hasNumericProgress: Bool {
         measurement?.sourceType == .automatic && state.progress.value != nil && state.progress.target != nil
@@ -536,12 +539,15 @@ private struct GoalCompactRow: View {
 
     private var valueLine: String {
         guard let value = state.progress.value else { return "Not enough data" }
-        let formatted = value.formatted(.number.precision(.fractionLength(0...1)))
+        let displayValue = measurement?.displayValue(value, units: units) ?? value
+        let unit = measurement?.displayUnit(units) ?? ""
+        let formatted = displayValue.formatted(.number.precision(.fractionLength(0...1)))
         if let target = state.progress.target {
-            return "\(formatted) · floor \(target.formatted(.number.precision(.fractionLength(0...1)))) \(measurement?.unit ?? "")"
+            let displayTarget = measurement?.displayValue(target, units: units) ?? target
+            return "\(formatted) · floor \(displayTarget.formatted(.number.precision(.fractionLength(0...1)))) \(unit)"
                 .trimmingCharacters(in: .whitespaces)
         }
-        return "\(formatted) \(measurement?.unit ?? "")".trimmingCharacters(in: .whitespaces)
+        return "\(formatted) \(unit)".trimmingCharacters(in: .whitespaces)
     }
 
     private var symbol: String {
@@ -1138,6 +1144,9 @@ private struct GoalDayDetailView: View {
     let selection: GoalDaySelection
     let onAskPulse: () -> Void
 
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
+
     private var measurement: GoalMeasurement? { state.measurement }
     private var value: GoalDailyValue? {
         state.values.last { Calendar.current.isDate($0.date, inSameDayAs: selection.date) }
@@ -1230,7 +1239,9 @@ private struct GoalDayDetailView: View {
             return "\(format(actual)) g of \(format(target)) g"
         }
         if let number = value.number {
-            return "\(format(number)) \(measurement?.unit ?? "")"
+            let displayValue = measurement?.displayValue(number, units: units) ?? number
+            let unit = measurement?.displayUnit(units) ?? ""
+            return "\(format(displayValue)) \(unit)"
         }
         if let boolean = value.boolean {
             return boolean ? "Recorded as completed" : "Recorded as not completed"
@@ -1262,6 +1273,9 @@ private struct GoalDayDetailView: View {
 private struct GoalAutomaticProgress: View {
     let state: GoalCardState
 
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
@@ -1284,8 +1298,10 @@ private struct GoalAutomaticProgress: View {
 
     private var valueLabel: String {
         guard let value = state.progress.value else { return "No data yet" }
-        let unit = state.measurement?.unit.map { " \($0)" } ?? ""
-        return "\(value.formatted(.number.precision(.fractionLength(0))))\(unit)"
+        let displayValue = state.measurement?.displayValue(value, units: units) ?? value
+        let unitLabel = state.measurement?.displayUnit(units)
+        let unit = unitLabel.map { $0.isEmpty ? "" : " \($0)" } ?? ""
+        return "\(displayValue.formatted(.number.precision(.fractionLength(0))))\(unit)"
     }
 }
 
@@ -1320,6 +1336,9 @@ private struct GoalDetailView: View {
     let onBooleanCheckin: (Bool) -> Void
     let onRatingCheckin: (Double) -> Void
     let onAskPulse: () -> Void
+
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
     var body: some View {
         ScrollView {
@@ -1386,14 +1405,15 @@ private struct GoalDetailView: View {
     private var targetDescription: String {
         guard let measurement = state.measurement,
               let target = measurement.targetValue else { return "Track progress" }
-        let formatted = target.formatted(.number.precision(.fractionLength(0...1)))
+        let displayTarget = measurement.displayValue(target, units: units)
+        let formatted = displayTarget.formatted(.number.precision(.fractionLength(0...1)))
         switch measurement.kind {
         case .frequency:
             return "\(formatted) \(measurement.unit ?? "times") per \(periodNoun)"
         case .habit where measurement.aggregation == .rate:
             return "\((target * 100).formatted(.number.precision(.fractionLength(0))))% of measured days"
         default:
-            return "\(formatted) \(measurement.unit ?? "")".trimmingCharacters(in: .whitespaces)
+            return "\(formatted) \(measurement.displayUnit(units))".trimmingCharacters(in: .whitespaces)
         }
     }
 
