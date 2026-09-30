@@ -133,6 +133,10 @@ targets:
     sources:
       - path: NutriPulseWidgets
       - path: Shared
+      # Daylight in the widget: the same theme tokens and fonts as the app.
+      - path: NutriPulse/DesignSystem/Theme.swift
+      - path: NutriPulse/Resources/Fonts
+        buildPhase: resources
     info:
       path: NutriPulseWidgets/Info.plist
       properties:
@@ -144,6 +148,14 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        UIAppFonts:
+          - BricolageGrotesque-Medium.ttf
+          - BricolageGrotesque-Bold.ttf
+          - BricolageGrotesque-ExtraBold.ttf
+          - Figtree-Regular.ttf
+          - Figtree-Medium.ttf
+          - Figtree-SemiBold.ttf
+          - Figtree-Bold.ttf
     entitlements:
       path: NutriPulseWidgets/NutriPulseWidgets.entitlements
       properties:

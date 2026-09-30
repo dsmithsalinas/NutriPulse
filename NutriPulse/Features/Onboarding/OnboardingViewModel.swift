@@ -79,11 +79,13 @@ enum WeightGoal: String, CaseIterable, Identifiable {
         }
     }
 
-    var detail: String {
+    /// In the units the user picked on the height and weight step, so a metric user never sees
+    /// pounds here (and "~1 lb", singular).
+    func detail(imperial: Bool) -> String {
         switch self {
-        case .lose:     return "500 kcal/day deficit (~1 lbs/week)"
+        case .lose:     return "500 kcal/day deficit (~\(imperial ? "1 lb" : "0.5 kg")/week)"
         case .maintain: return "Match your energy expenditure"
-        case .gain:     return "250 kcal/day surplus (~0.5 lbs/week)"
+        case .gain:     return "250 kcal/day surplus (~\(imperial ? "0.5 lb" : "0.25 kg")/week)"
         }
     }
 

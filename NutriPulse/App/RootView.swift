@@ -23,6 +23,8 @@ struct RootView: View {
                 profilePreview
             } else if isOnboardingPreview {
                 onboardingPreview
+            } else if isWidgetPreview {
+                widgetPreview
             } else if isGoalBuilderPreview {
                 CreateGoalView(
                     vm: GoalsViewModel(),
@@ -165,6 +167,24 @@ struct RootView: View {
     @ViewBuilder private var onboardingPreview: some View {
         #if DEBUG
         OnboardingView.preview()
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--widget-preview`: every Protein Floor widget size, as the widget draws them, with a
+    // partly-filled and a cleared floor.
+    private var isWidgetPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--widget-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var widgetPreview: some View {
+        #if DEBUG
+        WidgetGalleryPreview()
         #else
         EmptyView()
         #endif
