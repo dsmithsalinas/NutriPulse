@@ -9,6 +9,15 @@ import SwiftUI
 struct ProteinTile: View {
     let proteinG: Double
     let goalG: Double?
+    /// Keeps the tile indigo after protein crosses the floor, while Today waits to play the
+    /// moment to a watching user (the logging sheet is usually still up).
+    var holdsClear: Bool = false
+    /// Incremented to play the floor-cleared moment: the lime flood is already under way from
+    /// `holdsClear` lifting; this adds the fizz above the tile and the number's bounce.
+    var celebration: Int = 0
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var bounce = false
 
     private var level: Double {
         guard let goalG, goalG > 0 else { return 0 }
@@ -24,15 +33,24 @@ struct ProteinTile: View {
         return remaining > 0 ? "\(remaining)g to go" : "Floor cleared"
     }
 
+    /// Past the floor: the tile turns lime for the rest of the day, matching the widget.
+    private var showsClear: Bool {
+        guard let remaining else { return false }
+        return remaining <= 0 && !holdsClear
+    }
+
+    private var ink: Color { showsClear ? Theme.Colors.limeInk : .white }
+    private var label: Color { showsClear ? Theme.Colors.limeLabel : Theme.Colors.heroLabel }
+
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
-                TileEyebrow("Protein", color: Theme.Colors.heroLabel)
+                TileEyebrow("Protein", color: label)
                 Spacer(minLength: 4)
                 if let goalG {
                     Text("floor \(Int(goalG.rounded()))")
                         .font(Theme.Fonts.body(12, .semibold))
-                        .foregroundStyle(Theme.Colors.heroLabel)
+                        .foregroundStyle(label)
                 }
             }
             Spacer(minLength: 12)
@@ -42,26 +60,109 @@ struct ProteinTile: View {
                     Text("g")
                         .font(Theme.Fonts.display(22, relativeTo: .title2))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(ink)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
+                .scaleEffect(bounce ? 1.12 : 1, anchor: .bottomLeading)
                 Text(status)
                     .font(Theme.Fonts.body(14, .semibold))
-                    .foregroundStyle(Theme.Colors.heroSubtext)
+                    .foregroundStyle(showsClear ? Theme.Colors.limeLabel : Theme.Colors.heroSubtext)
             }
         }
+        // The ink turns as the lime reaches the numbers near the bottom, early in the flood.
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2).delay(0.08), value: showsClear)
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 260, maxHeight: .infinity, alignment: .topLeading)
         .background {
             ZStack {
                 Theme.Colors.heroDeep
                 LiquidFill(level: level, color: Theme.Colors.hero)
+                // Lime floods up through the indigo when the floor is cleared.
+                LiquidFill(level: showsClear ? 1 : 0, color: Theme.Colors.lime, change: Self.flood)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
+        .overlay(alignment: .top) { FloorClearedFizz(trigger: celebration) }
+        .onChange(of: celebration) { _, new in
+            guard new > 0, !reduceMotion else { return }
+            // Once the flood reaches the top: the count pops as the bubbles leave.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.5)) { bounce = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) { bounce = false }
+                }
+            }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(goalG.map { "Protein \(Int(proteinG.rounded())) of \(Int($0.rounded())) grams. \(status)" }
             ?? "Protein \(Int(proteinG.rounded())) grams")
+    }
+}
+
+extension ProteinTile {
+    /// Quicker and more decisive than the gram fill: the lime should arrive as one moment.
+    static let flood = Animation.timingCurve(0.45, 0, 0.2, 1, duration: 0.8)
+}
+
+/// A handful of lime bubbles that rise off the top of the protein tile and pop, played once
+/// per `trigger` increment after the lime flood tops out. Nothing under Reduce Motion.
+private struct FloorClearedFizz: View {
+    let trigger: Int
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var burst: Int? = nil
+
+    // x across the tile (0…1), diameter, rise above the tile's top edge, and start delay.
+    private static let bubbles: [(x: CGFloat, size: CGFloat, rise: CGFloat, delay: Double)] = [
+        (0.16, 15, 64, 0.00), (0.30, 10, 92, 0.09), (0.44, 18, 56, 0.04), (0.58, 11, 104, 0.14),
+        (0.70, 14, 78, 0.06), (0.84, 9, 60, 0.18), (0.36, 12, 116, 0.11),
+    ]
+
+    var body: some View {
+        GeometryReader { geo in
+            if let burst {
+                ForEach(Self.bubbles.indices, id: \.self) { i in
+                    let b = Self.bubbles[i]
+                    FizzBubble(size: b.size, rise: b.rise, delay: b.delay)
+                        .position(x: geo.size.width * b.x, y: 10)
+                }
+                .id(burst)
+            }
+        }
+        .frame(height: 20)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onChange(of: trigger) { _, new in
+            guard new > 0, !reduceMotion else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                burst = new
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+                    if burst == new { burst = nil }
+                }
+            }
+        }
+    }
+}
+
+private struct FizzBubble: View {
+    let size: CGFloat
+    let rise: CGFloat
+    let delay: Double
+    @State private var risen = false
+    @State private var popped = false
+
+    var body: some View {
+        Circle()
+            .fill(Theme.Colors.lime)
+            .overlay(Circle().strokeBorder(Theme.Colors.limeLine, lineWidth: 1.5))
+            .frame(width: size, height: size)
+            .scaleEffect(popped ? 1.6 : (risen ? 1 : 0.3))
+            .opacity(popped ? 0 : (risen ? 1 : 0))
+            .offset(y: risen ? -rise : 0)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.7).delay(delay)) { risen = true }
+                withAnimation(.easeOut(duration: 0.2).delay(delay + 0.62)) { popped = true }
+            }
     }
 }
 
@@ -70,6 +171,8 @@ struct ProteinTile: View {
 struct LiquidFill: View {
     let level: Double
     let color: Color
+    /// How later level changes move; the first appear always uses the gentle fill-in.
+    var change: Animation = Theme.Motion.fill
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shown: Double = 0
@@ -87,7 +190,7 @@ struct LiquidFill: View {
             withAnimation(Theme.Motion.fill.delay(0.3)) { shown = level }
         }
         .onChange(of: level) { _, new in
-            withAnimation(reduceMotion ? nil : Theme.Motion.fill) { shown = new }
+            withAnimation(reduceMotion ? nil : change) { shown = new }
         }
         .accessibilityHidden(true)
     }
@@ -104,14 +207,17 @@ private struct WaveShape: Shape {
     }
 
     func path(in rect: CGRect) -> Path {
-        let surface = rect.maxY - rect.height * CGFloat(min(max(level, 0), 1))
+        let clamped = min(max(level, 0), 1)
+        let surface = rect.maxY - rect.height * CGFloat(clamped)
+        // The wave flattens as the liquid reaches the brim, so a full tile has no indigo gaps.
+        let swell = self.amplitude * CGFloat(min(1, (1 - clamped) * 8))
         let wavelength = rect.width / 1.4
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: surface))
         var x = rect.minX
         while x <= rect.maxX {
             let angle = (Double(x / wavelength) + phase) * 2 * .pi
-            path.addLine(to: CGPoint(x: x, y: surface + CGFloat(sin(angle)) * amplitude))
+            path.addLine(to: CGPoint(x: x, y: surface + CGFloat(sin(angle)) * swell))
             x += 2
         }
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))

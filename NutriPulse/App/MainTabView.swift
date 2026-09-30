@@ -29,7 +29,7 @@ struct MainTabView: View {
 
     // Today only celebrates the protein goal once it's actually on screen — the tab is
     // selected and the logging sheet is down. Logging is what pushes protein over the line,
-    // so without this the ripple fires behind the sheet and is over before the user sees it.
+    // so without this the floor-cleared moment plays behind the sheet and is over before the user sees it.
     private var todayIsFrontmost: Bool {
         selectedTab == .today && !showLogger
     }

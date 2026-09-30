@@ -19,8 +19,10 @@ struct TodayView: View {
     @State private var showShotCycleCheckIn = false
     @State private var repeatedMealRoute: SmartNotificationRoute? = nil
     @State private var ringCelebrationTrigger = 0
-    @State private var proteinRippleTrigger = 0
+    @State private var proteinCelebrationTrigger = 0
     @State private var proteinCelebrationPending = false
+    // Between the latch clearing and the moment playing (the short delay below).
+    @State private var proteinCelebrationInFlight = false
     @State private var editingLog: FoodLog? = nil
     @State private var showWaterPicker = false
     @State private var showMovement = false
@@ -52,14 +54,15 @@ struct TodayView: View {
     // Settings page, so openSettingsURLString would drop the user somewhere with no
     // Health controls at all. Fall back to it only if the Health app can't be opened.
     // Plays a latched protein win, but only with Today actually in front of the user. The short
-    // delay lets the ring spring up to full first, so the ripple reads as the ring completing
-    // rather than firing over a half-drawn ring the instant the sheet clears.
+    // delay lets the sheet finish sliding away, so the lime flood is seen from its start.
     private func playProteinCelebrationIfVisible() {
         guard proteinCelebrationPending, isFrontmost, !showProteinRescue,
               !showRecoveryLogger, vm.isToday else { return }
         proteinCelebrationPending = false
+        proteinCelebrationInFlight = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            proteinRippleTrigger += 1
+            proteinCelebrationInFlight = false
+            proteinCelebrationTrigger += 1
             // The generic ring-close haptic already covers the all-rings case, so only buzz
             // here when protein hit on its own.
             if !vm.justClosedAllRings {
@@ -319,6 +322,24 @@ struct TodayView: View {
                 if vm.isToday { await strongWeek.load() }
                 openWeeklyReminderIfNeeded()
             }
+            #if DEBUG
+            // --floor-cleared-preview (with --tour for data): tops protein up past the floor two
+            // seconds in and plays the moment through the real latch, to review the animation.
+            .task {
+                guard ProcessInfo.processInfo.arguments.contains("--floor-cleared-preview"),
+                      let goal = vm.dailyGoal?.proteinG, vm.totalProteinG < goal,
+                      let sample = vm.foodLogs.first else { return }
+                try? await Task.sleep(for: .seconds(2))
+                vm.foodLogs.append(FoodLog(
+                    id: UUID(), userId: sample.userId, loggedAt: .now, logDate: sample.logDate, meal: .snack,
+                    foodItemId: UUID(), quantity: 1, caloriesSnapshot: 180,
+                    proteinGSnapshot: goal - vm.totalProteinG + 6, carbsGSnapshot: 8, fatGSnapshot: 4,
+                    fiberGSnapshot: 0, foodItems: .init(name: "Protein shake", brand: nil, servingDesc: "1 bottle")
+                ))
+                proteinCelebrationPending = true
+                playProteinCelebrationIfVisible()
+            }
+            #endif
             .onChange(of: vm.justClosedAllRings) { _, justClosed in
                 guard vm.isToday, justClosed else { return }
                 ringCelebrationTrigger += 1
@@ -416,9 +437,14 @@ struct TodayView: View {
         let showsShotCycle = cycleDay != nil && !vm.doseSchedule.cycleInterrupted
         return VStack(spacing: Theme.Spacing.tileGap) {
             HStack(alignment: .top, spacing: Theme.Spacing.tileGap) {
-                ProteinTile(proteinG: vm.totalProteinG, goalG: vm.dailyGoal?.proteinG)
+                ProteinTile(
+                    proteinG: vm.totalProteinG,
+                    goalG: vm.dailyGoal?.proteinG,
+                    // Stay indigo until the moment can play to someone watching.
+                    holdsClear: vm.isToday && (proteinCelebrationPending || proteinCelebrationInFlight),
+                    celebration: proteinCelebrationTrigger
+                )
                     .celebrationBeat(trigger: ringCelebrationTrigger)
-                    .proteinRipple(trigger: proteinRippleTrigger, anchorY: 146)
                     .popIn(order: 2)
                 VStack(spacing: Theme.Spacing.tileGap) {
                     CaloriesTile(

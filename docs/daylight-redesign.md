@@ -69,7 +69,7 @@ Each step is its own branch, stacked in order; each was built, tested and checke
 | Secondary screens | `daylight/pulse-structured` | Every screen reached from the main tabs (Analytics, summaries, goal builder, experiments, notification and dose settings, Today's lower cards and sheets, Strong Week, Body, onboarding, sign-in), built on shared chrome in `DesignSystem/DaylightChrome.swift`: pushed pages use `DaylightPageTitle` + `.daylightSubpage`, sheets use `SheetHeader`, settings forms use `.daylightForm()` |
 | Remaining screens | `daylight/screens` | Progress (floor-days hero, trend vs the previous period, stat tiles), Goals (hero goal, experiment tile), Shot day (hold to log, with an immediate VoiceOver path), Profile (targets hero, grouped setting tiles) |
 
-Debug launch flags for checking screens without an account (`--tour` turns on all of them, with the tab bar, to click through the whole app): `--pulse-preview`, `--water-preview`, `--log-preview`, `--shot-preview`, `--profile-preview`, `--onboarding-preview`, `--widget-preview`, `--store-today`, `--store-food`, `--progress-preview`, `--goals-preview`.
+Debug launch flags for checking screens without an account (`--tour` turns on all of them, with the tab bar, to click through the whole app): `--pulse-preview`, `--water-preview`, `--log-preview`, `--shot-preview`, `--profile-preview`, `--onboarding-preview`, `--widget-preview`, `--store-today`, `--store-food`, `--progress-preview`, `--goals-preview`. `--floor-cleared-preview` (not part of `--tour`; use with it) tops protein past the floor two seconds in and plays the floor-cleared moment.
 
 ### Known gaps
 
@@ -92,6 +92,7 @@ Debug launch flags for checking screens without an account (`--tour` turns on al
 ## Units and the widget (Sep 30)
 
 - **Units:** storage stays kg and cm; every screen converts through `UnitSystem`, and imperial reads "lbs" and inches everywhere (weight goals included). Pulse receives `user.units` and weights already in the user's units, and a UNITS prompt rule converts kg-named fields (body goals) before it speaks. Verified live: an 80 kg target comes back as 176.0 lbs.
+- **Floor cleared (Today):** replaces the old ring ripple. When protein crosses the floor, lime floods up through the protein tile, a few lime bubbles rise off its top and pop, and the gram count bounces, with the success haptic. The tile stays lime for the rest of the day (as the widget does). It waits until Today is on screen, holding indigo while the logging sheet is up. Reduce Motion: the tile just turns lime.
 - **Widget:** the Protein Floor widget uses the Daylight theme and fonts (Theme.swift and the fonts are compiled into the extension; PulseMark moved to `Shared/`). Its views live in `Shared/ProteinFloorWidgetViews.swift` so the app can show them under `--widget-preview`.
 
 ## Process rule

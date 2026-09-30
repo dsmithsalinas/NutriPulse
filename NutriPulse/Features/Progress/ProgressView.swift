@@ -18,6 +18,10 @@ struct ProgressDashboardView: View {
     @State private var analytics = AnalyticsViewModel()
     @State private var goals = GoalsViewModel()
     @State private var selectedRange: ProgressRange = .month
+    /// The range `analytics.summaries` actually holds. The picker moves first; the hero graphic
+    /// follows only once the new data lands, or Week would briefly draw the month's 30 days as
+    /// fixed-size squares and push the page sideways.
+    @State private var loadedRange: ProgressRange = .month
     @State private var previousSummaries: [DailySummary] = []
     @State private var experimentCount = 0
     @State private var showExperiments = false
@@ -39,7 +43,7 @@ struct ProgressDashboardView: View {
                         progressErrorState
                     } else {
                         FloorDaysHero(
-                            range: selectedRange,
+                            range: loadedRange,
                             summaries: analytics.summaries,
                             proteinGoal: analytics.goalProteinG,
                             trend: trend
@@ -276,8 +280,10 @@ struct ProgressDashboardView: View {
     // MARK: - Loading
 
     private func loadAnalytics() async {
-        analytics.selectedRange = selectedRange.analyticsRange
+        let requested = selectedRange
+        analytics.selectedRange = requested.analyticsRange
         await analytics.loadData()
+        if !Task.isCancelled, selectedRange == requested { loadedRange = requested }
     }
 
     private func loadPreviousPeriod() async {
@@ -300,13 +306,15 @@ struct ProgressDashboardView: View {
         let calendar = Calendar.current
         let window = selectedRange.previousWindow()
         let dayCount = (calendar.dateComponents([.day], from: window.lowerBound, to: window.upperBound).day ?? 0) + 1
+        // Relative to the preview's own floor, so the pill reads "Up from 12", not "Up from 0".
+        let floor = analytics.goalProteinG ?? 130
         previousSummaries = (0..<dayCount).map { offset in
             let date = calendar.date(byAdding: .day, value: offset, to: window.lowerBound) ?? window.lowerBound
             let isBelow = offset % 3 == 0
             return DailySummary(
                 date: date,
                 calories: isBelow ? 1_180 : 1_460,
-                proteinG: isBelow ? 94 : 128,
+                proteinG: isBelow ? floor - 30 : floor + 4,
                 carbsG: 122, fatG: 48, fiberG: 22
             )
         }
@@ -371,12 +379,15 @@ private struct FloorDaysHero: View {
                 }
                 Spacer(minLength: 8)
                 if let trend {
+                    // Lime means "good" across Daylight, so only an improvement gets it; a dip or
+                    // no change sits in a quiet glass pill rather than celebrating a decline.
+                    let improved = trend.direction == .up
                     Text(trend.label)
                         .font(Theme.Fonts.body(13, .bold))
-                        .foregroundStyle(Theme.Colors.limeInk)
+                        .foregroundStyle(improved ? Theme.Colors.limeInk : .white)
                         .padding(.horizontal, 10)
                         .frame(height: 30)
-                        .background(Theme.Colors.lime, in: Capsule())
+                        .background(improved ? Theme.Colors.lime : Color.white.opacity(0.14), in: Capsule())
                 }
             }
 
@@ -421,12 +432,15 @@ private struct FloorDaysGraphic: View {
         HStack(spacing: 6) {
             ForEach(Array(summaries.enumerated()), id: \.offset) { index, summary in
                 VStack(spacing: 6) {
+                    // Flexible squares: a longer list shrinks them instead of widening the page.
                     dayMark(for: summary)
-                        .frame(width: 36, height: 36)
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(maxWidth: 36)
                     Text(summary.date.formatted(.dateTime.weekday(.narrow)))
                         .font(Theme.Fonts.body(11, .semibold))
                         .foregroundStyle(Theme.Colors.heroLabel)
                 }
+                .frame(maxWidth: .infinity)
                 .popIn(order: index)
             }
         }
