@@ -97,7 +97,7 @@ struct HoldToConfirmButton: View {
                 .frame(width: diameter, height: diameter)
                 .shadow(color: fill.opacity(0.3), radius: 24, y: 10)
                 .scaleEffect(scale)
-                .animation(.easeOut(duration: 0.2), value: isPressed)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: isPressed)
                 .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.5), value: overshoot)
                 .overlay {
                     label
@@ -139,11 +139,10 @@ struct HoldToConfirmButton: View {
         guard state.beginHold() else { return }
         isPressed = true
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        if reduceMotion {
-            ringProgress = 0
-        } else {
-            withAnimation(.linear(duration: duration)) { ringProgress = 1 }
-        }
+        // The ring fills even under Reduce Motion: it's the only sign the hold is working, a
+        // steady linear progress indicator rather than decorative motion. Only the springy
+        // press and completion pop are dropped there.
+        withAnimation(.linear(duration: duration)) { ringProgress = 1 }
         let work = DispatchWorkItem { complete() }
         confirmWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
@@ -164,8 +163,10 @@ struct HoldToConfirmButton: View {
         confirmWork = nil
         ringProgress = 1
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        overshoot = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { overshoot = false }
+        if !reduceMotion {
+            overshoot = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { overshoot = false }
+        }
         onConfirm()
     }
 

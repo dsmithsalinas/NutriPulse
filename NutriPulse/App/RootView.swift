@@ -17,6 +17,8 @@ struct RootView: View {
                 waterPickerPreview
             } else if isLogSheetPreview {
                 logSheetPreview
+            } else if isShotDayPreview {
+                shotDayPreview
             } else if isGoalBuilderPreview {
                 CreateGoalView(
                     vm: GoalsViewModel(),
@@ -104,6 +106,27 @@ struct RootView: View {
     @ViewBuilder private var logSheetPreview: some View {
         #if DEBUG
         FoodLoggingView(selectedDate: .now)
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--shot-preview`: the Shot day screen after a sample dose a week ago (saving needs an account).
+    private var isShotDayPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--shot-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var shotDayPreview: some View {
+        #if DEBUG
+        let lastShot = Calendar.current.date(byAdding: .day, value: -7, to: .now)!
+        InjectionRitualView(latest: GLP1Log(
+            id: UUID(), userId: UUID(), injectedAt: lastShot, medication: "Zepbound", doseMg: 5,
+            site: "Left Abdomen", nextDueAt: .now
+        )) { _ in }
         #else
         EmptyView()
         #endif

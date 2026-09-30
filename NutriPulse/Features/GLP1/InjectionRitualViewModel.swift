@@ -15,6 +15,9 @@ final class InjectionRitualViewModel {
 
     // The dose we pre-filled with (before any change), so a one-off can be pinned back.
     private var defaultAtLoad: Double = 2.5
+    /// Whether the dose was stepped away from the regular one, so "make this my regular dose"
+    /// is a real choice worth showing.
+    var doseChangedFromRegular: Bool { doseMg != defaultAtLoad }
 
     var doses: [Double] { medication.availableDoses }
     var canStepDown: Bool { (doses.firstIndex(of: doseMg) ?? 0) > 0 }

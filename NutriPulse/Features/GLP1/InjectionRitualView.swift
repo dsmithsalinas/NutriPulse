@@ -143,6 +143,9 @@ struct InjectionRitualView: View {
                 doseStepper("plus", enabled: vm.canStepUp, label: "Raise dose") { vm.stepDose(1) }
             }
 
+            // Only once the dose differs from the regular one — with nothing changed, the
+            // toggle asks a question that has no answer (the old dose sheet had the same rule).
+            if vm.doseChangedFromRegular {
             HStack {
                 Spacer()
                 Toggle(isOn: $updateGoingForward) {
@@ -153,7 +156,10 @@ struct InjectionRitualView: View {
                 .tint(Theme.Colors.limeInk)
                 .fixedSize()
             }
+            .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: vm.doseChangedFromRegular)
         .padding(.leading, 16)
         .padding(.trailing, 10)
         .padding(.vertical, 10)

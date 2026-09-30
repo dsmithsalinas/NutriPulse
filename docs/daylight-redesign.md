@@ -44,10 +44,32 @@ Open it from claude.ai, or with `/artifacts` in Claude Code. The **C — Dayligh
 
 Not done as a separate pass before the redesign: the rebuild work is compiled and tested as it lands, and these checks ride along with it.
 
-- Build and run all iOS tests (`xcodegen`, then ⌘U). The merged Strong Week + Pulse code has not been compiled yet.
+- ~~Build and run all iOS tests.~~ Done Sep 29: the merged Strong Week + Pulse code compiles and every test passes.
 - Deploy `coach-chat` from `main` and generate a Strong Week outlook on a device.
 - Confirm the Monday 8 AM reminder is pending and arrives (the scheduler was serialized in the merge).
 - Redeploy `pulse-eval` before using the evaluator again (the prompt hash changed).
+
+## Build status (Sep 29)
+
+Each step is its own branch, stacked in order; each was built, tested and checked in the simulator before the next.
+
+| Step | Branch | What landed |
+|---|---|---|
+| Foundation | `daylight/foundation` | Daylight tokens in `Theme`, bundled Bricolage Grotesque (96pt cut) and Figtree, `DaylightComponents` (tile, eyebrow, pop-in, meter bar, counting number, flow layout), floating tab bar |
+| Pulse start screen | `daylight/pulse-start` | No automatic check-in or weekly summary; start screen with on-device tiles and Monday Recap; New topic |
+| Today and Log sheet | `daylight/today-log` | Tile grid with liquid protein fill, water picker with Undo (synced tombstones), movement sheet; Log sheet with Talk / Search / Scan / Favorites and the header meal everywhere |
+| Remaining screens | `daylight/screens` | Progress, Goals & experiments, Shot day (hold to log), Profile, in progress |
+
+Debug launch flags for checking screens without an account: `--pulse-preview`, `--water-preview`, `--log-preview`, `--store-today`, `--store-food`, `--progress-preview`, `--goals-preview`.
+
+### Known gaps
+
+- **Past conversations are one stream.** Pulse history has no conversation id, so the history button shows the whole transcript. Separate conversations need a `conversation_id` on `coach_messages`.
+- **Recents show "N servings", not "½ cup".** Local food logs don't store a serving description.
+- **"My foods" in Search means favorites.** FatSecret results carry no ownership flag.
+- **No Edit on the Favorites grid** yet.
+- The mockups are light-only; dark-mode colors are our own picks in the same slate family.
+- Everything that needs a signed-in account (real search, favorites, water sync, recap) still needs a pass on a device before TestFlight.
 
 ## Process rule
 
