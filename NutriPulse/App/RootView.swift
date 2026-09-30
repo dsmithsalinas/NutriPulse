@@ -19,6 +19,8 @@ struct RootView: View {
                 logSheetPreview
             } else if isShotDayPreview {
                 shotDayPreview
+            } else if isProfilePreview {
+                profilePreview
             } else if isGoalBuilderPreview {
                 CreateGoalView(
                     vm: GoalsViewModel(),
@@ -127,6 +129,23 @@ struct RootView: View {
             id: UUID(), userId: UUID(), injectedAt: lastShot, medication: "Zepbound", doseMg: 5,
             site: "Left Abdomen", nextDueAt: .now
         )) { _ in }
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--profile-preview`: Profile from fixtures (ProfileView.preview()), no account or network.
+    private var isProfilePreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--profile-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var profilePreview: some View {
+        #if DEBUG
+        ProfileView.preview()
         #else
         EmptyView()
         #endif

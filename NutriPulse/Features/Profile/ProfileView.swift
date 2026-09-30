@@ -84,6 +84,13 @@ struct ProfileView: View {
                 .padding(.bottom, Theme.Spacing.xl)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
+            // No navigation bar, so cover the status bar or scrolled tiles slide under the clock
+            // (same as Pulse). A ShapeStyle background extends into the safe area.
+            .overlay(alignment: .top) {
+                Color.clear
+                    .frame(height: 0)
+                    .background(Theme.Colors.ground)
+            }
             .toolbar(.hidden, for: .navigationBar)
             .task {
                 #if DEBUG
@@ -808,9 +815,11 @@ struct ProfileView: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 iconBadge(icon, tint: tint)
+                // Titles read as ordinary rows, like nav and link rows; only a non-default tint
+                // (the destructive red) colors the title too.
                 Text(title)
                     .font(Theme.Fonts.body(15, .semibold))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(tint == Theme.Colors.primary ? Theme.Colors.textPrimary : tint)
                 Spacer(minLength: 8)
                 if isLoading {
                     ProgressView()
