@@ -89,18 +89,18 @@ struct GLP1TrackerView: View {
             VStack(alignment: .leading, spacing: 3) {
                 if let log = vm.latest {
                     Text("\(log.medication) · \(log.doseMg.glp1DoseString) mg")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Theme.Fonts.number(16, .bold, relativeTo: .headline))
                     if let next = vm.nextDoseText {
                         Text("\(vm.doseSchedule.latestSkip == nil ? "Next dose" : "Next reminder") · \(next)")
-                            .font(.subheadline)
-                            .foregroundStyle(vm.isOverdue ? .orange : .secondary)
+                            .font(Theme.Fonts.body(14))
+                            .foregroundStyle(vm.isOverdue ? .orange : Theme.Colors.textSecondary)
                     }
                 } else {
                     Text("No dose logged yet")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Theme.Fonts.body(16, .bold))
                     Text("Log a dose in Profile → GLP-1 to start tracking")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(14))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
             }
 
@@ -110,8 +110,7 @@ struct GLP1TrackerView: View {
                 reminderPill
             }
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     private var reminderPill: some View {
@@ -168,17 +167,16 @@ struct GLP1TrackerView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Protein floor")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(Theme.Fonts.body(15, .bold))
                 if let day = vm.daysSinceShot {
                     Text("· day \(day) after your shot")
-                        .font(.caption)
+                        .font(Theme.Fonts.body(12))
                         .foregroundStyle(Theme.Colors.textFaint)
                 }
                 Spacer()
                 HStack(spacing: 4) {
                     Text("\(Int(vm.proteinToday.rounded())) / \(Int(vm.proteinGoal.rounded()))g")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .monospacedDigit()
+                        .font(Theme.Fonts.number(15, .bold, relativeTo: .subheadline))
                     if vm.proteinCleared {
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
@@ -201,12 +199,11 @@ struct GLP1TrackerView: View {
             Text(vm.proteinCleared
                  ? "Floor cleared — muscle protected."
                  : "\(vm.proteinRemaining)g to go — clearing your floor protects your muscle while the medication does its part.")
-                .font(.footnote)
+                .font(Theme.Fonts.body(13))
                 .foregroundStyle(vm.proteinCleared ? Theme.NutrientColor.fiber : Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     // MARK: Water
@@ -216,13 +213,12 @@ struct GLP1TrackerView: View {
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "drop.fill").foregroundStyle(Theme.NutrientColor.water)
-                    Text("Water").font(.system(size: 15, weight: .bold))
+                    Text("Water").font(Theme.Fonts.body(15, .bold))
                 }
                 Spacer()
                 Text(waterLabel)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                    .font(Theme.Fonts.number(14, .bold, relativeTo: .subheadline))
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             GeometryReader { geo in
@@ -236,8 +232,7 @@ struct GLP1TrackerView: View {
             }
             .frame(height: 10)
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     private var waterLabel: String {
