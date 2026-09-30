@@ -52,6 +52,9 @@ struct CoachView: View {
                     .background(Theme.Colors.ground)
             }
             .toolbar(.hidden, for: .navigationBar)
+            // The composer below already clears the tab bar; the tab-wide end margin
+            // (MainTabView) would leave a second gap above it.
+            .contentMargins(.bottom, 0, for: .scrollContent)
             .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.85), value: inConversation)
             .sheet(isPresented: $showAboutYou) {
                 NavigationStack { AboutYouView() }

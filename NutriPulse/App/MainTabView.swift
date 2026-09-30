@@ -9,6 +9,8 @@ struct MainTabView: View {
     @State private var showLogger = false
     @State private var loggerInitialTab: FoodLoggingViewModel.LogTab = .talk
     @State private var tabBarHeight: CGFloat = 0
+    @State private var tabBarCompact = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     // Read directly rather than through @Environment: it's a device-cached singleton (like
     // SyncEngine), not something a preview or test needs to substitute per-view.
     private var pulseStore: PulseProfileStore { PulseProfileStore.shared }
@@ -54,8 +56,25 @@ struct MainTabView: View {
         // content is never obscured and each tab keeps its own state. The hide has to be on
         // each tab's content: on iOS 26, hiding it on the TabView alone leaves the Liquid Glass
         // bar drawn behind our floating one.
+        // The bar floats over the page, and a TabView doesn't pass the safe-area inset on to
+        // its tabs' scroll views, so every scrolling page gets that room at its end directly:
+        // the last rows can always be scrolled clear of the bar. Pulse opts out (its composer
+        // already clears the bar itself; see CoachView).
+        .contentMargins(.bottom, tabBarHeight, for: .scrollContent)
+        // Scrolling down shrinks the bar; scrolling back up restores it. A drag, not scroll
+        // offsets, so it works on every tab and iOS 17 without per-page plumbing. Simultaneous,
+        // so it never takes a scroll or a tap from the page.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 20)
+                .onChanged { value in
+                    guard selectedTab != .pulse,
+                          abs(value.translation.height) > abs(value.translation.width) else { return }
+                    setTabBarCompact(value.translation.height < 0)
+                }
+        )
+        .onChange(of: selectedTab) { _, _ in setTabBarCompact(false) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            MainTabBar(selected: $selectedTab, showsPulse: pulseStore.pulseEnabled, onLog: {
+            MainTabBar(selected: $selectedTab, showsPulse: pulseStore.pulseEnabled, compact: tabBarCompact, onLog: {
                 loggerInitialTab = .talk
                 showLogger = true
             })
@@ -133,6 +152,13 @@ struct MainTabView: View {
         // reload so this device's cache matches the server copy that saved it.
         .onReceive(NotificationCenter.default.publisher(for: .pulseProfileChanged)) { _ in
             Task { await pulseStore.load() }
+        }
+    }
+
+    private func setTabBarCompact(_ compact: Bool) {
+        guard compact != tabBarCompact else { return }
+        withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)) {
+            tabBarCompact = compact
         }
     }
 
