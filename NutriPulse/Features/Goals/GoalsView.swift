@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // Daylight Goals (docs/daylight-redesign.md): a custom header (back-to-Progress + New goal),
 // a full-detail hero card for the primary active goal, a live experiment tile framed around
@@ -41,10 +42,12 @@ struct GoalsView: View {
                 header
                     .popIn(order: 0)
 
-                if vm.isLoading && vm.active.isEmpty {
+                if vm.isLoading && vm.active.isEmpty && vm.floorSummary == nil && vm.completed.isEmpty {
                     ProgressView("Loading goals…")
                         .frame(maxWidth: .infinity, minHeight: 280)
-                } else if vm.active.isEmpty {
+                } else if vm.active.isEmpty && vm.floorSummary == nil && vm.completed.isEmpty {
+                    // The protein floor makes Goals non-empty for almost everyone; this is the
+                    // true fallback for the rare account with no effective protein target yet.
                     goalsEmptyState
                         .popIn(order: 1)
                 } else {
@@ -174,7 +177,21 @@ struct GoalsView: View {
                         appState.pendingCoachPrompt = "How am I doing on my goal: \(primary.bundle.version.title)?"
                     }
                 )
+                .goalWin(vm.wins[primary.id])
                 .popIn(order: 1)
+            }
+
+            // Everyone has a protein floor, so this is the hero when there's no user goal yet,
+            // and otherwise sits just under it.
+            if let floorSummary = vm.floorSummary {
+                ProteinFloorCard(summary: floorSummary)
+                    .goalWin(vm.wins[ProteinFloorGoal.syntheticGoalID])
+                    .popIn(order: heroState == nil ? 1 : 2)
+            }
+
+            if heroState == nil {
+                createFirstGoalPrompt
+                    .popIn(order: 2)
             }
 
             if let data = experimentCardData {
@@ -183,20 +200,21 @@ struct GoalsView: View {
                     onYes: { Task { await vm.record(true, for: data.goalState) } },
                     onNotToday: { Task { await vm.record(false, for: data.goalState) } }
                 )
-                .popIn(order: 2)
+                .popIn(order: 3)
             }
 
             ForEach(Array(secondaryGoals.enumerated()), id: \.element.id) { index, state in
                 GoalCompactRow(state: state) { selectedGoal = GoalSelection(id: state.id) }
-                    .popIn(order: 3 + index)
+                    .goalWin(vm.wins[state.id])
+                    .popIn(order: 4 + index)
             }
 
             experimentsRow
-                .popIn(order: 3 + secondaryGoals.count)
+                .popIn(order: 4 + secondaryGoals.count)
 
             if !vm.completed.isEmpty {
-                completedRow
-                    .popIn(order: 4 + secondaryGoals.count)
+                completedShelf
+                    .popIn(order: 5 + secondaryGoals.count)
             }
         }
     }
@@ -207,6 +225,35 @@ struct GoalsView: View {
 
     private var secondaryGoals: [GoalCardState] {
         vm.active.filter { $0.id != heroState?.id }
+    }
+
+    // A lighter nudge than `goalsEmptyState` for when the floor card is already filling the
+    // hero slot — there's no user goal yet, but the screen isn't empty.
+    private var createFirstGoalPrompt: some View {
+        Button { showCreate = true } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.primary)
+                    .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add your first goal")
+                        .font(Theme.Fonts.body(15, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("Footing can combine quick check-ins with health data you already track.")
+                        .font(Theme.Fonts.body(13))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 4)
+            .padding(.trailing, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: Theme.Radius.tileSmall, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add your first goal")
+        .accessibilityHint("Opens the goal builder")
     }
 
     // Frames the intervention goal's own daily check-in as "the experiment" — an experiment
@@ -268,23 +315,31 @@ struct GoalsView: View {
         return "\(running) \(running == 1 ? "experiment" : "experiments") in progress"
     }
 
-    private var completedRow: some View {
-        Button { showCompleted = true } label: {
+    // A trophy shelf preview: a few small tiles (lime for met, neutral for honestly-not) with a
+    // "See all" through to the full shelf in CompletedGoalsView. Tapping a tile jumps straight
+    // to that goal's own detail sheet, the same one every other goal opens into.
+    private var completedShelf: some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(vm.completed.count == 1 ? "1 finished goal" : "\(vm.completed.count) finished goals")
                     .font(Theme.Fonts.body(15, .bold))
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                Button("See all") { showCompleted = true }
+                    .font(Theme.Fonts.body(13, .bold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .frame(minWidth: 44, minHeight: 44)
             }
-            .padding(.horizontal, 6)
-            .frame(height: 52)
-            .contentShape(Rectangle())
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(vm.completed.prefix(8)) { state in
+                        GoalTrophyTile(state: state) { selectedGoal = GoalSelection(id: state.id) }
+                    }
+                }
+                .padding(.trailing, 4)
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityHint("Shows your completed goals")
+        .accessibilityElement(children: .contain)
     }
 
     private var goalsEmptyState: some View {
@@ -517,8 +572,17 @@ private struct CompletedGoalsView: View {
                     )
                     .frame(minHeight: 260)
                 } else {
-                    ForEach(goals) { state in
-                        GoalCompactRow(state: state) { onSelect(state.id) }
+                    // A trophy shelf: small lime tiles for goals met, neutral tiles for goals
+                    // that honestly ended without meeting their target.
+                    Text(shelfAccessibilitySummary)
+                        .font(.system(size: 1))
+                        .foregroundStyle(.clear)
+                        .frame(height: 0)
+                        .accessibilityLabel(shelfAccessibilitySummary)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 148), spacing: 10)], spacing: 10) {
+                        ForEach(goals) { state in
+                            GoalTrophyTile(state: state) { onSelect(state.id) }
+                        }
                     }
                 }
             }
@@ -527,6 +591,231 @@ private struct CompletedGoalsView: View {
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var shelfAccessibilitySummary: String {
+        let met = goals.filter { $0.progress.status == .met }.count
+        return "\(goals.count) completed goals: \(met) met, \(goals.count - met) ended without meeting the goal."
+    }
+}
+
+// MARK: - Trophy shelf tile (a single completed goal)
+
+private struct GoalTrophyTile: View {
+    let state: GoalCardState
+    let onTap: () -> Void
+
+    private var wasMet: Bool { state.progress.status == .met }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(state.bundle.version.title)
+                    .font(Theme.Fonts.body(14, .bold))
+                    .foregroundStyle(wasMet ? Theme.Colors.limeInk : Theme.Colors.textPrimary)
+                    .lineLimit(2)
+                Text(endDateLabel)
+                    .font(Theme.Fonts.body(11, .semibold))
+                    .foregroundStyle(wasMet ? Theme.Colors.limeInk.opacity(0.7) : Theme.Colors.textSecondary)
+                Spacer(minLength: 4)
+                Text(winLine)
+                    .font(Theme.Fonts.body(12, .semibold))
+                    .foregroundStyle(wasMet ? Theme.Colors.limeInk : Theme.Colors.textSecondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .frame(width: 148, height: 100, alignment: .topLeading)
+            .background(wasMet ? Theme.Colors.lime : Theme.Colors.surfaceInset,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.tileSmall, style: .continuous))
+        }
+        .buttonStyle(PressableStyle(scale: 0.97))
+        .accessibilityLabel("\(state.bundle.version.title), \(winLine)")
+        .accessibilityHint("Shows this goal's history")
+    }
+
+    private var endDateLabel: String {
+        guard let end = state.bundle.version.endDate, let date = parseISODate(end) else { return "Ended" }
+        return "Ended \(date.formatted(.dateTime.month(.abbreviated).day()))"
+    }
+
+    // Honest, non-shaming wording: a met goal reads as a win; an ended-not-met goal states the
+    // plain count without calling it a failure.
+    private var winLine: String {
+        guard state.progress.measuredCount > 0 else { return "No usable data" }
+        if wasMet {
+            return "Met on \(state.progress.metCount) of \(state.progress.measuredCount) days"
+        }
+        return "Ended · \(state.progress.metCount) of \(state.progress.measuredCount) days"
+    }
+
+    private func parseISODate(_ value: String) -> Date? {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    }
+}
+
+// MARK: - Protein floor (built-in goal)
+
+/// Everyone has a protein floor (`DailyGoal.proteinG`), so this always has something to show —
+/// it's the hero when there's no user goal yet, and otherwise sits just under it. Unlike a user
+/// goal it can't be edited or deleted here, since it isn't a stored goal at all.
+private struct ProteinFloorCard: View {
+    let summary: ProteinFloorGoal.Summary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    TileEyebrow("Built-in goal")
+                    Text("Hit my protein floor")
+                        .font(Theme.Fonts.display(22, .bold, relativeTo: .title2))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "fork.knife")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.primary)
+                    .frame(width: 36, height: 36)
+                    .background(Theme.Colors.surfaceInset, in: Circle())
+            }
+
+            floorGrid
+
+            HStack {
+                if summary.currentStreak > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "flame.fill")
+                            .foregroundStyle(Color(hex: 0xFB923C))
+                        Text("\(summary.currentStreak) \(summary.currentStreak == 1 ? "day" : "days") in a row")
+                            .font(Theme.Fonts.body(15, .bold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                    }
+                }
+                Spacer()
+                Text(summary.loggedDaysLabel)
+                    .font(Theme.Fonts.body(12))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+
+            Divider().overlay(Theme.Colors.hairline)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Today")
+                        .font(Theme.Fonts.body(13, .bold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                    Spacer()
+                    Text(summary.todayCaption)
+                        .font(Theme.Fonts.body(13, .bold))
+                        .foregroundStyle(summary.todayMet ? Theme.Colors.goalMet : Theme.Colors.textSecondary)
+                }
+                MeterBar(progress: summary.todayProgress, color: Theme.Colors.primary, delay: 0.4)
+            }
+
+            Text("Change your floor in Profile › Daily targets.")
+                .font(Theme.Fonts.body(12))
+                .foregroundStyle(Theme.Colors.textFaint)
+        }
+        .padding(18)
+        .tile()
+    }
+
+    private var floorGrid: some View {
+        HStack(spacing: 5) {
+            ForEach(summary.days, id: \.date) { day in
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(cellFill(day.state))
+                    .overlay {
+                        if day.state == .missing {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(Theme.Colors.primary.opacity(0.4), style: StrokeStyle(lineWidth: 2, dash: [3]))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 22)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(gridAccessibilitySummary)
+    }
+
+    private func cellFill(_ state: GoalDayState) -> Color {
+        switch state {
+        case .met: Theme.Colors.primary
+        case .notMet: Theme.Colors.surfaceInset
+        case .missing, .pending: .clear
+        }
+    }
+
+    // A single VoiceOver-readable summary rather than 14 individual cells to swipe through —
+    // "days without logs are no data, never below", spelled out the same way for accessibility.
+    private var gridAccessibilitySummary: String {
+        let met = summary.days.filter { $0.state == .met }.count
+        let below = summary.days.filter { $0.state == .notMet }.count
+        let noData = summary.days.filter { $0.state == .missing }.count
+        return "Last \(summary.days.count) days: \(met) met the floor, \(below) below the floor, \(noData) with no data."
+    }
+}
+
+// MARK: - Win celebration
+
+/// Layered onto a goal (or the protein floor) card when `GoalsViewModel.wins` has a fresh win
+/// for it: the existing `celebrationBeat` pulse (skipped under Reduce Motion), a success haptic,
+/// and a briefly-shown lime "Win" tag. Which wins have already played is tracked in
+/// `GoalWinStore`, so this modifier only ever receives a given win once.
+private struct GoalWinOverlay: ViewModifier {
+    let win: GoalWinKind?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var beatTrigger = 0
+    @State private var showTag = false
+
+    func body(content: Content) -> some View {
+        content
+            .celebrationBeat(trigger: beatTrigger)
+            .overlay(alignment: .topTrailing) {
+                if showTag {
+                    Text("Win")
+                        .font(Theme.Fonts.body(12, .bold))
+                        .foregroundStyle(Theme.Colors.limeInk)
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .background(Theme.Colors.lime, in: Capsule())
+                        .padding(10)
+                        .transition(.opacity.combined(with: .scale))
+                        .accessibilityLabel(tagAccessibilityLabel)
+                }
+            }
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showTag)
+            .onAppear { fireIfNeeded() }
+            .onChange(of: win) { _, _ in fireIfNeeded() }
+    }
+
+    private func fireIfNeeded() {
+        guard win != nil else { return }
+        if !reduceMotion { beatTrigger += 1 }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        showTag = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            showTag = false
+        }
+    }
+
+    private var tagAccessibilityLabel: String {
+        switch win {
+        case .completed: "Win, goal completed"
+        case .streak(let days): "Win, \(days) day streak"
+        case nil: "Win"
+        }
+    }
+}
+
+private extension View {
+    /// Plays a brief celebration when `win` is non-nil and hasn't already been shown for this
+    /// goal. Pass `nil` for a goal with nothing new to celebrate.
+    func goalWin(_ win: GoalWinKind?) -> some View {
+        modifier(GoalWinOverlay(win: win))
     }
 }
 
@@ -572,6 +861,13 @@ private struct GoalHeroCard: View {
             }
 
             if !timelineDays.isEmpty {
+                // A single summary ahead of the grid, so VoiceOver doesn't have to swipe through
+                // every day just to hear how the goal is trending.
+                Text(gridAccessibilitySummary)
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(height: 0)
+                    .accessibilityLabel(gridAccessibilitySummary)
                 dayGrid
             }
 
@@ -783,6 +1079,13 @@ private struct GoalHeroCard: View {
         }
         let today = Calendar.current.isDateInToday(item.date) ? ", today" : ""
         return "\(item.date.formatted(date: .abbreviated, time: .omitted))\(today), \(state)"
+    }
+
+    private var gridAccessibilitySummary: String {
+        let met = timelineDays.filter { $0.dayState == .met }.count
+        let notMet = timelineDays.filter { $0.dayState == .notMet }.count
+        let missing = timelineDays.filter { $0.dayState == .missing }.count
+        return "\(timelineDays.count) day grid: \(met) met, \(notMet) not met, \(missing) with no data."
     }
 
     private func parse(_ value: String) -> Date? {

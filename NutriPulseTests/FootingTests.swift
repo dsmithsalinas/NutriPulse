@@ -523,6 +523,162 @@ final class GoalDraftTests: XCTestCase {
     }
 }
 
+// MARK: - Protein floor (built-in goal)
+
+final class ProteinFloorGoalTests: XCTestCase {
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .iso8601)
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        return value
+    }
+
+    private func date(_ value: String) -> Date {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        return calendar.date(from: .init(year: parts[0], month: parts[1], day: parts[2]))!
+    }
+
+    private func summary(_ date: Date, protein: Double) -> DailySummary {
+        DailySummary(date: date, calories: 1_500, proteinG: protein, carbsG: 100, fatG: 50, fiberG: 20)
+    }
+
+    func testNoEffectiveFloorMeansNoCard() {
+        let result = ProteinFloorGoal.summary(
+            from: [], floorTarget: nil, today: date("2026-08-30"), calendar: calendar
+        )
+        XCTAssertNil(result)
+
+        let zeroTarget = ProteinFloorGoal.summary(
+            from: [], floorTarget: 0, today: date("2026-08-30"), calendar: calendar
+        )
+        XCTAssertNil(zeroTarget)
+    }
+
+    func testDaysWithoutLogsAreNoDataNeverBelow() {
+        let today = date("2026-08-30")
+        // Only today has a summary; every other day of the window is unlogged.
+        let result = ProteinFloorGoal.summary(
+            from: [summary(today, protein: 150)], floorTarget: 130, today: today, calendar: calendar
+        )!
+        XCTAssertEqual(result.days.count, ProteinFloorGoal.windowDays)
+        XCTAssertEqual(result.days.dropLast().allSatisfy { $0.state == .missing }, true)
+        XCTAssertEqual(result.days.last?.state, .met)
+        XCTAssertEqual(result.loggedDays, 1)
+        XCTAssertEqual(result.totalDays, ProteinFloorGoal.windowDays)
+    }
+
+    func testStreakSkipsMissingDaysButStopsAtAConfirmedMiss() {
+        let today = date("2026-08-30")
+        let summaries = [
+            summary(calendar.date(byAdding: .day, value: -3, to: today)!, protein: 90),   // below
+            // -2 days ago: no log at all (missing, skipped)
+            summary(calendar.date(byAdding: .day, value: -1, to: today)!, protein: 140),  // met
+            summary(today, protein: 150),                                                 // met
+        ]
+        let result = ProteinFloorGoal.summary(from: summaries, floorTarget: 130, today: today, calendar: calendar)!
+        XCTAssertEqual(result.currentStreak, 2)
+    }
+
+    func testTodayProgressAndCaption() {
+        let today = date("2026-08-30")
+        let underFloor = ProteinFloorGoal.summary(
+            from: [summary(today, protein: 90)], floorTarget: 130, today: today, calendar: calendar
+        )!
+        XCTAssertEqual(underFloor.todayCaption, "40g to go")
+        XCTAssertFalse(underFloor.todayMet)
+        XCTAssertEqual(underFloor.todayProgress, 90.0 / 130.0, accuracy: 0.0001)
+
+        let clearedFloor = ProteinFloorGoal.summary(
+            from: [summary(today, protein: 160)], floorTarget: 130, today: today, calendar: calendar
+        )!
+        XCTAssertEqual(clearedFloor.todayCaption, "Floor cleared")
+        XCTAssertTrue(clearedFloor.todayMet)
+        XCTAssertEqual(clearedFloor.todayProgress, 1, accuracy: 0.0001)
+    }
+
+    func testNoLogTodayShowsFullRemainingFloor() {
+        let today = date("2026-08-30")
+        let result = ProteinFloorGoal.summary(from: [], floorTarget: 130, today: today, calendar: calendar)!
+        XCTAssertEqual(result.todayProteinG, 0)
+        XCTAssertEqual(result.todayCaption, "130g to go")
+        XCTAssertFalse(result.todayMet)
+    }
+}
+
+// MARK: - Gentle cap on active goals
+
+final class GoalCreationPolicyTests: XCTestCase {
+    func testWarnsAtAndAboveTheSuggestedLimitButNotBelowIt() {
+        XCTAssertFalse(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 0))
+        XCTAssertFalse(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 2))
+        XCTAssertTrue(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 3))
+        XCTAssertTrue(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 4))
+    }
+
+    func testCustomLimitIsRespected() {
+        XCTAssertFalse(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 3, limit: 5))
+        XCTAssertTrue(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 5, limit: 5))
+    }
+}
+
+// MARK: - Goal wins
+
+final class GoalWinsTests: XCTestCase {
+    func testCompletionWinsOnceThenStopsWithoutRelitigating() {
+        let first = GoalWins.newWin(completed: true, currentStreak: 0, alreadyCelebrated: [])
+        XCTAssertEqual(first?.kind, .completed)
+
+        let repeatCall = GoalWins.newWin(completed: true, currentStreak: 0, alreadyCelebrated: [GoalWins.Keys.completed])
+        XCTAssertNil(repeatCall)
+    }
+
+    func testStreakMilestoneFiresExactlyOnceAtEachMilestone() {
+        let sevenDay = GoalWins.newWin(completed: false, currentStreak: 7, alreadyCelebrated: [])
+        XCTAssertEqual(sevenDay?.kind, .streak(days: 7))
+        XCTAssertEqual(sevenDay?.key, GoalWins.Keys.streak(7))
+
+        let alreadyShown = GoalWins.newWin(
+            completed: false, currentStreak: 7, alreadyCelebrated: [GoalWins.Keys.streak(7)]
+        )
+        XCTAssertNil(alreadyShown)
+    }
+
+    func testNonMilestoneStreakHasNoWin() {
+        XCTAssertNil(GoalWins.newWin(completed: false, currentStreak: 8, alreadyCelebrated: []))
+        XCTAssertNil(GoalWins.newWin(completed: false, currentStreak: 0, alreadyCelebrated: []))
+    }
+
+    func testCompletionTakesPriorityWhenBothLandOnTheSameDay() {
+        let win = GoalWins.newWin(completed: true, currentStreak: 14, alreadyCelebrated: [])
+        XCTAssertEqual(win?.kind, .completed)
+    }
+}
+
+final class GoalWinStoreTests: XCTestCase {
+    private func makeStore() -> GoalWinStore {
+        let suiteName = "GoalWinStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        return GoalWinStore(defaults: defaults)
+    }
+
+    func testUncelebratedGoalStartsEmpty() {
+        let store = makeStore()
+        XCTAssertTrue(store.celebrated(for: UUID()).isEmpty)
+    }
+
+    func testMarkingCelebratedPersistsPerGoalAndKey() {
+        let store = makeStore()
+        let goalA = UUID()
+        let goalB = UUID()
+        store.markCelebrated(GoalWins.Keys.completed, for: goalA)
+        store.markCelebrated(GoalWins.Keys.streak(7), for: goalA)
+        store.markCelebrated(GoalWins.Keys.streak(7), for: goalB)
+
+        XCTAssertEqual(store.celebrated(for: goalA), [GoalWins.Keys.completed, GoalWins.Keys.streak(7)])
+        XCTAssertEqual(store.celebrated(for: goalB), [GoalWins.Keys.streak(7)])
+    }
+}
+
 // MARK: - Explainable insights
 
 final class InsightEngineTests: XCTestCase {
