@@ -31,10 +31,11 @@ struct BodyGoalsSheet: View {
                             .multilineTextAlignment(.trailing)
                     }
                 } header: {
-                    Text("Targets")
+                    DaylightSectionHeader("Targets")
                 } footer: {
-                    Text("Where you're headed — no dates attached, and nothing in the app changes without you.")
+                    DaylightSectionFooter("Where you're headed — no dates attached, and nothing in the app changes without you.")
                 }
+                .daylightSection()
 
                 Section {
                     LabeledContent("Lean mass (\(units.weightUnit))") {
@@ -43,17 +44,15 @@ struct BodyGoalsSheet: View {
                             .multilineTextAlignment(.trailing)
                     }
                 } header: {
-                    Text("Floor")
+                    DaylightSectionHeader("Floor")
                 } footer: {
-                    Text("A floor, not a target: the win is staying above it while the weight comes down.")
+                    DaylightSectionFooter("A floor, not a target: the win is staying above it while the weight comes down.")
                 }
+                .daylightSection()
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .tint(Theme.Colors.primary)
+            .daylightForm()
             .navigationTitle("Body Goals")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
