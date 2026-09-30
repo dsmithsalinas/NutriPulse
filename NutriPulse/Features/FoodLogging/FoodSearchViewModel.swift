@@ -32,12 +32,79 @@ final class FoodSearchViewModel {
     var errorMessage: String? = nil
     var detailError: String? = nil
     var logError: String? = nil
-    var quickAdds: [FavoriteQuickAdd] = []
     var wantsToFavorite = false
-    private(set) var favoriteLogsThisSession = 0
 
-    func recordFavoriteLogged() {
-        favoriteLogsThisSession += 1
+    // MARK: - Filter chips (Daylight Search: All / Protein-dense / My foods)
+
+    var selectedFilter: SearchFilter = .all
+    /// FatSecret ids (FoodItem.externalId) for foods the user has already favorited — lets
+    /// Search sort favorites first and support the "My foods" filter without re-deriving it
+    /// from FoodItem rows on every render.
+    private(set) var favoritedExternalIds: Set<String> = []
+
+    /// `results`, filtered by `selectedFilter` and sorted favorites-first. `Array.sorted` is
+    /// stable (Swift 5+), so within each group the FatSecret ranking is preserved.
+    var filteredResults: [FoodSearchResult] {
+        results
+            .filter { matchesSelectedFilter($0) }
+            .sorted { favoritedExternalIds.contains($0.id) && !favoritedExternalIds.contains($1.id) }
+    }
+
+    private func matchesSelectedFilter(_ result: FoodSearchResult) -> Bool {
+        switch selectedFilter {
+        case .all:
+            return true
+        case .proteinDense:
+            guard let macros = FoodSearchMacros.parse(result.description) else { return false }
+            return ProteinDensity.isProteinDense(calories: macros.calories, proteinG: macros.proteinG)
+        case .myFoods:
+            return favoritedExternalIds.contains(result.id)
+        }
+    }
+
+    func loadFavoritedExternalIds() async {
+        await FavoritesStore.shared.loadIfNeeded()
+        let ids = FavoritesStore.shared.favoritedIds
+        guard !ids.isEmpty else { favoritedExternalIds = []; return }
+        struct Row: Decodable {
+            let externalId: String?
+            enum CodingKeys: String, CodingKey { case externalId = "external_id" }
+        }
+        do {
+            let rows: [Row] = try await supabase
+                .from("food_items")
+                .select("external_id")
+                .in("id", values: Array(ids))
+                .eq("source", value: "fatsecret")
+                .execute()
+                .value
+            favoritedExternalIds = Set(rows.compactMap(\.externalId))
+        } catch {
+            favoritedExternalIds = []
+        }
+    }
+
+    // MARK: - Quick log ("+" — logs the first serving straight to the header meal)
+
+    var quickLoggingID: String? = nil
+    private(set) var quickLoggedIDs: Set<String> = []
+
+    /// Tapping a result's name opens the full confirm sheet; tapping "+" logs it immediately
+    /// at quantity 1, first serving, straight to whichever meal the header shows.
+    func quickLog(_ result: FoodSearchResult, meal: Meal, on date: Date) async {
+        quickLoggingID = result.id
+        defer { quickLoggingID = nil }
+        do {
+            let detail = try await client.getFood(id: result.id)
+            guard let serving = detail.servings.first else {
+                errorMessage = "Couldn't log \(result.name). Try again."
+                return
+            }
+            try await persistLog(detail: detail, serving: serving, quantity: 1, meal: meal, date: date, favorite: false)
+            quickLoggedIDs.insert(result.id)
+        } catch {
+            errorMessage = "Couldn't log \(result.name). Try again."
+        }
     }
 
     // Guards against a slow response for food A landing after the user has moved on to
@@ -47,7 +114,6 @@ final class FoodSearchViewModel {
     private var detailRequestID = UUID()
 
     private let client = FatSecretClient()
-    private let favRepo = FavoriteRepository()
 
     // Called from .task(id: searchQuery) in FoodSearchView.
     // The task auto-cancels when searchQuery changes, giving us debounce for free.
@@ -102,10 +168,6 @@ final class FoodSearchViewModel {
             guard !Task.isCancelled else { return }
             canLoadMoreResults = false
         }
-    }
-
-    func loadQuickAdds() async {
-        do { quickAdds = try await favRepo.fetchQuickAdds() } catch {}
     }
 
     func loadDetail(for result: FoodSearchResult) async {
@@ -206,7 +268,22 @@ final class FoodSearchViewModel {
         guard let detail, let serving = selectedServing else { return }
         isLogging = true
         defer { isLogging = false }
+        try await persistLog(detail: detail, serving: serving, quantity: quantity, meal: selectedMeal, date: date, favorite: wantsToFavorite)
+        wantsToFavorite = false
+    }
 
+    // Shared by the full confirm-sheet log (logFood, above — any serving/quantity/meal, can
+    // favorite) and the "+" quick log (first serving, quantity 1, never favorites in the same
+    // tap). Kept as one path so both stay consistent about upserting the food_item and writing
+    // local-first.
+    private func persistLog(
+        detail: FoodDetail,
+        serving: FoodServing,
+        quantity: Double,
+        meal: Meal,
+        date: Date,
+        favorite: Bool
+    ) async throws {
         let userId = try await supabase.auth.session.user.id
 
         // Upsert the food_item so logging the same FatSecret food twice doesn't duplicate rows.
@@ -241,7 +318,7 @@ final class FoodSearchViewModel {
             id: UUID(),
             userId: userId,
             logDate: date.isoDateString,
-            meal: selectedMeal.rawValue,
+            meal: meal.rawValue,
             foodItemId: item.id,
             foodItemName: detail.name,
             quantity: quantity,
@@ -254,7 +331,7 @@ final class FoodSearchViewModel {
         SyncEngine.shared.refreshPendingCount()
         Task { await SyncEngine.shared.pushPendingChanges() }
 
-        if wantsToFavorite {
+        if favorite {
             struct NewFav: Encodable {
                 let userId: UUID; let foodItemId: UUID
                 enum CodingKeys: String, CodingKey {
@@ -266,7 +343,6 @@ final class FoodSearchViewModel {
                 .insert(NewFav(userId: userId, foodItemId: item.id))
                 .execute()
             FavoritesStore.shared.insertId(item.id)
-            wantsToFavorite = false
         }
     }
 }

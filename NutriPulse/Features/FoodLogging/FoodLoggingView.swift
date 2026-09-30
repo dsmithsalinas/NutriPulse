@@ -1,5 +1,9 @@
 import SwiftUI
 
+// Daylight Log sheet (docs/daylight-redesign.md): a header showing the meal everything logs to
+// ("Adding to Dinner ▾") plus a close button, and Talk / Search / Scan / Favorites tabs beneath
+// it. Manual entry moved inside Search ("Can't find it? Enter it yourself"); Favorites replaces
+// the old Manual tab.
 struct FoodLoggingView: View {
     let selectedDate: Date
     let initialTab: FoodLoggingViewModel.LogTab
@@ -11,6 +15,8 @@ struct FoodLoggingView: View {
     @State private var vm = FoodLoggingViewModel()
     @State private var searchVM = FoodSearchViewModel()
     @State private var talkVM = TalkToLogViewModel()
+    @State private var favoritesVM = FavoritesViewModel()
+    @State private var showManualEntry = false
 
     init(selectedDate: Date, initialTab: FoodLoggingViewModel.LogTab = .talk) {
         self.selectedDate = selectedDate
@@ -24,67 +30,81 @@ struct FoodLoggingView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Picker("Log method", selection: $vm.selectedTab) {
-                    ForEach(FoodLoggingViewModel.LogTab.allCases, id: \.self) { tab in
-                        Text(tab.rawValue).tag(tab)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(Theme.Spacing.md)
+        VStack(spacing: 14) {
+            Capsule()
+                .fill(Theme.Colors.hairline)
+                .frame(width: 40, height: 5)
+                .padding(.top, 8)
 
+            LogSheetHeader(meal: $vm.selectedMeal, onClose: { dismiss() })
+
+            LogTabBar(selection: $vm.selectedTab)
+
+            Group {
                 switch vm.selectedTab {
                 case .talk:
-                    TalkToLogView(vm: talkVM, date: selectedDate, onLogged: handleLogged)
-                case .manual:
-                    ManualEntryView(vm: vm, date: selectedDate, onLogged: handleLogged)
+                    TalkToLogView(vm: talkVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: { source in
+                        handleLogged(source, keepOpen: false)
+                    })
                 case .search:
-                    FoodSearchView(vm: searchVM, date: selectedDate, onLogged: handleLogged)
+                    FoodSearchView(
+                        vm: searchVM, date: selectedDate, headerMeal: vm.selectedMeal,
+                        onLogged: handleLogged,
+                        onEnterManually: { showManualEntry = true }
+                    )
                 case .scan:
-                    BarcodeScanView(vm: searchVM, date: selectedDate, onLogged: handleLogged)
+                    BarcodeScanView(vm: searchVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: { source in
+                        handleLogged(source, keepOpen: false)
+                    })
+                case .favorites:
+                    FavoritesView(vm: favoritesVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: handleLogged)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .tint(Theme.Colors.primary)
-            .navigationTitle("Log Food")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
-            .toolbar {
-                if searchVM.favoriteLogsThisSession > 0 {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                            .fontWeight(.semibold)
-                    }
-                } else {
+        }
+        .padding(.horizontal, Theme.Spacing.page)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .tint(Theme.Colors.primary)
+        .sheet(isPresented: $showManualEntry) {
+            NavigationStack {
+                ManualEntryView(vm: vm, date: selectedDate, onLogged: { source in
+                    showManualEntry = false
+                    handleLogged(source, keepOpen: false)
+                })
+                .navigationTitle("Enter it yourself")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
+                        Button("Cancel") { showManualEntry = false }
                     }
                 }
+                .background(Theme.Colors.ground.ignoresSafeArea())
             }
-            // .constant() evaluates once and freezes — Binding(get:set:) re-evaluates
-            // whenever @Observable tracks a change to vm.errorMessage.
-            .alert("Error", isPresented: Binding(
-                get: { vm.errorMessage != nil },
-                set: { if !$0 { vm.errorMessage = nil } }
-            )) {
-                Button("OK") { vm.errorMessage = nil }
-            } message: {
-                Text(vm.errorMessage ?? "")
-            }
-            .onAppear {
-                if !AppStoreScreenshotMode.active {
-                    Telemetry.logIntentStarted(source: vm.selectedTab.telemetrySource)
-                }
+            .tint(Theme.Colors.primary)
+        }
+        // .constant() evaluates once and freezes — Binding(get:set:) re-evaluates
+        // whenever @Observable tracks a change to vm.errorMessage.
+        .alert("Error", isPresented: Binding(
+            get: { vm.errorMessage != nil },
+            set: { if !$0 { vm.errorMessage = nil } }
+        )) {
+            Button("OK") { vm.errorMessage = nil }
+        } message: {
+            Text(vm.errorMessage ?? "")
+        }
+        .onAppear {
+            if !AppStoreScreenshotMode.active {
+                Telemetry.logIntentStarted(source: vm.selectedTab.telemetrySource)
             }
         }
-        .tint(Theme.Colors.primary)
     }
 
-    // Only the talk flow carries a meaningful confirm-card edit rate — every
-    // other source logs exactly what the user picked, nothing to correct.
-    private func handleLogged(_ source: LogSource) {
+    // Every tab's "+" logs without leaving the sheet (keepOpen: true) so a user can add
+    // several foods in a row; tapping into the confirm step (a food's name, Talk's Log
+    // button, manual entry, a barcode) is a deliberate one-off log that dismisses after.
+    private func handleLogged(_ source: LogSource, keepOpen: Bool) {
         if source == .talk {
             Telemetry.logConfirmed(
                 source: source,
@@ -94,36 +114,8 @@ struct FoodLoggingView: View {
         } else {
             Telemetry.logConfirmed(source: source)
         }
-
-        // Favorite quick-adds are intentionally a batch flow. Each tap logs immediately,
-        // then the toolbar changes from Cancel to Done so the user has a clear exit after
-        // adding one or several saved foods. Every other path remains single-item.
-        if source == .favorite {
-            searchVM.recordFavoriteLogged()
-        } else {
+        if !keepOpen {
             dismiss()
         }
-    }
-}
-
-private struct ComingSoonView: View {
-    let icon: String
-    let label: String
-    let detail: String
-
-    var body: some View {
-        VStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: icon)
-                .font(.system(size: 44))
-                .foregroundStyle(.quaternary)
-            Text(label)
-                .font(.headline)
-                .foregroundStyle(.secondary)
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
     }
 }
