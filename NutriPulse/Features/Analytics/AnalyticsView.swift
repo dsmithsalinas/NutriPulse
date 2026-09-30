@@ -182,31 +182,6 @@ private struct AnalyticsSummaryCard: View {
     }
 }
 
-// MARK: - Chart draw-in
-
-/// Reveals a Swift Charts plot left-to-right on first appear, like a curtain retracting — the
-/// Daylight draw-in for bars and lines. Honors Reduce Motion (shown immediately, no animation).
-private struct ChartDrawIn: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var revealed = false
-
-    func body(content: Content) -> some View {
-        content
-            .mask(alignment: .leading) {
-                GeometryReader { geo in
-                    Rectangle().frame(width: geo.size.width * (revealed || reduceMotion ? 1 : 0))
-                }
-            }
-            .onAppear {
-                guard !revealed, !reduceMotion else { revealed = true; return }
-                withAnimation(Theme.Motion.draw.delay(0.1)) { revealed = true }
-            }
-    }
-}
-
-private extension View {
-    func chartDrawIn() -> some View { modifier(ChartDrawIn()) }
-}
 
 // MARK: - Calories chart
 

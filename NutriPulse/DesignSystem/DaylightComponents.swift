@@ -121,6 +121,34 @@ struct MeterBar: View {
     }
 }
 
+// MARK: - Chart draw-in
+
+/// Reveals a Swift Charts plot from the leading edge on first appear, the chart counterpart of
+/// `MeterBar`'s draw-in. Under Reduce Motion it's simply shown.
+/// Usage: `Chart { ... }.chartDrawIn()`
+struct ChartDrawIn: ViewModifier {
+    var delay: Double = 0.1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var revealed = false
+
+    func body(content: Content) -> some View {
+        content
+            .mask(alignment: .leading) {
+                GeometryReader { geo in
+                    Rectangle().frame(width: geo.size.width * (revealed || reduceMotion ? 1 : 0))
+                }
+            }
+            .onAppear {
+                guard !revealed, !reduceMotion else { revealed = true; return }
+                withAnimation(Theme.Motion.draw.delay(delay)) { revealed = true }
+            }
+    }
+}
+
+extension View {
+    func chartDrawIn(delay: Double = 0.1) -> some View { modifier(ChartDrawIn(delay: delay)) }
+}
+
 // MARK: - Counting number
 
 /// A whole number that counts up from zero on first appear, then animates between values when

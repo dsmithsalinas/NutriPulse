@@ -277,30 +277,3 @@ struct BodyMetricHistoryView: View {
     }
 }
 
-// MARK: - Chart draw-in
-
-/// Masks a Swift Charts view so it draws in from the leading edge on first appear, the same
-/// leading-edge reveal `MeterBar` and `Sparkline` use elsewhere in Daylight. Reduce Motion:
-/// shown immediately, no animation. Shared with `BodyHubView`'s row sparklines.
-struct ChartDrawIn: ViewModifier {
-    var delay: Double = 0.3
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var revealed = false
-
-    func body(content: Content) -> some View {
-        content
-            .mask(alignment: .leading) {
-                GeometryReader { geo in
-                    Rectangle().frame(width: geo.size.width * (revealed || reduceMotion ? 1 : 0))
-                }
-            }
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(Theme.Motion.draw.delay(delay)) { revealed = true }
-            }
-    }
-}
-
-extension View {
-    func chartDrawIn(delay: Double = 0.3) -> some View { modifier(ChartDrawIn(delay: delay)) }
-}
