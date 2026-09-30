@@ -10,6 +10,7 @@ struct CreateGoalView: View {
     @State private var draft: GoalDraft?
     @State private var step = 1
     @State private var isSaving = false
+    @State private var showActiveGoalCapNote = false
 
     init(vm: GoalsViewModel, initialDraft: GoalDraft? = nil) {
         self.vm = vm
@@ -288,22 +289,42 @@ struct CreateGoalView: View {
 
     private var bottomAction: some View {
         Button(isSaving ? "Creating…" : step == 3 ? "Create goal" : "Continue") {
-            guard var current = draft else { return }
+            guard draft != nil else { return }
             if step < 3 {
                 step += 1
                 return
             }
-            current.title = current.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            isSaving = true
-            Task {
-                if await vm.create(current) { dismiss() }
-                isSaving = false
+            // A calm heads-up, never a block: past the suggested count, pause for confirmation
+            // instead of silently piling on another goal.
+            if vm.shouldWarnBeforeAddingGoal {
+                showActiveGoalCapNote = true
+                return
             }
+            submit()
         }
         .buttonStyle(.brandPrimary)
         .disabled(!(draft?.isValid ?? false) || isSaving)
         .padding(Theme.Spacing.page)
         .background(.ultraThinMaterial)
+        .alert(
+            "You have \(vm.active.count) goals going",
+            isPresented: $showActiveGoalCapNote
+        ) {
+            Button("Not now", role: .cancel) {}
+            Button("Add anyway") { submit() }
+        } message: {
+            Text("Fewer goals tend to stick better. Add it anyway?")
+        }
+    }
+
+    private func submit() {
+        guard var current = draft else { return }
+        current.title = current.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        isSaving = true
+        Task {
+            if await vm.create(current) { dismiss() }
+            isSaving = false
+        }
     }
 
     private func sourceRow(_ source: GoalTrackingSource) -> some View {

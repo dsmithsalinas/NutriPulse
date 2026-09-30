@@ -18,8 +18,19 @@ final class GoalsViewModel {
     private(set) var isLoading = false
     var error: String?
 
+    /// The built-in protein floor card — computed fresh each load, never stored as a goal of
+    /// its own. `nil` only while loading or if there's no effective protein target yet.
+    private(set) var floorSummary: ProteinFloorGoal.Summary?
+    /// Wins worth celebrating on this load, keyed by goal id (`ProteinFloorGoal.syntheticGoalID`
+    /// for the floor card). Already-shown wins are filtered out via `winStore` before landing
+    /// here, so a view seeing an id in this dictionary should play its celebration once.
+    private(set) var wins: [UUID: GoalWinKind] = [:]
+
     private let repository = PersonalGoalRepository()
     private let metrics = GoalMetricService()
+    private let analyticsRepository = AnalyticsRepository()
+    private let dailyGoalRepository = GoalRepository()
+    private let winStore = GoalWinStore()
 
     func load() async {
         guard !isLoading else { return }
@@ -27,10 +38,11 @@ final class GoalsViewModel {
         if DebugLaunch.has("--goals-preview")
             || DebugLaunch.has("--progress-preview") {
             let previews = Self.previewStates()
-            active = DebugLaunch.has("--progress-preview")
-                ? Array(previews.prefix(1))
-                : previews
-            completed = []
+            let isProgressPreview = DebugLaunch.has("--progress-preview")
+            active = isProgressPreview ? Array(previews.prefix(1)) : previews
+            completed = isProgressPreview ? [] : Self.previewCompletedStates()
+            floorSummary = isProgressPreview ? nil : Self.previewFloorSummary()
+            wins = isProgressPreview ? [:] : Self.previewWins(floorSummary: floorSummary)
             error = nil
             return
         }
@@ -54,10 +66,59 @@ final class GoalsViewModel {
         } catch {
             self.error = "Goals couldn’t refresh. Your existing health data is unchanged."
         }
+        await loadFloorSummary()
+        refreshWins()
     }
 
     func state(for id: UUID) -> GoalCardState? {
         active.first { $0.id == id } ?? completed.first { $0.id == id }
+    }
+
+    /// A calm heads-up before adding a goal past the suggested active count — never a block.
+    var shouldWarnBeforeAddingGoal: Bool {
+        GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: active.count)
+    }
+
+    // Fetched independently from the personal-goals tables (and tolerant of failure there,
+    // since a goal-loading error shouldn't also blank out the one card everyone always has).
+    private func loadFloorSummary() async {
+        let today = Date.now
+        do {
+            async let summariesTask = analyticsRepository.fetchDailySummaries(days: ProteinFloorGoal.windowDays)
+            async let goalTask = dailyGoalRepository.fetchGoal(for: today)
+            let (summaries, goal) = try await (summariesTask, goalTask)
+            floorSummary = ProteinFloorGoal.summary(from: summaries, floorTarget: goal?.proteinG, today: today)
+        } catch {
+            // Leave any previously loaded floor summary in place rather than blanking it.
+        }
+    }
+
+    // Detects wins across the active goals and the floor card, skipping any already shown
+    // (persisted in `winStore`) and marking freshly-detected ones as shown so they play once.
+    private func refreshWins() {
+        var result: [UUID: GoalWinKind] = [:]
+        for state in active {
+            if let win = GoalWins.newWin(
+                completed: state.progress.status == .met,
+                currentStreak: state.progress.currentStreak,
+                alreadyCelebrated: winStore.celebrated(for: state.id)
+            ) {
+                result[state.id] = win.kind
+                winStore.markCelebrated(win.key, for: state.id)
+            }
+        }
+        if let floorSummary {
+            let id = ProteinFloorGoal.syntheticGoalID
+            if let win = GoalWins.newWin(
+                completed: false,
+                currentStreak: floorSummary.currentStreak,
+                alreadyCelebrated: winStore.celebrated(for: id)
+            ) {
+                result[id] = win.kind
+                winStore.markCelebrated(win.key, for: id)
+            }
+        }
+        wins = result
     }
 
     private func states(
@@ -156,6 +217,90 @@ final class GoalsViewModel {
                 measurement: sleep, values: sleepValues
             ),
         ]
+    }
+
+    // A floor streak that lands exactly on the 7-day milestone, with a couple of no-data and
+    // below-floor days further back so the grid and "logged days" count show real variety.
+    private static func previewFloorSummary() -> ProteinFloorGoal.Summary {
+        let calendar = Calendar.current
+        let today = calendar.date(from: DateComponents(year: 2026, month: 8, day: 30))!
+        let floorTarget = 130.0
+        // Oldest (13 days ago) to newest (today). `nil` means no log that day.
+        let proteinByDay: [Double?] = [
+            142, nil, 96, 150, 145, 138, 90,
+            130, 141, 150, 144, 139, 152, 160,
+        ]
+        let summaries: [DailySummary] = proteinByDay.enumerated().compactMap { offset, protein in
+            guard let protein else { return nil }
+            let date = calendar.date(byAdding: .day, value: offset - (proteinByDay.count - 1), to: today)!
+            return DailySummary(date: date, calories: 1_500, proteinG: protein, carbsG: 120, fatG: 50, fiberG: 22)
+        }
+        return ProteinFloorGoal.summary(from: summaries, floorTarget: floorTarget, today: today, calendar: calendar)!
+    }
+
+    // A couple of finished goals for the trophy shelf: one met, one honestly not.
+    private static func previewCompletedStates() -> [GoalCardState] {
+        let userId = UUID()
+        let calendar = Calendar.current
+        func date(_ y: Int, _ m: Int, _ d: Int) -> Date {
+            calendar.date(from: DateComponents(year: y, month: m, day: d))!
+        }
+        func completedBundle(title: String, start: String, end: String, metCount: Int, totalDays: Int) -> GoalCardState {
+            let versionId = UUID()
+            let goalId = UUID()
+            let measurement = GoalMeasurement(
+                id: UUID(), goalVersionId: versionId, userId: userId, role: "primary",
+                name: title, kind: .habit, aggregation: .rate, comparison: .atLeast,
+                targetValue: 0.75, unit: nil, sourceType: .manualBoolean, sourceMetric: nil,
+                minimumCoverage: 0.5, createdAt: date(2026, 8, 1)
+            )
+            let goal = PersonalGoal(
+                id: goalId, userId: userId, status: .completed,
+                currentVersionId: versionId, createdAt: date(2026, 8, 1),
+                completedAt: date(2026, 8, 21)
+            )
+            let version = GoalVersion(
+                id: versionId, goalId: goalId, userId: userId, versionNumber: 1,
+                title: title, detail: nil, period: .custom,
+                startDate: start, endDate: end, timezoneId: TimeZone.current.identifier,
+                scheduledWeekdays: [1, 2, 3, 4, 5, 6, 7],
+                effectiveFrom: start, effectiveTo: nil, createdAt: date(2026, 8, 1)
+            )
+            let goalBundle = PersonalGoalBundle(
+                goal: goal, version: version, measurements: [measurement],
+                checkins: [], observations: []
+            )
+            let startDate = date(2026, 8, 1)
+            let values = (0..<totalDays).map { offset in
+                GoalDailyValue(
+                    date: calendar.date(byAdding: .day, value: offset, to: startDate)!,
+                    boolean: offset < metCount
+                )
+            }
+            let progress = GoalProgressCalculator.calculate(
+                version: version, measurement: measurement, values: values,
+                today: date(2026, 8, 21), calendar: calendar
+            )
+            return .init(bundle: goalBundle, values: values, progress: progress, quality: nil)
+        }
+
+        return [
+            completedBundle(
+                title: "Stretch after lunch", start: "2026-08-01", end: "2026-08-21",
+                metCount: 18, totalDays: 21
+            ),
+            completedBundle(
+                title: "10,000 steps average", start: "2026-08-01", end: "2026-08-21",
+                metCount: 9, totalDays: 21
+            ),
+        ]
+    }
+
+    // Presentational only — a fixed win so screenshots and manual QA can see the celebration
+    // without writing to (and permanently tripping) the real win store.
+    private static func previewWins(floorSummary: ProteinFloorGoal.Summary?) -> [UUID: GoalWinKind] {
+        guard let floorSummary, GoalWins.milestoneDays.contains(floorSummary.currentStreak) else { return [:] }
+        return [ProteinFloorGoal.syntheticGoalID: .streak(days: floorSummary.currentStreak)]
     }
     #endif
 
