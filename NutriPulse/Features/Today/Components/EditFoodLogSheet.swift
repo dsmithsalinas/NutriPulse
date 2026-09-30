@@ -25,11 +25,13 @@ struct EditFoodLogSheet: View {
             Form {
                 Section {
                     Text(log.displayName)
-                        .font(.headline)
-                    Text("\(Int(log.caloriesSnapshot)) kcal · \(Int(log.proteinGSnapshot))g protein per serving")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } header: { Text("Food") }
+                        .font(Theme.Fonts.body(17, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("\(Int(log.caloriesSnapshot)) kcal \u{00B7} \(Int(log.proteinGSnapshot))g protein per serving")
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                } header: { DaylightSectionHeader("Food") }
+                .daylightSection()
 
                 Section {
                     Picker("Meal", selection: $meal) {
@@ -42,16 +44,14 @@ struct EditFoodLogSheet: View {
                         Spacer()
                         Text(quantity.formatted())
                             .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.Colors.textSecondary)
                         Stepper("", value: $quantity, in: 0.25...20, step: 0.25)
                             .labelsHidden()
                     }
-                } header: { Text("Log details") }
+                } header: { DaylightSectionHeader("Log details") }
+                .daylightSection()
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .listRowBackground(Theme.Colors.surfaceCard)
-            .tint(Theme.Colors.primary)
+            .daylightForm()
             .navigationTitle("Edit Log")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Theme.Colors.ground, for: .navigationBar)

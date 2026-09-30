@@ -115,13 +115,13 @@ private struct SwipeToDeleteRow<Content: View>: View {
             Button(role: .destructive, action: onDelete) {
                 VStack(spacing: 4) {
                     Image(systemName: "trash")
-                    Text("Delete").font(.caption2)
+                    Text("Delete").font(Theme.Fonts.body(11, .semibold))
                 }
                 .foregroundStyle(.white)
                 .frame(width: buttonWidth)
                 .frame(maxHeight: .infinity)
             }
-            .background(Color.red)
+            .background(Theme.Colors.swipeDelete)
 
             content()
                 .background(Theme.Colors.surfaceCard)
@@ -159,4 +159,10 @@ private struct SwipeToDeleteRow<Content: View>: View {
             offsetX = 0
         }
     }
+}
+
+// Theme has no destructive-red token of its own (see ProfileView's private `danger`, which
+// isn't visible outside that file) — the swipe-to-delete affordance needs one too.
+private extension Theme.Colors {
+    static let swipeDelete = Color(light: 0xB91C1C, dark: 0xF87171)
 }

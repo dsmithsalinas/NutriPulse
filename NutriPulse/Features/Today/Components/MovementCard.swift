@@ -21,14 +21,13 @@ struct MovementCard: View {
                 HStack(spacing: 6) {
                     Image(systemName: "figure.run")
                         .foregroundStyle(Theme.Colors.primary)
-                    Text("Movement")
-                        .fontWeight(.semibold)
+                    TileEyebrow("Movement")
                 }
                 Spacer()
                 if totalMinutes > 0 {
                     Text("\(totalMinutes) min")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(14, .semibold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
             }
 
@@ -42,16 +41,14 @@ struct MovementCard: View {
 
             Button(action: onLog) {
                 Text("+ Log workout")
-                    .font(.subheadline.weight(.medium))
+                    .font(Theme.Fonts.body(14, .semibold))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(Theme.Colors.primary.opacity(0.12))
-                    .foregroundStyle(Theme.Colors.primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(.vertical, 10)
+                    .background(Theme.Colors.primarySoft, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
+                    .foregroundStyle(Theme.Colors.primaryText)
             }
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile(radius: Theme.Radius.tileSmall, padding: Theme.Spacing.md)
     }
 
     private func workoutRow(_ workout: WorkoutLog) -> some View {
@@ -62,23 +59,18 @@ struct MovementCard: View {
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(workout.displayName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(Theme.Fonts.body(15, .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Text(meta(for: workout))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(12))
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
             Spacer()
             sourceBadge(workout.source)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 10)
-        .background(Theme.Colors.surfaceInset)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-        }
+        .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
         .contextMenu {
             // An imported row only leaves Footing — the workout stays in Apple
             // Health, and the tombstone stops the next import from resurrecting it.
@@ -95,24 +87,23 @@ struct MovementCard: View {
 
     private func sourceBadge(_ source: WorkoutSource) -> some View {
         Text(source == .healthkit ? "Health" : "Manual")
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(source == .healthkit ? Color.pink : Theme.Colors.primary)
+            .font(Theme.Fonts.body(10, .semibold))
+            .foregroundStyle(source == .healthkit ? Theme.Colors.listening : Theme.Colors.primaryText)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background((source == .healthkit ? Color.pink : Theme.Colors.primary).opacity(0.12))
-            .clipShape(Capsule())
+            .background((source == .healthkit ? Theme.Colors.listening : Theme.Colors.primary).opacity(0.12), in: Capsule())
     }
 
     private var emptyRow: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Nothing logged yet")
-                .font(.subheadline)
-                .fontWeight(.medium)
+                .font(Theme.Fonts.body(15, .medium))
+                .foregroundStyle(Theme.Colors.textPrimary)
             Text(HealthKitManager.shared.isAvailable
                  ? "Workouts from Apple Health show up here automatically."
                  : "Log a walk, lift, ride, or run.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(12))
+                .foregroundStyle(Theme.Colors.textSecondary)
         }
     }
 

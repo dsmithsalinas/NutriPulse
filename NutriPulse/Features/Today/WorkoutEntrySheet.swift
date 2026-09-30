@@ -41,7 +41,7 @@ struct WorkoutEntrySheet: View {
                     }
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
-                } header: { Text("Activity") }
+                } header: { DaylightSectionHeader("Activity") }
 
                 Section {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 60), spacing: 8)], spacing: 8) {
@@ -67,7 +67,8 @@ struct WorkoutEntrySheet: View {
                                 .frame(width: 80)
                         }
                     }
-                } header: { Text("Duration") }
+                } header: { DaylightSectionHeader("Duration") }
+                .daylightSection()
 
                 Section {
                     HStack {
@@ -86,12 +87,11 @@ struct WorkoutEntrySheet: View {
                             .multilineTextAlignment(.trailing)
                             .frame(width: 100)
                     }
-                } header: { Text("Details") }
-                  footer: { Text("Both optional — leave blank to keep it quick.") }
+                } header: { DaylightSectionHeader("Details") }
+                  footer: { DaylightSectionFooter("Both optional — leave blank to keep it quick.") }
+                .daylightSection()
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .tint(Theme.Colors.primary)
+            .daylightForm()
             .navigationTitle("Log Workout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
@@ -141,13 +141,13 @@ struct WorkoutEntrySheet: View {
                         .font(.system(size: 13))
                 }
                 Text(label)
-                    .font(.subheadline.weight(.medium))
+                    .font(Theme.Fonts.body(15, .medium))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(isSelected ? Theme.Colors.primary : Theme.Colors.surfaceInset)
+            .padding(.vertical, 10)
+            .background(isSelected ? Theme.Colors.primary : Theme.Colors.surfaceInset,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
             .foregroundStyle(isSelected ? .white : Theme.Colors.textPrimary)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
     }
