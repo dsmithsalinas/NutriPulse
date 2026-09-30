@@ -950,18 +950,42 @@ final class TodayViewModel {
         await loadHealthData()
     }
 
-    func addWater(_ ml: Double) async {
-        guard let userId = try? await supabase.auth.session.user.id else { return }
+    @discardableResult
+    func addWater(_ ml: Double) async -> UUID? {
+        guard let userId = try? await supabase.auth.session.user.id else { return nil }
+        let id = UUID()
         do {
             try LocalStore.shared.insertWaterLog(
-                id: UUID(), userId: userId,
+                id: id, userId: userId,
                 logDate: selectedDate.isoDateString, amountMl: ml
             )
             waterIntakeMl += ml
             SyncEngine.shared.refreshPendingCount()
             Task { await SyncEngine.shared.pushPendingChanges() }
+            return id
         } catch {
             errorMessage = "Couldn't log water."
+            return nil
+        }
+    }
+
+    // Never-below-zero clamp for undoing a water log against the running total. Pulled out
+    // as a pure helper so the arithmetic (and its floor) can be unit tested without a store.
+    nonisolated static func waterIntakeAfterUndo(_ currentMl: Double, removing ml: Double) -> Double {
+        Swift.max(0, currentMl - ml)
+    }
+
+    // Undo for a just-logged glass of water. Tombstones the row (never a hard local
+    // delete — see LocalStore.markWaterLogDeleted) so an in-flight create push can't
+    // resurrect it, then pushes the delete promptly, mirroring deleteWorkout/deleteLog.
+    func undoWater(id: UUID, ml: Double) async {
+        do {
+            try LocalStore.shared.markWaterLogDeleted(id: id)
+            waterIntakeMl = Self.waterIntakeAfterUndo(waterIntakeMl, removing: ml)
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+        } catch {
+            errorMessage = "Couldn't undo water."
         }
     }
 

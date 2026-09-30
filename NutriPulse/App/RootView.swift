@@ -13,6 +13,8 @@ struct RootView: View {
                 storeScreenshotPreview
             } else if isStrongWeekPreview {
                 strongWeekPreview
+            } else if isWaterPickerPreview {
+                waterPickerPreview
             } else if isGoalBuilderPreview {
                 CreateGoalView(
                     vm: GoalsViewModel(),
@@ -67,6 +69,22 @@ struct RootView: View {
     @ViewBuilder private var strongWeekPreview: some View {
         #if DEBUG
         StrongWeekPreview()
+        #else
+        EmptyView()
+        #endif
+    }
+
+    private var isWaterPickerPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--water-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var waterPickerPreview: some View {
+        #if DEBUG
+        WaterPickerPreview()
         #else
         EmptyView()
         #endif

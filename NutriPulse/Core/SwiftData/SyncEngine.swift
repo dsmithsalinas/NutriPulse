@@ -274,24 +274,33 @@ final class SyncEngine {
     // MARK: - Push water logs
 
     private func pushPendingWaterLogs() async -> Bool {
-        let pending: [SDWaterLog]
-        do {
-            pending = try LocalStore.shared.pendingWaterLogs()
-        } catch {
-            return false
-        }
-
         var succeeded = true
-        for log in pending {
-            do {
-                try await supabase.from("water_logs")
-                    .upsert(WaterLogInsert(from: log), onConflict: "id", ignoreDuplicates: true)
-                    .execute()
-                try LocalStore.shared.markWaterLogSynced(id: log.id)
-            } catch {
-                succeeded = false
+        do {
+            let pending = try LocalStore.shared.pendingWaterLogs()
+            for log in pending {
+                do {
+                    try await supabase.from("water_logs")
+                        .upsert(WaterLogInsert(from: log), onConflict: "id", ignoreDuplicates: true)
+                        .execute()
+                    try LocalStore.shared.markWaterLogSynced(id: log.id)
+                } catch {
+                    succeeded = false
+                }
             }
-        }
+        } catch { succeeded = false }
+        // A tombstone for a row that never reached the server (Undo tapped before the
+        // create push landed) deletes zero rows — no error, and the local row is cleaned
+        // up either way. Same contract as pushPendingFoodLogs' delete branch.
+        do {
+            let toDelete = try LocalStore.shared.deletedWaterLogs()
+            for log in toDelete {
+                let id = log.id
+                do {
+                    try await supabase.from("water_logs").delete().eq("id", value: id).execute()
+                    try LocalStore.shared.removeWaterLogAfterDelete(id: id)
+                } catch { succeeded = false }
+            }
+        } catch { succeeded = false }
         return succeeded
     }
 

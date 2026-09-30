@@ -1,11 +1,9 @@
 import SwiftUI
 
-// Day-aware header for Today. On the current day it leads with a time-of-day greeting; on a
-// past day it steps aside for the date and a way back. The date pill (‹ label ›) is the day
-// navigator — arrows step one day, tapping the label opens a picker to jump anywhere. The
-// forward arrow is disabled on today, since there's no logging into the future.
+// Today's Daylight header: the date over a big weekday, a calendar button that opens the day
+// picker, and a way back when viewing a past day. Days also change by swiping the page (see
+// TodayView), and VoiceOver users swipe up/down on this header to step a day.
 struct TodayHeaderView: View {
-    let firstName: String
     let date: Date
     let isToday: Bool
     let onPrevious: () -> Void
@@ -13,86 +11,65 @@ struct TodayHeaderView: View {
     let onToday: () -> Void
     let onPickDate: () -> Void
 
-    private var greeting: String {
-        switch Calendar.current.component(.hour, from: .now) {
-        case 5..<12:  return "Morning"
-        case 12..<17: return "Afternoon"
-        case 17..<22: return "Evening"
-        default:      return "Hi"
-        }
-    }
-
-    private var pillLabel: String {
-        if isToday { return "Today" }
-        let f = DateFormatter()
-        f.dateFormat = "EEE · MMM d"
-        return f.string(from: date)
+    private var dateLine: String {
+        let day = date.formatted(.dateTime.month(.abbreviated).day())
+        if isToday { return day }
+        if Calendar.current.isDateInYesterday(date) { return "\(day) · Yesterday" }
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                arrow("chevron.left", action: onPrevious, disabled: false)
-
-                Button(action: onPickDate) {
-                    HStack(spacing: 5) {
-                        Text(pillLabel)
-                            .font(.system(size: 12, weight: .bold))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .bold))
-                            .opacity(0.7)
-                    }
+        HStack(alignment: .bottom, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(dateLine)
+                    .font(Theme.Fonts.body(14, .semibold))
                     .foregroundStyle(Theme.Colors.textSecondary)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 6)
-                    .background(Theme.Colors.surfaceCard)
-                    .clipShape(Capsule())
-                    .overlay { Capsule().strokeBorder(Theme.Colors.hairline, lineWidth: 1) }
+                Text(date.formatted(.dateTime.weekday(.wide)))
+                    .font(Theme.Fonts.display(36, .extraBold, relativeTo: .largeTitle))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityHint("Swipe up or down to change the day")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: onNext()
+                case .decrement: onPrevious()
+                @unknown default: break
                 }
-                .buttonStyle(.plain)
-
-                arrow("chevron.right", action: onNext, disabled: isToday)
-
-                Spacer(minLength: 8)
             }
 
-            if isToday {
-                Text("\(greeting), \(firstName)")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(.primary)
-            } else {
+            Spacer(minLength: 8)
+
+            if !isToday {
                 Button(action: onToday) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "arrow.uturn.left")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("Back to today")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .foregroundStyle(Theme.Colors.primary)
+                    Label("Today", systemImage: "arrow.uturn.left")
+                        .font(Theme.Fonts.body(14, .bold))
+                        .foregroundStyle(Theme.Colors.primaryText)
+                        .padding(.horizontal, 14)
+                        .frame(height: 44)
+                        .background(Theme.Colors.surfaceCard, in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
+                .accessibilityLabel("Back to today")
+                .transition(.scale.combined(with: .opacity))
             }
+
+            Button(action: onPickDate) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.Colors.surfaceCard, in: Circle())
+                    .shadow(color: Color(hex: 0x0F172A, opacity: 0.08), radius: 1, y: 1)
+            }
+            .buttonStyle(.pressable)
+            .accessibilityLabel("Pick a day")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.easeInOut(duration: 0.18), value: isToday)
-    }
-
-    private func arrow(_ system: String, action: @escaping () -> Void, disabled: Bool) -> some View {
-        Button(action: action) {
-            Image(systemName: system)
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .frame(width: 30, height: 30)
-                .background(Theme.Colors.surfaceCard)
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-                }
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.35 : 1)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isToday)
     }
 }
 

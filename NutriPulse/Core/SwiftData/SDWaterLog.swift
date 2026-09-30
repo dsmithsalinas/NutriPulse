@@ -8,7 +8,7 @@ final class SDWaterLog {
     var logDate: String
     var amountMl: Double
     var loggedAt: Date
-    var syncState: String  // "pendingCreate" | "synced"
+    var syncState: String  // "pendingCreate" | "synced" | "pendingDelete" (Undo)
 
     init(
         id: UUID = UUID(),

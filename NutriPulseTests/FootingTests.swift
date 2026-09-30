@@ -1641,6 +1641,22 @@ final class DecimalInputTests: XCTestCase {
     }
 }
 
+final class WaterUndoTests: XCTestCase {
+    // Undoing a glass larger than what's left (e.g. the goal was edited, or a second
+    // undo races the first) must clamp at zero rather than going negative.
+    func testNeverGoesBelowZero() {
+        XCTAssertEqual(TodayViewModel.waterIntakeAfterUndo(150, removing: 250), 0)
+    }
+
+    func testSubtractsNormally() {
+        XCTAssertEqual(TodayViewModel.waterIntakeAfterUndo(750, removing: 250), 500)
+    }
+
+    func testExactUndoReachesZeroNotNegativeZero() {
+        XCTAssertEqual(TodayViewModel.waterIntakeAfterUndo(250, removing: 250), 0)
+    }
+}
+
 // MARK: - LocalStore sync-state transitions
 //
 // These pin the compare-and-set behaviour that keeps a push from clobbering an
@@ -1846,6 +1862,89 @@ final class LocalStoreSyncStateTests: XCTestCase {
 
         try LocalStore.shared.pruneDeletedFoodLogs(userId: UUID(), since: "2026-07-01", remoteIds: [])
         XCTAssertNotNil(try row(old), "belongs to a different user")
+    }
+
+    // MARK: Water undo
+
+    private func waterRow(_ id: UUID) throws -> SDWaterLog? {
+        let descriptor = FetchDescriptor<SDWaterLog>(predicate: #Predicate { $0.id == id })
+        return try container.mainContext.fetch(descriptor).first
+    }
+
+    @discardableResult
+    private func insertWater(amountMl: Double = 250) throws -> UUID {
+        let id = UUID()
+        try LocalStore.shared.insertWaterLog(
+            id: id, userId: userId, logDate: "2026-07-07", amountMl: amountMl
+        )
+        return id
+    }
+
+    // Undo must tombstone, not hard-delete (same contract as food/workout deletes), and
+    // the tombstoned row must stop counting toward the day's total immediately.
+    func testUndoTombstonesWaterLogAndExcludesItFromTotal() throws {
+        let id = try insertWater(amountMl: 250)
+        XCTAssertEqual(try LocalStore.shared.fetchWaterTotal(for: dateFor("2026-07-07"), userId: userId), 250)
+
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+
+        XCTAssertNotNil(try waterRow(id), "row was hard-deleted; an in-flight create would be orphaned")
+        XCTAssertEqual(try XCTUnwrap(waterRow(id)).syncState, "pendingDelete")
+        XCTAssertEqual(try LocalStore.shared.fetchWaterTotal(for: dateFor("2026-07-07"), userId: userId), 0)
+    }
+
+    // A create push that lands after Undo must not resurrect the water: markWaterLogSynced
+    // only flips pendingCreate → synced, mirroring markWorkoutLogSynced's guard.
+    func testMarkWaterLogSyncedDoesNotResurrectATombstone() throws {
+        let id = try insertWater()
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+
+        try LocalStore.shared.markWaterLogSynced(id: id)
+
+        XCTAssertEqual(try XCTUnwrap(waterRow(id)).syncState, "pendingDelete")
+    }
+
+    // Completion of the delete push only removes rows still tombstoned — a race where the
+    // row was somehow re-synced first must not hard-delete it out from under that state.
+    func testRemoveWaterLogAfterDeleteOnlyRemovesTombstonedRows() throws {
+        let id = try insertWater()
+        try LocalStore.shared.markWaterLogSynced(id: id)   // not tombstoned yet
+
+        try LocalStore.shared.removeWaterLogAfterDelete(id: id)
+        XCTAssertNotNil(try waterRow(id), "a synced row must not be removed by a delete completion")
+
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+        try LocalStore.shared.removeWaterLogAfterDelete(id: id)
+        XCTAssertNil(try waterRow(id))
+    }
+
+    // A pull that skips existing ids must not resurrect a tombstoned row: the local
+    // pendingDelete row already exists at that id, so upsertWaterLog's exists-check skips it.
+    func testPullSkipsATombstonedWaterLog() throws {
+        let id = try insertWater(amountMl: 250)
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+
+        try LocalStore.shared.upsertWaterLog(
+            id: id, userId: userId, logDate: "2026-07-07", amountMl: 250, loggedAt: .now
+        )
+
+        XCTAssertEqual(try XCTUnwrap(waterRow(id)).syncState, "pendingDelete")
+        XCTAssertEqual(try LocalStore.shared.fetchWaterTotal(for: dateFor("2026-07-07"), userId: userId), 0)
+    }
+
+    // pendingCount feeds the "N changes waiting to sync" badge; a pending water delete
+    // (from Undo) must count just like a pending water create does.
+    func testPendingCountIncludesPendingWaterDeletes() throws {
+        XCTAssertEqual(try LocalStore.shared.pendingCount(), 0)
+
+        let id = try insertWater()
+        XCTAssertEqual(try LocalStore.shared.pendingCount(), 1)
+
+        try LocalStore.shared.markWaterLogSynced(id: id)
+        XCTAssertEqual(try LocalStore.shared.pendingCount(), 0)
+
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+        XCTAssertEqual(try LocalStore.shared.pendingCount(), 1)
     }
 
     // MARK: Workout reconciliation

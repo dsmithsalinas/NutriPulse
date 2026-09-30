@@ -12,7 +12,6 @@ struct TodayView: View {
     @State private var showStrongWeek = false
     @State private var showBodyCompSheet = false
     @State private var showBodyHub = false
-    @State private var showWorkoutSheet = false
     @State private var showDatePicker = false
     @State private var showRitual = false
     @State private var showProteinRescue = false
@@ -23,6 +22,8 @@ struct TodayView: View {
     @State private var proteinRippleTrigger = 0
     @State private var proteinCelebrationPending = false
     @State private var editingLog: FoodLog? = nil
+    @State private var showWaterPicker = false
+    @State private var showMovement = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppState.self) private var appState
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
@@ -32,6 +33,13 @@ struct TodayView: View {
     // it returns on the next dose day (or as an overdue prompt the following day).
     @AppStorage("doseCardDismissedDay") private var doseCardDismissedDay = ""
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
+    // The water tile's one-tap amount, in ml. 0 until the user picks a size, which falls back
+    // to the first preset for their units (250 ml or 8 oz).
+    @AppStorage("waterUsualMl") private var storedUsualWaterMl: Double = 0
+    private var waterUnit: WaterUnit { units == .imperial ? .oz : .ml }
+    private var usualWaterMl: Double {
+        storedUsualWaterMl > 0 ? storedUsualWaterMl : (waterUnit.quickAdds.first?.ml ?? 250)
+    }
 
     // Health permissions live in the Health app (Sharing → Apps), not in this app's
     // Settings page, so openSettingsURLString would drop the user somewhere with no
@@ -64,10 +72,8 @@ struct TodayView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: Theme.Spacing.md) {
+                VStack(spacing: Theme.Spacing.tileGap) {
                     TodayHeaderView(
-                        firstName: appState.profile?.fullName?
-                            .components(separatedBy: " ").first ?? "there",
                         date: vm.selectedDate,
                         isToday: vm.isToday,
                         onPrevious: vm.goToPreviousDay,
@@ -76,6 +82,7 @@ struct TodayView: View {
                         onPickDate: { showDatePicker = true }
                     )
                     .padding(.top, Theme.Spacing.sm)
+                    .popIn(order: 0)
 
                     if let status = SyncEngine.shared.statusMessage {
                         SyncStatusBanner(status: status) {
@@ -87,20 +94,42 @@ struct TodayView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity, minHeight: 200)
                     } else {
-                        HeroNutritionCard(
-                            calories: vm.totalCalories,
-                            proteinG: vm.totalProteinG,
-                            carbsG:   vm.totalCarbsG,
-                            fatG:     vm.totalFatG,
-                            fiberG:   vm.totalFiberG,
-                            goal:     vm.dailyGoal
-                        )
-                        .celebrationBeat(trigger: ringCelebrationTrigger)
-                        .proteinRipple(trigger: proteinRippleTrigger)
-
                         // Pulse gets one adaptive slot. A single, ranked next step keeps Today
                         // calm even when dose, recovery, pacing, and target signals coexist.
                         pulsePriorityCard
+                            .popIn(order: 1)
+
+                        tileGrid
+
+                        if vm.foodLogs.isEmpty {
+                            EmptyDayView(isToday: vm.isToday)
+                                .popIn(order: 7)
+                        } else {
+                            // Meal sections in fixed display order (breakfast → snack)
+                            ForEach(Meal.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { meal in
+                                let logs = vm.logsByMeal[meal] ?? []
+                                if !logs.isEmpty {
+                                    MealSectionView(
+                                        meal: meal,
+                                        logs: logs,
+                                        onEdit: { editingLog = $0 },
+                                        onDelete: { log in Task { await vm.deleteLog(id: log.id) } }
+                                    )
+                                    .popIn(order: 7)
+                                }
+                            }
+                        }
+
+                        if vm.isToday, !vm.availableYesterdayMeals.isEmpty {
+                            RepeatYesterdayCard(
+                                meals: vm.availableYesterdayMeals
+                                    .map { (meal: $0.key, itemCount: $0.value.count) }
+                                    .sorted { $0.meal.sortOrder < $1.meal.sortOrder },
+                                busyMeal: vm.repeatingMeal,
+                                onRepeat: { meal in Task { await vm.repeatYesterday(meal) } }
+                            )
+                        }
+
                         if vm.isToday {
                             StrongWeekCard(vm: strongWeek) {
                                 showStrongWeek = true
@@ -123,12 +152,6 @@ struct TodayView: View {
                             )
                         }
 
-                        MovementCard(
-                            workouts: vm.workouts,
-                            onLog: { showWorkoutSheet = true },
-                            onDelete: { workout in Task { await vm.deleteWorkout(id: workout.id) } }
-                        )
-
                         BodyCompositionCard(
                             data: vm.bodyComp,
                             waistCm: vm.latestWaistCm,
@@ -137,49 +160,15 @@ struct TodayView: View {
                             onAddTapped: { showBodyCompSheet = true }
                         )
 
-                        WaterCard(
-                            intakeMl: vm.waterIntakeMl,
-                            goalMl:   vm.waterGoalMl
-                        ) { ml in
-                            Task { await vm.addWater(ml) }
-                        }
-
-                        if vm.isToday, !vm.availableYesterdayMeals.isEmpty {
-                            RepeatYesterdayCard(
-                                meals: vm.availableYesterdayMeals
-                                    .map { (meal: $0.key, itemCount: $0.value.count) }
-                                    .sorted { $0.meal.sortOrder < $1.meal.sortOrder },
-                                busyMeal: vm.repeatingMeal,
-                                onRepeat: { meal in Task { await vm.repeatYesterday(meal) } }
-                            )
-                        }
-
-                        if vm.foodLogs.isEmpty {
-                            EmptyDayView(isToday: vm.isToday)
-                        } else {
-                            // Meal sections in fixed display order (breakfast → snack)
-                            ForEach(Meal.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { meal in
-                                let logs = vm.logsByMeal[meal] ?? []
-                                if !logs.isEmpty {
-                                    MealSectionView(
-                                        meal: meal,
-                                        logs: logs,
-                                        onEdit: { editingLog = $0 },
-                                        onDelete: { log in Task { await vm.deleteLog(id: log.id) } }
-                                    )
-                                }
-                            }
-                        }
-
                         if let error = vm.errorMessage {
                             Text(error)
-                                .font(.caption)
+                                .font(Theme.Typography.caption)
                                 .foregroundStyle(.red)
                                 .padding()
                         }
                     }
                 }
-                .padding(.horizontal, Theme.Spacing.md)
+                .padding(.horizontal, Theme.Spacing.page)
                 .padding(.bottom, Theme.Spacing.xl)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
@@ -201,6 +190,20 @@ struct TodayView: View {
             )
             .navigationDestination(isPresented: $showBodyHub) {
                 BodyHubView(todayVM: vm, heightCm: appState.profile?.heightCm)
+            }
+            .sheet(isPresented: $showWaterPicker) {
+                WaterPickerSheet(
+                    intakeMl: vm.waterIntakeMl,
+                    goalMl: vm.waterGoalMl,
+                    unit: waterUnit,
+                    usualMl: Binding(get: { usualWaterMl }, set: { storedUsualWaterMl = $0 }),
+                    onAdd: { ml in await vm.addWater(ml) },
+                    onUndo: { id, ml in await vm.undoWater(id: id, ml: ml) }
+                )
+            }
+            .sheet(isPresented: $showMovement) {
+                MovementSheet(vm: vm)
+                    .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showDatePicker) {
                 DatePickerSheet(selected: vm.selectedDate) { picked in
@@ -227,17 +230,6 @@ struct TodayView: View {
                         writeToHK: writeToHK
                     )
                 }
-            }
-            .sheet(isPresented: $showWorkoutSheet) {
-                WorkoutEntrySheet { activity, minutes, calories, distanceMeters in
-                    await vm.addManualWorkout(
-                        activity: activity,
-                        durationMinutes: minutes,
-                        calories: calories,
-                        distanceMeters: distanceMeters
-                    )
-                }
-                .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showProteinRescue, onDismiss: {
                 playProteinCelebrationIfVisible()
@@ -393,6 +385,76 @@ struct TodayView: View {
                 Task { await vm.refreshSmartNotifications() }
             }
         }
+    }
+
+    // MARK: - Tile grid
+
+    // Protein spans the left column beside calories and the shot cycle; water and movement sit
+    // below. Without a shot cycle, movement moves up beside protein and water takes the row.
+    private var tileGrid: some View {
+        let cycleDay = vm.currentShotCycleDay
+        let showsShotCycle = cycleDay != nil && !vm.doseSchedule.cycleInterrupted
+        return VStack(spacing: Theme.Spacing.tileGap) {
+            HStack(alignment: .top, spacing: Theme.Spacing.tileGap) {
+                ProteinTile(proteinG: vm.totalProteinG, goalG: vm.dailyGoal?.proteinG)
+                    .celebrationBeat(trigger: ringCelebrationTrigger)
+                    .proteinRipple(trigger: proteinRippleTrigger, anchorY: 146)
+                    .popIn(order: 2)
+                VStack(spacing: Theme.Spacing.tileGap) {
+                    CaloriesTile(
+                        calories: vm.totalCalories,
+                        carbsG: vm.totalCarbsG,
+                        fatG: vm.totalFatG,
+                        fiberG: vm.totalFiberG,
+                        goal: vm.dailyGoal
+                    )
+                    .popIn(order: 3)
+                    if showsShotCycle, let cycleDay {
+                        ShotCycleTile(cycleDay: cycleDay, cycleLength: shotCycleLength) {
+                            showShotCycleCheckIn = true
+                        }
+                        .popIn(order: 4)
+                    } else {
+                        movedTile.popIn(order: 4)
+                    }
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: Theme.Spacing.tileGap) {
+                WaterTile(
+                    intakeMl: vm.waterIntakeMl,
+                    goalMl: vm.waterGoalMl,
+                    unit: waterUnit,
+                    usualMl: usualWaterMl,
+                    onQuickAdd: {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        Task { await vm.addWater(usualWaterMl) }
+                    },
+                    onOpenPicker: { showWaterPicker = true }
+                )
+                .popIn(order: 5)
+                if showsShotCycle {
+                    movedTile.popIn(order: 6)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var movedTile: some View {
+        MovedTile(workouts: vm.workouts) { showMovement = true }
+    }
+
+    // Days between the last shot and the next one due, from the dose schedule; weekly otherwise.
+    private var shotCycleLength: Int {
+        guard let log = vm.latestGLP1, let due = log.nextDueAt else { return 7 }
+        let days = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: log.injectedAt),
+            to: Calendar.current.startOfDay(for: due)
+        ).day ?? 7
+        return (1...14).contains(days) ? days : 7
     }
 
     private func openWeeklyReminderIfNeeded() {

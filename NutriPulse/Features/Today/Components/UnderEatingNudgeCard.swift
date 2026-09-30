@@ -51,50 +51,41 @@ struct UnderEatingNudgeCard: View {
     let nudge: DayNudge
     let onAsk: () -> Void
 
+    // Daylight's Pulse strip: a white tile, the mark on a solid indigo square, and the hand-off
+    // into the coach as its own full-width row.
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+        HStack(alignment: .top, spacing: 12) {
             PulseMark()
                 .foregroundStyle(.white)
-                .padding(8)
-                .frame(width: 36, height: 36)
-                .background(Theme.Colors.primaryGradient)
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .shadow(color: Theme.Colors.primary.opacity(0.4), radius: 6, y: 3)
+                .frame(width: 20, height: 20)
+                .frame(width: 40, height: 40)
+                .background(Theme.Colors.hero, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(nudge.headline)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(Theme.Fonts.body(15, .bold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Text(nudge.body)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(14))
+                    .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(action: onAsk) {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Text(nudge.cta)
                         Image(systemName: "arrow.right")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                     }
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Theme.Colors.primary)
+                    .font(Theme.Fonts.body(14, .bold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .frame(minHeight: 32)
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 7)
+                .padding(.top, 2)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(15)
-        .frame(maxWidth: .infinity)
-        .background {
-            LinearGradient(
-                colors: [Theme.Colors.primary.opacity(0.13), Theme.Colors.surfaceCard],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Theme.Colors.primary.opacity(0.28), lineWidth: 1)
-        }
+        .tile(radius: Theme.Radius.tileSmall, padding: 14)
     }
 }
