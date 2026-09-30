@@ -642,8 +642,13 @@ final class GoalWinsTests: XCTestCase {
         XCTAssertNil(alreadyShown)
     }
 
-    func testNonMilestoneStreakHasNoWin() {
-        XCTAssertNil(GoalWins.newWin(completed: false, currentStreak: 8, alreadyCelebrated: []))
+    func testStreakWinsCelebrateTheHighestMilestoneReachedOnce() {
+        // Missing the exact day doesn't lose the win: first opened on day 9, the 7 still plays.
+        XCTAssertEqual(GoalWins.newWin(completed: false, currentStreak: 9, alreadyCelebrated: [])?.kind, .streak(days: 7))
+        // Past 14 before ever looking: celebrate 14, and 7 never fires afterward.
+        XCTAssertEqual(GoalWins.newWin(completed: false, currentStreak: 16, alreadyCelebrated: [])?.kind, .streak(days: 14))
+        XCTAssertNil(GoalWins.newWin(completed: false, currentStreak: 16, alreadyCelebrated: [GoalWins.Keys.streak(14)]))
+        XCTAssertNil(GoalWins.newWin(completed: false, currentStreak: 6, alreadyCelebrated: []))
         XCTAssertNil(GoalWins.newWin(completed: false, currentStreak: 0, alreadyCelebrated: []))
     }
 

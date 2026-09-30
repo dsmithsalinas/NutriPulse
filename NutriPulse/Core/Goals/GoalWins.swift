@@ -10,8 +10,9 @@ enum GoalWinKind: Equatable {
 /// Win detection is pure — the caller (`GoalsViewModel`) decides whether a given win has already
 /// been shown, via `alreadyCelebrated`, and is the one that persists that decision (`GoalWinStore`).
 enum GoalWins {
-    /// Streak lengths worth calling out. Exact matches only, so the celebration fires the day a
-    /// streak reaches one of these numbers, not every day afterward that it stays above it.
+    /// Streak lengths worth calling out. The highest one reached celebrates once, even if Goals
+    /// wasn't opened on the exact day: someone who first looks on day 9 still gets their 7.
+    /// Lower milestones never fire after a higher one has.
     static let milestoneDays: [Int] = [7, 14, 30]
 
     enum Keys {
@@ -33,10 +34,10 @@ enum GoalWins {
         if completed, !alreadyCelebrated.contains(Keys.completed) {
             return (.completed, Keys.completed)
         }
-        if milestoneDays.contains(currentStreak) {
-            let key = Keys.streak(currentStreak)
+        if let reached = milestoneDays.last(where: { $0 <= currentStreak }) {
+            let key = Keys.streak(reached)
             if !alreadyCelebrated.contains(key) {
-                return (.streak(days: currentStreak), key)
+                return (.streak(days: reached), key)
             }
         }
         return nil
