@@ -18,7 +18,7 @@ struct OnboardingSplashView: View {
     private let subtitle = "Let's start with a few quick questions so I can get to know you — and be useful from day one."
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack {
             Theme.Colors.ground.ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -29,17 +29,18 @@ struct OnboardingSplashView: View {
                 // A hidden full-length copy reserves the line height so the avatar doesn't jump
                 // as the title types in.
                 Text(title)
-                    .font(.system(size: 32, weight: .semibold, design: .rounded))
+                    .font(Theme.Fonts.display(32, .extraBold, relativeTo: .largeTitle))
                     .opacity(0)
                     .overlay(alignment: .top) {
                         Text(typed)
-                            .font(.system(size: 32, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.primary)
+                            .font(Theme.Fonts.display(32, .extraBold, relativeTo: .largeTitle))
+                            .foregroundStyle(Theme.Colors.textPrimary)
                     }
                     .padding(.top, 26)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(subtitle)
-                    .font(.system(size: 15))
+                    .font(Theme.Fonts.body(15))
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -49,13 +50,16 @@ struct OnboardingSplashView: View {
 
                 Spacer()
                 Spacer()
-            }
-            .padding(.horizontal, 26)
-            .frame(maxWidth: .infinity)
 
-            GlowingArrowButton(action: onContinue)
-                .padding(.trailing, 26)
-                .padding(.bottom, 30)
+                Button("Let's go", action: onContinue)
+                    .buttonStyle(.daylightPrimary)
+                    .padding(.top, 8)
+                    .opacity(showSubtitle ? 1 : 0)
+                    .disabled(!showSubtitle)
+                    .accessibilityHidden(!showSubtitle)
+            }
+            .padding(.horizontal, Theme.Spacing.page)
+            .frame(maxWidth: .infinity)
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)

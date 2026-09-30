@@ -27,9 +27,14 @@ struct DobStepView: View {
             )
             .datePickerStyle(.wheel)
             .labelsHidden()
+            .tint(Theme.Colors.primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
-            .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+            }
         }
     }
 }

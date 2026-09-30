@@ -25,9 +25,10 @@ struct HealthKitStepView: View {
                             .frame(width: 30)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.label)
-                                .font(.system(size: 15, weight: .medium))
+                                .font(Theme.Fonts.body(15, .semibold))
+                                .foregroundStyle(Theme.Colors.textPrimary)
                             Text(item.detail)
-                                .font(.system(size: 12.5))
+                                .font(Theme.Fonts.body(13))
                                 .foregroundStyle(Theme.Colors.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -35,23 +36,28 @@ struct HealthKitStepView: View {
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                    }
                 }
 
                 if let didGrantAccess {
                     HStack(spacing: 8) {
                         Image(systemName: didGrantAccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                            .foregroundStyle(didGrantAccess ? .green : .orange)
+                            .foregroundStyle(didGrantAccess ? Theme.Colors.limeLine : Theme.NutrientColor.fat)
                         Text(didGrantAccess
                              ? "Apple Health connected"
                              : "No Health access granted — you can enable it later in the Health app.")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(Theme.Fonts.body(14, .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
                             .multilineTextAlignment(.leading)
                         Spacer(minLength: 0)
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background((didGrantAccess ? Color.green : Color.orange).opacity(0.12),
+                    .background((didGrantAccess ? Theme.Colors.lime : Theme.NutrientColor.fat).opacity(didGrantAccess ? 0.4 : 0.12),
                                 in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 } else {
                     Button(action: connect) {
@@ -62,15 +68,9 @@ struct HealthKitStepView: View {
                                 Image(systemName: "heart.fill")
                             }
                             Text(isConnecting ? "Requesting…" : "Connect Apple Health")
-                                .font(.system(size: 16, weight: .semibold))
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(Theme.Colors.primaryGradient,
-                                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .foregroundStyle(.white)
                     }
-                    .buttonStyle(.pressable)
+                    .buttonStyle(.daylightPrimary)
                     .disabled(isConnecting)
                     .padding(.top, 2)
                 }
@@ -97,9 +97,9 @@ struct HealthKitStepView: View {
     }
 
     private let dataPoints: [DataPoint] = [
-        .init(icon: "flame.fill",     color: .orange, label: "Active calories",     detail: "Counts toward your net calorie goal"),
-        .init(icon: "moon.zzz.fill",  color: .indigo, label: "Sleep",               detail: "Recovery data Pulse uses in coaching"),
-        .init(icon: "heart.fill",     color: .red,    label: "Resting HR & HRV",    detail: "Signals for recovery and stress"),
-        .init(icon: "scalemass.fill", color: .blue,   label: "Weight",              detail: "Syncs weigh-ins you log in Footing"),
+        .init(icon: "flame.fill",     color: Theme.NutrientColor.calories, label: "Active calories",  detail: "Counts toward your net calorie goal"),
+        .init(icon: "moon.zzz.fill",  color: Theme.Colors.primary,         label: "Sleep",             detail: "Recovery data Pulse uses in coaching"),
+        .init(icon: "heart.fill",     color: Theme.Colors.listening,       label: "Resting HR & HRV",  detail: "Signals for recovery and stress"),
+        .init(icon: "scalemass.fill", color: Theme.NutrientColor.water,    label: "Weight",            detail: "Syncs weigh-ins you log in Footing"),
     ]
 }
