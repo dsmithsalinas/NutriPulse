@@ -16,7 +16,9 @@ struct BodyHubView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                DaylightPageTitle("Body")
+
                 Picker("Range", selection: $vm.selectedRange) {
                     ForEach(BodyHubViewModel.TimeRange.allCases) { range in
                         Text(range.label).tag(range)
@@ -27,32 +29,32 @@ struct BodyHubView: View {
                 metricRow(
                     .weight,
                     series: vm.weightSeries,
-                    fallbackValue: todayVM.bodyComp.weightKg
+                    fallbackValue: todayVM.bodyComp.weightKg,
+                    order: 0
                 )
                 metricRow(
                     .bodyFat,
                     series: vm.bodyFatSeries,
-                    fallbackValue: todayVM.bodyComp.bodyFatPct
+                    fallbackValue: todayVM.bodyComp.bodyFatPct,
+                    order: 1
                 )
                 metricRow(
                     .leanMass,
                     series: vm.leanSeries,
-                    fallbackValue: todayVM.bodyComp.lbmKg
+                    fallbackValue: todayVM.bodyComp.lbmKg,
+                    order: 2
                 )
 
                 if !vm.trackedSites.isEmpty {
-                    Text("MEASUREMENTS")
-                        .font(.system(size: 11, weight: .bold))
-                        .tracking(0.6)
-                        .foregroundStyle(Theme.Colors.textFaint)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    TileEyebrow("Measurements")
                         .padding(.top, Theme.Spacing.xs)
 
-                    ForEach(vm.trackedSites) { site in
+                    ForEach(Array(vm.trackedSites.enumerated()), id: \.element) { index, site in
                         metricRow(
                             .site(site),
                             series: vm.siteSeries(site),
-                            fallbackValue: vm.latestPerSite[site]?.valueCm
+                            fallbackValue: vm.latestPerSite[site]?.valueCm,
+                            order: 3 + index
                         )
                     }
                 }
@@ -62,16 +64,16 @@ struct BodyHubView: View {
                         showCheckIn = true
                     } label: {
                         Text("+ Track another · \(vm.untrackedSites.map { $0.displayName.lowercased() }.joined(separator: ", "))")
-                            .font(.subheadline)
+                            .font(Theme.Fonts.body(14, .semibold))
                             .foregroundStyle(Theme.Colors.primary)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
+                            .frame(minHeight: 44)
                             .background {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                RoundedRectangle(cornerRadius: Theme.Radius.tileSmall, style: .continuous)
                                     .strokeBorder(Theme.Colors.primary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                             }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                 }
 
                 if let insight = vm.insightText {
@@ -81,39 +83,37 @@ struct BodyHubView: View {
                             .padding(.top, 2)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("More than the scale")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
+                                .font(Theme.Fonts.body(15, .semibold))
+                                .foregroundStyle(Theme.Colors.textPrimary)
                             Text(insight)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.Fonts.body(13))
+                                .foregroundStyle(Theme.Colors.textSecondary)
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(Theme.Spacing.md)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.Colors.primary.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .tile(Theme.Colors.primarySoft, shadow: false)
+                    .popIn(order: 3 + vm.trackedSites.count)
                 }
 
                 if !vm.milestones.isEmpty {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("MEANINGFUL CHANGES")
-                            .font(.system(size: 11, weight: .bold))
-                            .tracking(0.6)
-                            .foregroundStyle(Theme.Colors.textFaint)
+                        TileEyebrow("Meaningful changes")
                         ForEach(vm.milestones) { milestone in
                             HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                                 Image(systemName: "sparkles")
                                     .foregroundStyle(Theme.Colors.primary)
                                     .frame(width: 22)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(milestone.title).font(.subheadline.weight(.semibold))
-                                    Text(milestone.detail).font(.caption).foregroundStyle(.secondary)
+                                    Text(milestone.title)
+                                        .font(Theme.Fonts.body(14, .semibold))
+                                        .foregroundStyle(Theme.Colors.textPrimary)
+                                    Text(milestone.detail)
+                                        .font(Theme.Fonts.body(12))
+                                        .foregroundStyle(Theme.Colors.textSecondary)
                                 }
                                 Spacer(minLength: 0)
                             }
-                            .padding(Theme.Spacing.md)
-                            .card()
+                            .tile()
                         }
                     }
                 }
@@ -122,24 +122,22 @@ struct BodyHubView: View {
                     showCheckIn = true
                 } label: {
                     Text("+ Log check-in")
-                        .font(.subheadline.weight(.medium))
+                        .font(Theme.Fonts.body(15, .semibold))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Theme.Colors.primary.opacity(0.12))
+                        .frame(height: 44)
+                        .background(Theme.Colors.primarySoft)
                         .foregroundStyle(Theme.Colors.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
                 }
+                .buttonStyle(.pressable)
             }
-            .padding(Theme.Spacing.md)
+            .padding(Theme.Spacing.page)
             .padding(.bottom, Theme.Spacing.xl)
             .opacity(vm.isLoading ? 0.5 : 1)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .scrollContentBackground(.hidden)
-        .navigationTitle("Body")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
-        .toolbar(.visible, for: .navigationBar)
+        .daylightSubpage("Body")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -147,6 +145,7 @@ struct BodyHubView: View {
                 } label: {
                     Image(systemName: "scope")
                         .foregroundStyle(Theme.Colors.primary)
+                        .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("Body goals")
             }
@@ -182,22 +181,23 @@ struct BodyHubView: View {
     private func metricRow(
         _ metric: BodyMetric,
         series: [(date: Date, value: Double)],
-        fallbackValue: Double?
+        fallbackValue: Double?,
+        order: Int
     ) -> some View {
         NavigationLink {
             BodyMetricHistoryView(metric: metric)
         } label: {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: metric.systemImage)
-                    .font(.system(size: 17))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(metric.color)
-                    .frame(width: 24)
+                    .frame(width: 32, height: 32)
+                    .background(metric.color.opacity(0.12), in: Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(metric.title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
+                        .font(Theme.Fonts.body(15, .semibold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     subline(metric, series: series)
                 }
 
@@ -209,14 +209,12 @@ struct BodyHubView: View {
 
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(currentText(metric, series: series, fallback: fallbackValue))
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
+                        .font(Theme.Fonts.number(16, .bold, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     // Quiet by design: the goal is a caption, not a progress meter.
                     if let goal = vm.goalValue(for: metric) {
                         Text("\(metric.goalNoun) \(metric.format(goal, units: units))")
-                            .font(.system(size: 10))
+                            .font(Theme.Fonts.body(10, .semibold))
                             .foregroundStyle(Theme.Colors.textFaint)
                             .monospacedDigit()
                     }
@@ -224,13 +222,14 @@ struct BodyHubView: View {
                 .frame(minWidth: 56, alignment: .trailing)
 
                 Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textFaint)
             }
-            .padding(Theme.Spacing.md)
-            .card()
+            .frame(minHeight: 44)
+            .tile(radius: Theme.Radius.tileSmall)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
+        .popIn(order: order)
     }
 
     private func sparkline(_ series: [(date: Date, value: Double)], color: Color) -> some View {
@@ -247,6 +246,8 @@ struct BodyHubView: View {
         .chartYAxis(.hidden)
         .chartYScale(domain: .automatic(includesZero: false))
         .frame(width: 56, height: 24)
+        .chartDrawIn()
+        .accessibilityHidden(true)
     }
 
     private func currentText(_ metric: BodyMetric, series: [(date: Date, value: Double)], fallback: Double?) -> String {
@@ -261,21 +262,21 @@ struct BodyHubView: View {
             if case .leanMass = metric,
                BodyHubViewModel.leanHeldSteady(deltaKg: delta, baselineKg: series.first?.value) == true {
                 Text("holding steady")
-                    .font(.caption)
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.NutrientColor.fiber)
             } else {
                 Text(deltaText(metric, delta: delta))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(12))
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
         } else if series.count == 1 {
             Text("1 entry \(vm.selectedRange.phrase)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(12))
+                .foregroundStyle(Theme.Colors.textSecondary)
         } else {
             Text("No entries \(vm.selectedRange.phrase)")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(Theme.Fonts.body(12))
+                .foregroundStyle(Theme.Colors.textFaint)
         }
     }
 
