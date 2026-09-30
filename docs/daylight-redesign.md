@@ -8,6 +8,7 @@ Open it from claude.ai, or with `/artifacts` in Claude Code. The **C — Dayligh
 - Bright, tiled layout on a cool neutral background (`#EEF1F6`), white tiles with 20–28 px radii, deep indigo hero tile (`#1E1B4B` / `#4F46E5`), lime accent (`#D9F99D`) for wins and the Log button, sky (`#E0F2FE`) for water.
 - Type: Bricolage Grotesque (display, numbers) and Figtree (body). Numbers use tabular figures.
 - Motion: tiles spring in with a slight overshoot, the protein tile fills like liquid with a moving wave, bars and lines draw in, and the protein number counts up. Everything switches off when Reduce Motion is on.
+- **Pulse's logo is the existing Pulse mark** (`PulseMark` in `Features/Today/Components/UnderEatingNudgeCard.swift`): a faint full ring, a 250° arc clockwise from 12 o'clock with round caps, and a dot where the arc ends. Use it everywhere Pulse appears (tab bar, chat header, avatars, Today's Pulse strip), never a heartbeat line. Early mockups used a heartbeat line; they have been updated.
 - Floating dark tab bar: Today · Progress · Log (+) · Pulse · Profile; the selected tab expands into a labelled white pill.
 
 ## Screens and decisions
