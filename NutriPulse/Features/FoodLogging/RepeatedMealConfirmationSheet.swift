@@ -32,21 +32,22 @@ struct RepeatedMealConfirmationSheet: View {
                     ProgressView("Loading your usual meal…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if logs.isEmpty {
-                    ContentUnavailableView(
-                        "Meal unavailable",
-                        systemImage: "fork.knife",
-                        description: Text("The original meal is no longer available on this device.")
+                    BrandedEmptyState(
+                        icon: "fork.knife",
+                        title: "Meal unavailable",
+                        message: "The original meal is no longer available on this device."
                     )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Label("Review before logging", systemImage: "checklist")
-                                    .font(.headline)
-                                    .foregroundStyle(Theme.Colors.primary)
+                                    .font(Theme.Fonts.body(15, .bold))
+                                    .foregroundStyle(Theme.Colors.primaryText)
                                 Text("From \(formattedSourceDate). Adjust any serving, then add it to today.")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .font(Theme.Fonts.body(14))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
                             }
 
                             VStack(spacing: 0) {
@@ -54,11 +55,12 @@ struct RepeatedMealConfirmationSheet: View {
                                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                                         HStack(alignment: .firstTextBaseline) {
                                             Text(log.displayName)
-                                                .font(.subheadline.weight(.semibold))
+                                                .font(Theme.Fonts.body(15, .bold))
+                                                .foregroundStyle(Theme.Colors.textPrimary)
                                             Spacer()
                                             Text("\(Int((log.caloriesSnapshot * quantity(for: log)).rounded())) kcal")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .font(Theme.Fonts.body(12))
+                                                .foregroundStyle(Theme.Colors.textSecondary)
                                                 .monospacedDigit()
                                         }
 
@@ -67,16 +69,21 @@ struct RepeatedMealConfirmationSheet: View {
                                             set: { quantities[log.id] = $0 }
                                         ), in: 0.5...10, step: 0.5) {
                                             Text("\(quantity(for: log).formatted(.number.precision(.fractionLength(0...1)))) servings")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
+                                                .font(Theme.Fonts.body(12))
+                                                .foregroundStyle(Theme.Colors.textSecondary)
                                         }
                                     }
                                     .padding(Theme.Spacing.md)
 
-                                    if log.id != logs.last?.id { Divider().padding(.leading, Theme.Spacing.md) }
+                                    if log.id != logs.last?.id {
+                                        Rectangle()
+                                            .fill(Theme.Colors.hairline)
+                                            .frame(height: 1)
+                                            .padding(.leading, Theme.Spacing.md)
+                                    }
                                 }
                             }
-                            .card()
+                            .tile()
 
                             HStack(spacing: Theme.Spacing.sm) {
                                 macro("Calories", totals.calories, "kcal")
@@ -98,12 +105,10 @@ struct RepeatedMealConfirmationSheet: View {
                             HStack {
                                 if isSaving { ProgressView().tint(.white) }
                                 Text("Log \(meal.displayName)")
-                                    .fontWeight(.semibold)
                             }
                             .frame(maxWidth: .infinity, minHeight: 50)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.Colors.primary)
+                        .buttonStyle(.brandPrimary)
                         .disabled(isSaving)
                         .padding(Theme.Spacing.md)
                         .background(.bar)
@@ -124,6 +129,7 @@ struct RepeatedMealConfirmationSheet: View {
                 isLoading = false
             }
         }
+        .tint(Theme.Colors.primary)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
@@ -136,14 +142,14 @@ struct RepeatedMealConfirmationSheet: View {
     private func macro(_ label: String, _ value: Double, _ unit: String) -> some View {
         VStack(spacing: 3) {
             Text("\(Int(value.rounded()))\(unit)")
-                .font(.caption.weight(.bold))
+                .font(Theme.Fonts.body(13, .bold))
+                .foregroundStyle(Theme.Colors.textPrimary)
                 .monospacedDigit()
             Text(label.uppercased())
-                .font(.system(size: 9, weight: .semibold))
+                .font(Theme.Fonts.body(10, .semibold))
                 .foregroundStyle(Theme.Colors.textFaint)
         }
         .frame(maxWidth: .infinity, minHeight: 52)
-        .background(Theme.Colors.surfaceCard)
-        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .tile(radius: Theme.Radius.row, padding: 0)
     }
 }
