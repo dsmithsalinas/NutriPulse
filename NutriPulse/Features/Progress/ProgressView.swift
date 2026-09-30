@@ -979,9 +979,16 @@ private struct SummaryReviewCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Label("\(title), from Pulse", systemImage: "sparkles")
-                .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
-                .foregroundStyle(Theme.Colors.primary)
+            // Worked out on the device from the logs by fixed rules, so it's labelled as the
+            // user's own numbers, not as Pulse (which it isn't, and which may be turned off).
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Your \(title.prefix(1).lowercased() + title.dropFirst())")
+                    .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("Worked out from your logs")
+                    .font(Theme.Fonts.body(13))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
             row("What went well", wentWell, "checkmark.circle.fill", .green)
             row("Where it got difficult", gotDifficult, "arrow.down.right.circle.fill", .orange)
             row("Pattern noticed", pattern, "point.3.connected.trianglepath.dotted", Theme.Colors.primary)

@@ -586,7 +586,7 @@ private struct GoalHeroCard: View {
                     }
                 }
                 Spacer()
-                Text("Dashed = not measured")
+                Text("Dashed = no data")
                     .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -631,6 +631,10 @@ private struct GoalHeroCard: View {
                             if cellDashed(item.dayState) {
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                                     .strokeBorder(Theme.Colors.primary.opacity(0.4), style: StrokeStyle(lineWidth: 2, dash: [3]))
+                            } else if item.dayState == .pending {
+                                // Still ahead: a plain outline, so it doesn't read as missing data.
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .strokeBorder(Theme.Colors.hairline, lineWidth: 1.5)
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -654,18 +658,19 @@ private struct GoalHeroCard: View {
         }
     }
 
+    // Dashed only for a past scheduled day with no data. Days still ahead get a plain outline,
+    // and days outside the schedule stay empty: calling either "not measured" was wrong.
     private func cellDashed(_ state: GoalDayState?) -> Bool {
-        switch state {
-        case .missing, .pending, nil: true
-        default: false
-        }
+        state == .missing
     }
 
     private var weeklyTimelineDays: [GoalTimelineDay] {
         let calendar = Calendar.current
-        let referenceDate = state.bundle.goal.status == .active
-            ? Date.now
-            : GoalLifecycle.evaluationDate(for: state.bundle)
+        // The week the progress numbers were computed for, not "now": when they differed (a
+        // card left open into a new week, or fixture data) the grid showed an empty week under
+        // "100% measured". The last scheduled day in the progress is always inside that week.
+        let referenceDate = state.progress.days.last?.0
+            ?? (state.bundle.goal.status == .active ? Date.now : GoalLifecycle.evaluationDate(for: state.bundle))
         guard let interval = calendar.dateInterval(of: .weekOfYear, for: referenceDate) else { return [] }
         let today = calendar.startOfDay(for: referenceDate)
         let startDate = parse(state.bundle.version.startDate)

@@ -13,9 +13,15 @@ struct WeeklyReviewCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Label("Your week, from Pulse", systemImage: "sparkles")
-                .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
-                .foregroundStyle(Theme.Colors.primary)
+            // Rule-based, from the logs; not written by Pulse.
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Your week")
+                    .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("Worked out from your logs")
+                    .font(Theme.Fonts.body(13))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
             reviewRow("What went well", review.wentWell, "checkmark.circle.fill", .green)
             reviewRow("Where it got difficult", review.gotDifficult, "arrow.down.right.circle.fill", .orange)
             reviewRow("Pattern noticed", review.pattern, "point.3.connected.trianglepath.dotted", Theme.Colors.primary)
