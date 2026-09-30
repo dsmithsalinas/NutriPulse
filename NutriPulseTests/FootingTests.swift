@@ -134,6 +134,12 @@ final class ProgressSummaryTests: XCTestCase {
 // MARK: - Daylight Progress hero (trend pill, "Try this" suggestion)
 
 final class ProgressTrendTests: XCTestCase {
+    func testRollingAverageSmoothsATrailingWindow() {
+        XCTAssertEqual(ProgressTrendBuilder.rollingAverage([100, 140, 120, 160], window: 3),
+                       [100, 120, 120, 140])
+        XCTAssertEqual(ProgressTrendBuilder.rollingAverage([5, 7], window: 1), [5, 7])
+    }
+
     private var calendar: Calendar {
         var value = Calendar(identifier: .iso8601)
         value.timeZone = TimeZone(secondsFromGMT: 0)!

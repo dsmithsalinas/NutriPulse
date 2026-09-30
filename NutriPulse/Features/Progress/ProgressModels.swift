@@ -259,6 +259,15 @@ struct ProgressTrend: Equatable {
 }
 
 enum ProgressTrendBuilder {
+    /// Trailing mean over up to `window` values ending at each index; same length as `values`.
+    static func rollingAverage(_ values: [Double], window: Int) -> [Double] {
+        guard window > 1 else { return values }
+        return values.indices.map { index in
+            let slice = values[max(0, index - window + 1)...index]
+            return slice.reduce(0, +) / Double(slice.count)
+        }
+    }
+
     /// Only meaningful with a protein goal and at least one measured day in the prior period —
     /// otherwise there's nothing real to compare against, and the pill stays hidden.
     static func trend(current: ProgressMetrics, previous: ProgressMetrics) -> ProgressTrend? {

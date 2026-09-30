@@ -101,10 +101,12 @@ struct GoalsView: View {
 
     // MARK: - Header
 
+    // Pushed from Progress: a back button row with New goal, then the title. On its own: the
+    // title and New goal share one row, like the other Daylight screens.
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            HStack {
-                if embeddedInNavigation {
+            if embeddedInNavigation {
+                HStack {
                     Button(action: { dismiss() }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 16, weight: .bold))
@@ -114,28 +116,42 @@ struct GoalsView: View {
                     }
                     .buttonStyle(.pressable)
                     .accessibilityLabel("Back to Progress")
+                    Spacer()
+                    newGoalButton
                 }
-                Spacer()
-                Button { showCreate = true } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 14, weight: .bold))
-                        Text("New goal")
-                            .font(Theme.Fonts.body(14, .bold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .frame(height: 44)
-                    .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                title
+            } else {
+                HStack(alignment: .center) {
+                    title
+                    Spacer(minLength: 8)
+                    newGoalButton
                 }
-                .buttonStyle(.pressable)
-                .accessibilityLabel("Create a goal")
             }
-            Text("Goals")
-                .font(Theme.Fonts.display(36, .extraBold, relativeTo: .largeTitle))
-                .foregroundStyle(Theme.Colors.textPrimary)
-                .accessibilityAddTraits(.isHeader)
         }
+    }
+
+    private var title: some View {
+        Text("Goals")
+            .font(Theme.Fonts.display(36, .extraBold, relativeTo: .largeTitle))
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var newGoalButton: some View {
+        Button { showCreate = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .bold))
+                Text("New goal")
+                    .font(Theme.Fonts.body(14, .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.pressable)
+        .accessibilityLabel("Create a goal")
     }
 
     // MARK: - Content

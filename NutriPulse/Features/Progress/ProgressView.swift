@@ -506,8 +506,11 @@ private struct Sparkline: View {
         GeometryReader { geo in
             Path { path in
                 guard values.count > 1 else { return }
-                let minV = values.min() ?? 0
+                // Anchor the bottom well below the data (at most 60% of the peak) instead of at
+                // its minimum: min-to-max scaling stretched a 110–140 g week into full-height
+                // spikes, so ordinary day-to-day wobble read as a crisis.
                 let maxV = values.max() ?? 1
+                let minV = min(values.min() ?? 0, maxV * 0.6)
                 let range = max(maxV - minV, 0.0001)
                 let stepX = geo.size.width / CGFloat(values.count - 1)
                 for (index, value) in values.enumerated() {
@@ -545,7 +548,10 @@ private struct AvgProteinStatTile: View {
         VStack(alignment: .leading, spacing: 8) {
             TileEyebrow("Avg protein")
             if logged.count > 1 {
-                Sparkline(values: logged.map(\.proteinG), color: Theme.NutrientColor.protein)
+                // A 3-day rolling average, matching the tile's "average" label: raw daily values
+                // zig-zag between high and low days and read as noise rather than a trend.
+                Sparkline(values: ProgressTrendBuilder.rollingAverage(logged.map(\.proteinG), window: 3),
+                          color: Theme.NutrientColor.protein)
                     .frame(height: 32)
             } else {
                 Spacer(minLength: 32)
