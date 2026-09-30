@@ -76,9 +76,6 @@ struct ProfileView: View {
                     measurementsTile
                         .popIn(order: 5)
 
-                    coachTile
-                        .popIn(order: 6)
-
                     supportTile
                         .popIn(order: 6)
 
@@ -455,7 +452,7 @@ struct ProfileView: View {
             toggleRow(
                 icon: "bell.and.waves.left.and.right",
                 title: "Smart coaching",
-                subtitle: "At most one nudge a day",
+                subtitle: pulseStore.pulseEnabled ? "At most one nudge a day" : "Off while Pulse is off",
                 isOn: Binding(
                     get: { vm.smartCoachingOn },
                     set: { value in
@@ -465,7 +462,9 @@ struct ProfileView: View {
                             Task { await vm.setSmartCoaching(false) }
                         }
                     }
-                )
+                ),
+                // These nudges come from Pulse, so with Pulse off they can't fire anyway.
+                disabled: !pulseStore.pulseEnabled
             )
             if !glp1Logs.isEmpty {
                 hairline
@@ -678,7 +677,8 @@ struct ProfileView: View {
             footer: "Pulse is Footing's coach: a tab of its own, a nudge on Today, and the written Strong Week outlook. Turning it off stops all three; Talk to Log's food parsing is separate and keeps working."
         ) {
             toggleRow(
-                icon: "waveform.path.ecg",
+                // Not a heartbeat line: the design notes reserve Pulse's look for the Pulse mark.
+                icon: "bubble.left.and.text.bubble.right",
                 title: "Pulse",
                 subtitle: pulseStore.pulseEnabled ? "On" : "Off",
                 isOn: Binding(
@@ -714,6 +714,10 @@ struct ProfileView: View {
             actionRow(icon: "hand.raised", title: "AI data sharing", showChevron: true) {
                 showAIDataSharingInfo = true
             }
+            hairline
+            actionRow(icon: "trash", title: "Clear Chat History", tint: Theme.Colors.danger) {
+                showClearHistoryConfirm = true
+            }
         }
         .confirmationDialog(
             "Turn off Pulse?",
@@ -748,16 +752,6 @@ struct ProfileView: View {
             try await save()
         } catch {
             vm.errorMessage = "Couldn't update Pulse. Check your connection and try again."
-        }
-    }
-
-    // MARK: - Pulse coach
-
-    private var coachTile: some View {
-        SettingsTile(eyebrow: "Pulse coach") {
-            actionRow(icon: "trash", title: "Clear Chat History", tint: Theme.Colors.danger) {
-                showClearHistoryConfirm = true
-            }
         }
     }
 

@@ -44,7 +44,7 @@ struct PulseConsentSheet: View {
                 }
                 .tile()
 
-                Text("This is used only to write Pulse's replies. You can turn Pulse off any time in Profile.")
+                Text("Footing sends it only so Pulse can write its replies. You can turn Pulse off any time in Profile.")
                     .font(Theme.Fonts.body(14))
                     .foregroundStyle(Theme.Colors.textSecondary)
 

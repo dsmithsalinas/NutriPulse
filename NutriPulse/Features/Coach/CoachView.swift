@@ -138,7 +138,17 @@ struct CoachView: View {
         await vm.startTopic(prompt)
     }
 
+    // Every path that sends anything to the AI goes through this. Closing the consent sheet
+    // leaves you on the Pulse tab, so the tab itself has to hold the line too.
+    private func pulseMaySend() -> Bool {
+        let store = PulseProfileStore.shared
+        if store.pulseActive { return true }
+        if store.needsConsent { appState.showPulseConsentSheet = true }
+        return false
+    }
+
     private func start(_ suggestion: PulseStartSuggestion) {
+        guard pulseMaySend() else { return }
         dictation.stop()
         inConversation = true
         Task {
@@ -151,6 +161,7 @@ struct CoachView: View {
     }
 
     private func startTopic(_ prompt: String) {
+        guard pulseMaySend() else { return }
         dictation.stop()
         inConversation = true
         Task { await vm.startTopic(prompt) }
@@ -558,6 +569,7 @@ struct CoachView: View {
             HStack(spacing: 8) {
                 ForEach(activeChips, id: \.self) { action in
                     Button {
+                        guard pulseMaySend() else { return }
                         Task { await vm.sendMessage(action) }
                     } label: {
                         Text(action)
@@ -658,6 +670,7 @@ struct CoachView: View {
     }
 
     private func send() {
+        guard pulseMaySend() else { return }
         let text = trimmedInput
         guard !text.isEmpty, !vm.isLoading else { return }
         if inConversation {
