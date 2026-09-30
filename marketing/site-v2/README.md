@@ -1,32 +1,20 @@
-# React + TypeScript + Vite
+# tryfooting.app
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The Footing marketing site, in the same Daylight design as the app (tokens, fonts and tiles
+from `NutriPulse/DesignSystem/Theme.swift`).
 
-Currently, two official plugins are available:
+- `src/` — the home page (React + Vite). `sections/Home.tsx` holds every section;
+  `ProteinTile.tsx` is the animated hero, a port of the app's floor-cleared moment.
+- `public/` — static pages served as-is: `privacy.html`, `terms.html`, `contact.html`,
+  `404.html`, styled by `legal.css`. The fonts in `public/fonts/` are the app's own files
+  (SIL Open Font License, included).
+- Every product claim must be one the app actually makes. The FAQ's privacy answer and
+  `public/privacy.html` must agree: change both in the same commit.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm run dev          # local dev server
+npm run build        # type-check and build to dist/
+npx wrangler dev     # serve dist/ the way Cloudflare does (/privacy, 404s)
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Deploying: see [DEPLOY.md](./DEPLOY.md). Commit and push before any deploy.
