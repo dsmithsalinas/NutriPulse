@@ -136,13 +136,13 @@ struct ShotCyclePlanCard: View {
                 }
                 Spacer()
                 Button(hasCheckIn ? "Update" : "Check in", action: onCheckIn)
-                    .font(.caption.weight(.semibold))
+                    .font(Theme.Fonts.body(13, .semibold, relativeTo: .caption))
                     .buttonStyle(.bordered)
             }
 
             if let pattern = plan.learnedPattern {
                 Label(pattern, systemImage: "point.3.connected.trianglepath.dotted")
-                    .font(.caption)
+                    .font(Theme.Fonts.body(13, relativeTo: .caption))
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -153,12 +153,12 @@ struct ShotCyclePlanCard: View {
             ForEach(Array(plan.actions.enumerated()), id: \.offset) { index, action in
                 HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                     Text("\(index + 1)")
-                        .font(.caption2.weight(.bold))
+                        .font(Theme.Fonts.body(11, .bold, relativeTo: .caption2))
                         .foregroundStyle(.white)
                         .frame(width: 20, height: 20)
                         .background(Theme.Colors.primary, in: Circle())
                     Text(action)
-                        .font(.subheadline)
+                        .font(Theme.Fonts.body(15, relativeTo: .subheadline))
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
