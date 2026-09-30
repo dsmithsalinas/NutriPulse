@@ -1,51 +1,77 @@
 import SwiftUI
 
+// Daylight Progress (docs/daylight-redesign.md): a big display title, a Goals pill, a
+// week/month/3-months switcher, an indigo "floor days" hero with a day-by-day graphic that
+// draws in, a quick-stat grid, two derived notice tiles, and — since the mockup doesn't cover
+// Analytics, Progress summaries, or Personal experiments — a plain row list underneath so
+// those destinations stay reachable.
+
+/// Local to Progress: the "Try this" tile's warm amber, paired with "Worth noticing"'s violet
+/// (`Theme.Colors.violet*`). Theme has no amber-family token yet.
+private extension Theme.Colors {
+    static let amberTile  = Color(hex: 0xFFEDD5)
+    static let amberLabel = Color(hex: 0x9A3412)
+    static let amberInk   = Color(hex: 0x431407)
+}
+
 struct ProgressDashboardView: View {
     @State private var analytics = AnalyticsViewModel()
     @State private var goals = GoalsViewModel()
     @State private var selectedRange: ProgressRange = .month
+    @State private var previousSummaries: [DailySummary] = []
     @State private var experimentCount = 0
     @State private var showExperiments = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
                     header
+                        .popIn(order: 0)
                     rangePicker
-                    dateRange
+                        .popIn(order: 1)
 
-                    if analytics.isLoading {
+                    if analytics.isLoading && analytics.summaries.isEmpty {
                         ProgressView()
                             .frame(maxWidth: .infinity, minHeight: 320)
                             .accessibilityLabel("Loading progress")
                     } else if analytics.errorMessage != nil {
                         progressErrorState
                     } else {
-                        ProgressHeroCard(
+                        FloorDaysHero(
                             range: selectedRange,
                             summaries: analytics.summaries,
-                            proteinGoal: analytics.goalProteinG
+                            proteinGoal: analytics.goalProteinG,
+                            trend: trend
                         )
+                        .popIn(order: 2)
 
-                        ProgressNoticeCard(text: noticeText)
+                        statGrid
 
-                        destinationList
+                        noticeRow
+                            .popIn(order: 7)
+
+                        moreSection
+                            .popIn(order: 8)
                     }
-
                 }
-                .padding(.horizontal, Theme.Spacing.md)
-                .padding(.top, 4)
+                .padding(.horizontal, Theme.Spacing.page)
+                .padding(.top, Theme.Spacing.sm)
                 .padding(.bottom, Theme.Spacing.xl)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
             .toolbar(.hidden, for: .navigationBar)
             .refreshable {
                 async let analyticsLoad: Void = loadAnalytics()
+                async let previousLoad: Void = loadPreviousPeriod()
                 async let supportingLoad: Void = loadSupportingData()
-                _ = await (analyticsLoad, supportingLoad)
+                _ = await (analyticsLoad, previousLoad, supportingLoad)
             }
-            .task(id: selectedRange) { await loadAnalytics() }
+            .task(id: selectedRange) {
+                async let analyticsLoad: Void = loadAnalytics()
+                async let previousLoad: Void = loadPreviousPeriod()
+                _ = await (analyticsLoad, previousLoad)
+            }
             .task { await loadSupportingData() }
             .sheet(isPresented: $showExperiments) {
                 ExperimentsView(activeGoals: goals.active)
@@ -57,83 +83,174 @@ struct ProgressDashboardView: View {
         .tint(Theme.Colors.primary)
     }
 
+    // MARK: - Header
+
     private var header: some View {
-        Text("Progress")
-            .font(Theme.Typography.display)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var rangePicker: some View {
-        Picker("Progress range", selection: $selectedRange) {
-            ForEach(ProgressRange.allCases) { range in
-                Text(range.label).tag(range)
-            }
-        }
-        .pickerStyle(.segmented)
-    }
-
-    private var dateRange: some View {
-        Text(selectedRange.dateRangeText())
-            .font(Theme.Typography.body)
-            .foregroundStyle(Theme.Colors.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var destinationList: some View {
-        VStack(spacing: 0) {
+        HStack(alignment: .center) {
+            Text("Progress")
+                .font(Theme.Fonts.display(36, .extraBold, relativeTo: .largeTitle))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
             NavigationLink {
                 GoalsView(embeddedInNavigation: true)
             } label: {
-                ProgressDestinationRow(
-                    icon: "target",
-                    title: "Goals",
-                    subtitle: "\(goals.active.count) active · Create or manage goals"
-                )
+                HStack(spacing: 6) {
+                    Image(systemName: "target")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("Goals")
+                        .font(Theme.Fonts.body(14, .bold))
+                }
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .padding(.horizontal, 14)
+                .frame(height: 44)
+                .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-
-            Divider().padding(.leading, 70)
-
-            NavigationLink {
-                AnalyticsView(
-                    embeddedInNavigation: true,
-                    initialRange: selectedRange.analyticsRange
-                )
-            } label: {
-                ProgressDestinationRow(
-                    icon: "chart.line.uptrend.xyaxis",
-                    title: "Analytics",
-                    subtitle: "Nutrition, body, movement, cycles"
-                )
-            }
-
-            Divider().padding(.leading, 70)
-
-            NavigationLink {
-                ProgressSummariesView(initialPeriod: selectedRange.summaryPeriod)
-            } label: {
-                ProgressDestinationRow(
-                    icon: "doc.text",
-                    title: "Progress summaries",
-                    subtitle: analytics.loggedDays.count >= 3 ? "Latest summary ready" : "Builds after 3 measured days"
-                )
-            }
-
-            Divider().padding(.leading, 70)
-
-            Button { showExperiments = true } label: {
-                ProgressDestinationRow(
-                    icon: "flask.fill",
-                    title: "Personal experiments",
-                    subtitle: experimentCount == 1 ? "1 active" : "\(experimentCount) active"
-                )
-            }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
+            .accessibilityHint("Opens your goals")
         }
-        .card()
+    }
+
+    // MARK: - Range picker
+
+    private var rangePicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                ForEach(ProgressRange.allCases) { range in
+                    Button {
+                        guard selectedRange != range else { return }
+                        withAnimation(Theme.Motion.tabSelect) { selectedRange = range }
+                    } label: {
+                        Text(range.pillLabel)
+                            .font(Theme.Fonts.body(14, .bold))
+                            .foregroundStyle(selectedRange == range ? .white : Theme.Colors.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                            .background {
+                                if selectedRange == range {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(Theme.Colors.ink)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selectedRange == range ? [.isSelected] : [])
+                }
+            }
+            .padding(4)
+            .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Range")
+
+            Text(selectedRange.dateRangeText())
+                .font(Theme.Fonts.body(13, .semibold))
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .padding(.leading, 4)
+        }
+    }
+
+    // MARK: - Stat grid
+
+    private var statGrid: some View {
+        VStack(spacing: Theme.Spacing.tileGap) {
+            HStack(spacing: Theme.Spacing.tileGap) {
+                AvgProteinStatTile(summaries: analytics.summaries)
+                    .popIn(order: 3)
+                WeightTrendStatTile(weightLogs: analytics.weightLogs)
+                    .popIn(order: 4)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: Theme.Spacing.tileGap) {
+                MovedStatTile(sessions: analytics.totalWorkoutSessions)
+                    .popIn(order: 5)
+                LoggedStatTile(loggedDays: analytics.loggedDays.count, totalDays: analytics.summaries.count)
+                    .popIn(order: 6)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Notice row
+
+    private var noticeRow: some View {
+        HStack(spacing: Theme.Spacing.tileGap) {
+            NoticeTile(
+                eyebrow: "Worth noticing",
+                text: noticeText,
+                fill: Theme.Colors.violet,
+                eyebrowColor: Theme.Colors.violetLabel,
+                textColor: Theme.Colors.violetInk
+            )
+            NoticeTile(
+                eyebrow: "Try this",
+                text: tryThisText,
+                fill: Theme.Colors.amberTile,
+                eyebrowColor: Theme.Colors.amberLabel,
+                textColor: Theme.Colors.amberInk
+            )
+        }
     }
 
     private var noticeText: String {
         ProgressNoticeBuilder.text(insights: analytics.cycleInsights)
+    }
+
+    private var tryThisText: String {
+        ProgressTryThisBuilder.text(.init(summaries: analytics.summaries, proteinGoal: analytics.goalProteinG))
+    }
+
+    // MARK: - More (destinations the mockup doesn't cover, kept reachable)
+
+    private var moreSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TileEyebrow("More")
+            VStack(spacing: 0) {
+                NavigationLink {
+                    AnalyticsView(
+                        embeddedInNavigation: true,
+                        initialRange: selectedRange.analyticsRange
+                    )
+                } label: {
+                    ProgressDestinationRow(
+                        icon: "chart.line.uptrend.xyaxis",
+                        title: "Analytics",
+                        subtitle: "Nutrition, body, movement, cycles"
+                    )
+                }
+
+                Divider().padding(.leading, 70).overlay(Theme.Colors.hairline)
+
+                NavigationLink {
+                    ProgressSummariesView(initialPeriod: selectedRange.summaryPeriod)
+                } label: {
+                    ProgressDestinationRow(
+                        icon: "doc.text",
+                        title: "Progress summaries",
+                        subtitle: analytics.loggedDays.count >= 3 ? "Latest summary ready" : "Builds after 3 measured days"
+                    )
+                }
+
+                Divider().padding(.leading, 70).overlay(Theme.Colors.hairline)
+
+                Button { showExperiments = true } label: {
+                    ProgressDestinationRow(
+                        icon: "flask.fill",
+                        title: "Personal experiments",
+                        subtitle: experimentCount == 1 ? "1 active" : "\(experimentCount) active"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .tile(padding: 0)
+        }
+    }
+
+    private var trend: ProgressTrend? {
+        ProgressTrendBuilder.trend(
+            current: .init(summaries: analytics.summaries, proteinGoal: analytics.goalProteinG),
+            previous: .init(summaries: previousSummaries, proteinGoal: analytics.goalProteinG)
+        )
     }
 
     private var progressErrorState: some View {
@@ -149,10 +266,45 @@ struct ProgressDashboardView: View {
         .card()
     }
 
+    // MARK: - Loading
+
     private func loadAnalytics() async {
         analytics.selectedRange = selectedRange.analyticsRange
         await analytics.loadData()
     }
+
+    private func loadPreviousPeriod() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--progress-preview") {
+            loadPreviewPreviousPeriod()
+            return
+        }
+        #endif
+        let window = selectedRange.previousWindow()
+        previousSummaries = (try? await AnalyticsRepository().fetchDailySummaries(
+            from: window.lowerBound, through: window.upperBound
+        )) ?? []
+    }
+
+    #if DEBUG
+    /// The preview harness has no "previous period" of its own — synthesize a plausible one
+    /// (slightly worse than the current preview data) so the trend pill is visible for review.
+    private func loadPreviewPreviousPeriod() {
+        let calendar = Calendar.current
+        let window = selectedRange.previousWindow()
+        let dayCount = (calendar.dateComponents([.day], from: window.lowerBound, to: window.upperBound).day ?? 0) + 1
+        previousSummaries = (0..<dayCount).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: window.lowerBound) ?? window.lowerBound
+            let isBelow = offset % 3 == 0
+            return DailySummary(
+                date: date,
+                calories: isBelow ? 1_180 : 1_460,
+                proteinG: isBelow ? 94 : 128,
+                carbsG: 122, fatG: 48, fiberG: 22
+            )
+        }
+    }
+    #endif
 
     private func loadSupportingData() async {
         await goals.load()
@@ -184,165 +336,153 @@ private extension ProgressMarkState {
     }
 }
 
-private struct ProgressHeroCard: View {
+// MARK: - Floor days hero
+
+private struct FloorDaysHero: View {
     let range: ProgressRange
     let summaries: [DailySummary]
     let proteinGoal: Double?
+    let trend: ProgressTrend?
 
     private var metrics: ProgressMetrics { .init(summaries: summaries, proteinGoal: proteinGoal) }
-    private var headline: String {
-        guard !metrics.logged.isEmpty else { return "Your protein picture starts here." }
-        if metrics.hasGoal { return "Here’s your protein-floor picture." }
-        return "Your logging pattern is taking shape."
-    }
-    private var detail: AttributedString {
-        var text: AttributedString
-        if metrics.hasGoal {
-            text = AttributedString("You reached your floor on \(metrics.metCount) of \(metrics.logged.count) measured days.")
-        } else {
-            text = AttributedString("You logged nutrition on \(metrics.logged.count) of \(summaries.count) days. Create a protein goal to track floor attainment.")
-        }
-        if let range = text.range(of: metrics.hasGoal ? "\(metrics.metCount) of \(metrics.logged.count)" : "\(metrics.logged.count) of \(summaries.count)") {
-            text[range].foregroundColor = Theme.Colors.primary
-            text[range].font = .system(size: 17, weight: .semibold)
-        }
-        return text
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("YOUR LAST \(range.rawValue) DAYS")
-                .font(.system(size: 12, weight: .bold))
-                .tracking(0.9)
-                .foregroundStyle(Theme.Colors.textFaint)
-
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(headline)
-                        .font(Theme.Typography.title)
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(detail)
-                        .font(Theme.Typography.body)
-                        .foregroundStyle(Theme.Colors.textSecondary)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    TileEyebrow(metrics.hasGoal ? "Floor days" : "Logged days", color: Theme.Colors.heroLabel)
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        CountingNumber(
+                            value: metrics.hasGoal ? metrics.metCount : metrics.logged.count,
+                            font: Theme.Fonts.number(44, relativeTo: .largeTitle)
+                        )
+                        .foregroundStyle(.white)
+                        Text("of \(metrics.hasGoal ? metrics.logged.count : summaries.count)")
+                            .font(Theme.Fonts.display(20, relativeTo: .title3))
+                            .foregroundStyle(Theme.Colors.heroLabel)
+                    }
                 }
-                Spacer(minLength: 4)
-                ProgressCompletionRing(
-                    completion: metrics.completion,
-                    caption: metrics.hasGoal ? "days met" : "days logged"
-                )
-            }
-
-            ProgressTimelineGraphic(
-                range: range,
-                summaries: summaries,
-                proteinGoal: proteinGoal
-            )
-
-            HStack(spacing: 16) {
-                ProgressLegend(color: Theme.Colors.primary, title: metrics.hasGoal ? "Met" : "Logged")
-                if metrics.hasGoal {
-                    ProgressLegend(color: Theme.NutrientColor.calories, title: "Below")
+                Spacer(minLength: 8)
+                if let trend {
+                    Text(trend.label)
+                        .font(Theme.Fonts.body(13, .bold))
+                        .foregroundStyle(Theme.Colors.limeInk)
+                        .padding(.horizontal, 10)
+                        .frame(height: 30)
+                        .background(Theme.Colors.lime, in: Capsule())
                 }
-                ProgressLegend(color: .clear, title: "Unknown", outlined: true)
-                Spacer()
-                Text("\(metrics.missingCount) \(metrics.missingCount == 1 ? "day" : "days") not measured")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
             }
-        }
-        .padding(14)
-        .card()
-    }
-}
 
-private struct ProgressCompletionRing: View {
-    let completion: Double
-    let caption: String
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Theme.Colors.ringTrack, lineWidth: 8)
-            Circle()
-                .trim(from: 0, to: min(max(completion, 0), 1))
-                .stroke(Theme.Colors.primaryGradient, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            VStack(spacing: 0) {
-                Text("\(Int((completion * 100).rounded()))%")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(Theme.Colors.primary)
-                Text(caption)
-                    .font(.system(size: 10))
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
+            FloorDaysGraphic(range: range, summaries: summaries, proteinGoal: proteinGoal)
         }
-        .frame(width: 76, height: 76)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.Colors.heroDeep, in: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(Int((completion * 100).rounded())) percent, \(caption)")
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        let base = metrics.hasGoal
+            ? "Floor days, \(metrics.metCount) of \(metrics.logged.count)"
+            : "Logged days, \(metrics.logged.count) of \(summaries.count)"
+        guard let trend else { return base }
+        return "\(base). \(trend.label) last period."
     }
 }
 
-private struct ProgressTimelineGraphic: View {
+private struct FloorDaysGraphic: View {
     let range: ProgressRange
     let summaries: [DailySummary]
     let proteinGoal: Double?
 
     private var metrics: ProgressMetrics { .init(summaries: summaries, proteinGoal: proteinGoal) }
-    private var weeks: [ProgressWeekInterval] {
-        ProgressTimelineBuilder.thirteenWeeks(summaries: summaries, proteinGoal: proteinGoal)
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            if range == .quarter {
-                Text("LAST 13 WEEKS")
-                    .font(.system(size: 10, weight: .bold))
-                    .tracking(0.6)
-                    .foregroundStyle(Theme.Colors.textFaint)
-                HStack(alignment: .bottom, spacing: 5) {
-                    ForEach(weeks) { week in
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(week.hasEnoughData ? weekColor(week.fraction) : .clear)
-                            .overlay {
-                                if !week.hasEnoughData {
-                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                        .stroke(Theme.Colors.primary.opacity(0.32), lineWidth: 1)
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 8 + 20 * week.fraction)
-                    }
+        Group {
+            switch range {
+            case .week: weekGrid
+            case .month: dayStrip
+            case .quarter: weekBars
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    private var weekGrid: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(summaries.enumerated()), id: \.offset) { index, summary in
+                VStack(spacing: 6) {
+                    dayMark(for: summary)
+                        .frame(width: 36, height: 36)
+                    Text(summary.date.formatted(.dateTime.weekday(.narrow)))
+                        .font(Theme.Fonts.body(11, .semibold))
+                        .foregroundStyle(Theme.Colors.heroLabel)
                 }
-                .frame(height: 28, alignment: .bottom)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(weeks.map(\.accessibilityText).joined(separator: ". "))
-            } else {
-                HStack(spacing: 3) {
-                    ForEach(Array(summaries.enumerated()), id: \.offset) { _, summary in
-                        let state = metrics.state(for: summary)
-                        Capsule()
-                            .fill(state.color)
-                            .overlay {
-                                if state == .unknown {
-                                    Capsule().stroke(Theme.Colors.primary.opacity(0.32), lineWidth: 1)
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 14)
-                    }
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(dayAccessibilitySummary)
+                .popIn(order: index)
             }
         }
     }
 
-    private func weekColor(_ fraction: Double) -> Color {
-        guard metrics.hasGoal else { return Theme.Colors.primary.opacity(0.35 + 0.65 * fraction) }
-        return fraction >= 0.5 ? Theme.Colors.primary.opacity(0.35 + 0.65 * fraction) : Theme.NutrientColor.calories
+    @ViewBuilder
+    private func dayMark(for summary: DailySummary) -> some View {
+        let state = metrics.state(for: summary)
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(state == .unknown ? Color.clear : fillColor(state))
+            .overlay {
+                if state == .unknown {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Theme.Colors.hero, style: StrokeStyle(lineWidth: 2, dash: [3]))
+                }
+            }
     }
 
-    private var dayAccessibilitySummary: String {
+    private func fillColor(_ state: ProgressMarkState) -> Color {
+        switch state {
+        case .met, .logged: Theme.Colors.hero
+        case .below: Theme.Colors.hero.opacity(0.4)
+        case .unknown: .clear
+        }
+    }
+
+    private var dayStrip: some View {
+        HStack(spacing: 3) {
+            ForEach(Array(summaries.enumerated()), id: \.offset) { _, summary in
+                let state = metrics.state(for: summary)
+                Capsule()
+                    .fill(state == .unknown ? Color.clear : fillColor(state))
+                    .overlay {
+                        if state == .unknown {
+                            Capsule().strokeBorder(Theme.Colors.hero.opacity(0.6), lineWidth: 1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 14)
+            }
+        }
+    }
+
+    private var weekBars: some View {
+        let weeks = ProgressTimelineBuilder.thirteenWeeks(summaries: summaries, proteinGoal: proteinGoal)
+        return HStack(alignment: .bottom, spacing: 4) {
+            ForEach(weeks) { week in
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(week.hasEnoughData ? Theme.Colors.hero.opacity(0.4 + 0.6 * week.fraction) : .clear)
+                    .overlay {
+                        if !week.hasEnoughData {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .strokeBorder(Theme.Colors.hero.opacity(0.5), lineWidth: 1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 8 + 24 * week.fraction)
+            }
+        }
+        .frame(height: 32, alignment: .bottom)
+    }
+
+    private var accessibilitySummary: String {
         if metrics.hasGoal {
             let below = metrics.logged.count - metrics.metCount
             return "\(metrics.metCount) days met the protein floor, \(below) \(below == 1 ? "day was" : "days were") below, and \(metrics.missingCount) \(metrics.missingCount == 1 ? "day was" : "days were") not measured."
@@ -351,48 +491,177 @@ private struct ProgressTimelineGraphic: View {
     }
 }
 
-private struct ProgressLegend: View {
-    let color: Color
-    let title: String
-    var outlined = false
+// MARK: - Sparkline
+
+/// A minimal line chart that draws in from the leading edge on first appear. Reduce Motion:
+/// the finished line, no animation.
+private struct Sparkline: View {
+    let values: [Double]
+    var color: Color = Theme.Colors.primary
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var drawn = false
 
     var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .overlay { if outlined { Circle().stroke(Theme.Colors.primary.opacity(0.4)) } }
-                .frame(width: 8, height: 8)
-            Text(title)
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.Colors.textSecondary)
-        }
-    }
-}
-
-private struct ProgressNoticeCard: View {
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "drop")
-                .font(.system(size: 26, weight: .medium))
-                .foregroundStyle(Theme.Colors.primary)
-                .frame(width: 44)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("WORTH NOTICING")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(0.8)
-                    .foregroundStyle(Theme.Colors.textFaint)
-                Text(text)
-                    .font(Theme.Typography.headline)
-                    .foregroundStyle(Theme.Colors.textPrimary)
+        GeometryReader { geo in
+            Path { path in
+                guard values.count > 1 else { return }
+                let minV = values.min() ?? 0
+                let maxV = values.max() ?? 1
+                let range = max(maxV - minV, 0.0001)
+                let stepX = geo.size.width / CGFloat(values.count - 1)
+                for (index, value) in values.enumerated() {
+                    let x = CGFloat(index) * stepX
+                    let y = geo.size.height - CGFloat((value - minV) / range) * geo.size.height
+                    if index == 0 {
+                        path.move(to: CGPoint(x: x, y: y))
+                    } else {
+                        path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                }
             }
-            Spacer(minLength: 0)
+            .trim(from: 0, to: drawn || reduceMotion ? 1 : 0)
+            .stroke(color, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(Theme.Motion.draw.delay(0.3)) { drawn = true }
+        }
+        .accessibilityHidden(true)
     }
 }
+
+// MARK: - Stat tiles
+
+private struct AvgProteinStatTile: View {
+    let summaries: [DailySummary]
+    private var logged: [DailySummary] { summaries.filter(\.hasData) }
+    private var average: Int {
+        guard !logged.isEmpty else { return 0 }
+        return Int((logged.reduce(0) { $0 + $1.proteinG } / Double(logged.count)).rounded())
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TileEyebrow("Avg protein")
+            if logged.count > 1 {
+                Sparkline(values: logged.map(\.proteinG), color: Theme.NutrientColor.protein)
+                    .frame(height: 32)
+            } else {
+                Spacer(minLength: 32)
+            }
+            Text(logged.isEmpty ? "No data yet" : "\(average)g")
+                .font(logged.isEmpty ? Theme.Fonts.body(14, .semibold) : Theme.Fonts.number(24, .bold, relativeTo: .title2))
+                .foregroundStyle(logged.isEmpty ? Theme.Colors.textSecondary : Theme.Colors.textPrimary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
+        .tile()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(logged.isEmpty ? "Average protein, no data yet" : "Average protein \(average) grams")
+    }
+}
+
+private struct WeightTrendStatTile: View {
+    let weightLogs: [WeightLog]
+    private var ordered: [WeightLog] { weightLogs.sorted { $0.loggedAt < $1.loggedAt } }
+    private var change: Double? {
+        guard ordered.count >= 2, let first = ordered.first, let last = ordered.last else { return nil }
+        return last.weightKg - first.weightKg
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TileEyebrow("Weight trend")
+            if ordered.count > 1 {
+                Sparkline(values: ordered.map(\.weightKg), color: Theme.Colors.textPrimary)
+                    .frame(height: 32)
+            } else {
+                Spacer(minLength: 32)
+            }
+            Text(change.map(changeText) ?? "Log weight to see a trend")
+                .font(change == nil ? Theme.Fonts.body(13, .semibold) : Theme.Fonts.number(24, .bold, relativeTo: .title2))
+                .foregroundStyle(change == nil ? Theme.Colors.textSecondary : Theme.Colors.textPrimary)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
+        .tile()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(change.map { "Weight trend, \(changeText($0))" } ?? "Weight trend, not enough data yet")
+    }
+
+    private func changeText(_ value: Double) -> String {
+        let magnitude = abs(value).formatted(.number.precision(.fractionLength(1)))
+        if value < -0.05 { return "−\(magnitude) kg" }
+        if value > 0.05 { return "+\(magnitude) kg" }
+        return "Stable"
+    }
+}
+
+private struct MovedStatTile: View {
+    let sessions: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TileEyebrow("Moved", color: Theme.Colors.skyInk)
+            Spacer(minLength: 0)
+            Text(sessions == 0 ? "No sessions yet" : "\(sessions) \(sessions == 1 ? "session" : "sessions")")
+                .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
+                .foregroundStyle(Theme.Colors.skyInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        .tile(Theme.Colors.sky, shadow: false)
+    }
+}
+
+private struct LoggedStatTile: View {
+    let loggedDays: Int
+    let totalDays: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TileEyebrow("Logged")
+            Spacer(minLength: 0)
+            Text("\(loggedDays) of \(totalDays) days")
+                .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        .tile()
+    }
+}
+
+// MARK: - Notice tile
+
+private struct NoticeTile: View {
+    let eyebrow: String
+    let text: String
+    let fill: Color
+    let eyebrowColor: Color
+    let textColor: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(eyebrow)
+                .font(Theme.Fonts.body(12, .bold))
+                .tracking(Theme.Typography.eyebrowTracking)
+                .textCase(.uppercase)
+                .foregroundStyle(eyebrowColor)
+            Text(text)
+                .font(Theme.Fonts.body(14, .semibold))
+                .foregroundStyle(textColor)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(fill, in: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
+    }
+}
+
+// MARK: - Destination row
 
 private struct ProgressDestinationRow: View {
     let icon: String
@@ -402,27 +671,30 @@ private struct ProgressDestinationRow: View {
     var body: some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 22, weight: .medium))
+                .font(.system(size: 20, weight: .medium))
                 .foregroundStyle(Theme.Colors.primary)
                 .frame(width: 40, height: 40)
+                .background(Theme.Colors.surfaceInset, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(Theme.Typography.headline)
+                    .font(Theme.Fonts.body(15, .bold))
                     .foregroundStyle(Theme.Colors.textPrimary)
                 Text(subtitle)
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
             Spacer()
             Image(systemName: "chevron.right")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.Colors.textFaint)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
 }
+
+// MARK: - Progress summaries (unchanged data path, lightly themed — reached via "More")
 
 private struct ProgressSummariesView: View {
     let initialPeriod: ProgressSummaryPeriod
@@ -670,6 +942,24 @@ private struct SummaryTimelineGraphic: View {
             return "\(metrics.metCount) days met the protein floor, \(below) \(below == 1 ? "day was" : "days were") below, and \(metrics.missingCount) \(metrics.missingCount == 1 ? "day was" : "days were") not measured."
         }
         return "Nutrition was logged on \(metrics.logged.count) days and missing on \(metrics.missingCount) days."
+    }
+}
+
+private struct ProgressLegend: View {
+    let color: Color
+    let title: String
+    var outlined = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(color)
+                .overlay { if outlined { Circle().stroke(Theme.Colors.primary.opacity(0.4)) } }
+                .frame(width: 8, height: 8)
+            Text(title)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
     }
 }
 

@@ -131,6 +131,76 @@ final class ProgressSummaryTests: XCTestCase {
     }
 }
 
+// MARK: - Daylight Progress hero (trend pill, "Try this" suggestion)
+
+final class ProgressTrendTests: XCTestCase {
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .iso8601)
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        return value
+    }
+
+    private func date(_ day: Int) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 8, day: day))!
+    }
+
+    private func summary(_ day: Int, protein: Double) -> DailySummary {
+        DailySummary(date: date(day), calories: 1_400, proteinG: protein, carbsG: 120, fatG: 50, fiberG: 20)
+    }
+
+    func testTrendComparesMetCountsBetweenPeriods() {
+        let current = ProgressMetrics(
+            summaries: [summary(8, protein: 140), summary(9, protein: 140), summary(10, protein: 90)],
+            proteinGoal: 130
+        )
+        let previous = ProgressMetrics(
+            summaries: [summary(1, protein: 90), summary(2, protein: 90), summary(3, protein: 140)],
+            proteinGoal: 130
+        )
+        let trend = ProgressTrendBuilder.trend(current: current, previous: previous)
+        XCTAssertEqual(trend?.currentMet, 2)
+        XCTAssertEqual(trend?.previousMet, 1)
+        XCTAssertEqual(trend?.direction, .up)
+        XCTAssertEqual(trend?.label, "Up from 1")
+    }
+
+    func testTrendIsNilWithoutAGoal() {
+        let current = ProgressMetrics(summaries: [summary(8, protein: 140)], proteinGoal: nil)
+        let previous = ProgressMetrics(summaries: [summary(1, protein: 90)], proteinGoal: nil)
+        XCTAssertNil(ProgressTrendBuilder.trend(current: current, previous: previous))
+    }
+
+    func testTrendIsNilWithNoMeasuredPreviousDays() {
+        let current = ProgressMetrics(summaries: [summary(8, protein: 140)], proteinGoal: 130)
+        let previous = ProgressMetrics(summaries: [], proteinGoal: 130)
+        XCTAssertNil(ProgressTrendBuilder.trend(current: current, previous: previous))
+    }
+
+    func testPreviousWindowIsSameLengthImmediatelyBeforeCurrent() {
+        let window = ProgressRange.week.previousWindow(now: date(30), calendar: calendar)
+        // .week covers the trailing 7 days ending "now" (Aug 24...Aug 30), so the previous
+        // window is the 7 days immediately before that.
+        XCTAssertEqual(window.lowerBound, date(17))
+        XCTAssertEqual(window.upperBound, date(23))
+    }
+
+    func testTryThisFlagsAverageBelowFloor() {
+        let metrics = ProgressMetrics(
+            summaries: [summary(8, protein: 100), summary(9, protein: 100)],
+            proteinGoal: 130
+        )
+        XCTAssertTrue(ProgressTryThisBuilder.text(metrics).contains("under your floor"))
+    }
+
+    func testTryThisPraisesWhenFloorIsCleared() {
+        let metrics = ProgressMetrics(
+            summaries: [summary(8, protein: 140), summary(9, protein: 150)],
+            proteinGoal: 130
+        )
+        XCTAssertTrue(ProgressTryThisBuilder.text(metrics).contains("keep repeating"))
+    }
+}
+
 // MARK: - Health data quality
 
 final class HealthDataQualityEngineTests: XCTestCase {
