@@ -1,5 +1,6 @@
 import Observation
 import Foundation
+import Supabase
 
 @Observable
 @MainActor
@@ -32,6 +33,9 @@ final class AnalyticsViewModel {
     var shotCycleCheckIns: [ShotCycleCheckIn] = []
     var goalCalories: Double?                 = nil
     var goalProteinG: Double?                 = nil
+    // Local-only, for the "Where does my protein come from?" question — see AnalyticsQuestions.
+    // Loaded once per range change alongside everything else, never per chip tap.
+    var foodLogs: [FoodLog]                   = []
 
     // `log_date` is written with the LOCAL calendar (Date.isoDateString) and must be read back
     // the same way. Parsing it as UTC midnight — `logDate + "T00:00:00Z"` — put a US Pacific
@@ -94,6 +98,16 @@ final class AnalyticsViewModel {
         )
     }
 
+    // MARK: - Question data
+
+    var proteinSources: [ProteinSource] {
+        ProteinSourceAggregator.topSources(from: foodLogs)
+    }
+
+    var doseChanges: [DoseChangeMark] {
+        GLP1DoseChangeDetector.changes(in: glp1History)
+    }
+
     var cycleInsights: [CycleDayInsight] {
         CycleAnalyticsEngine.build(
             summaries: summaries,
@@ -136,6 +150,15 @@ final class AnalyticsViewModel {
             goalCalories     = g?.calories
             goalProteinG     = g?.proteinG
             shotCycleCheckIns = checks
+            // LocalStore only, no network — safe to run after the guard above without racing
+            // a second range switch. userId failing just means "no protein sources", not an error.
+            if let userId = try? await supabase.auth.session.user.id {
+                let cal = Calendar.current
+                let since = cal.date(byAdding: .day, value: -(selectedRange.rawValue - 1), to: cal.startOfDay(for: .now)) ?? .now
+                foodLogs = (try? LocalStore.shared.fetchFoodLogs(since: since, userId: userId)) ?? []
+            } else {
+                foodLogs = []
+            }
         } catch {
             guard activeLoadID == loadID, !Task.isCancelled else { return }
             errorMessage = "Progress couldn’t refresh. Check your connection and try again."
@@ -162,7 +185,12 @@ final class AnalyticsViewModel {
                 fiberG: isMissing ? 0 : 22
             )
         }
-        movement = []
+        // Active roughly two days in three, so "Am I moving more?" has a real pattern to show.
+        movement = summaries.map { day in
+            let offsetFromToday = calendar.dateComponents([.day], from: day.date, to: today).day ?? 0
+            let active = offsetFromToday % 3 != 0
+            return DailyMovement(date: day.date, sessions: active ? 1 : 0, minutes: active ? Double(25 + (offsetFromToday % 4) * 5) : 0)
+        }
         let latestShotOffset = min(4, max(totalDays - 1, 0))
         let latestShotDate = calendar.date(byAdding: .day, value: -latestShotOffset, to: today)!
         hydration = summaries.map { summary in
@@ -170,20 +198,66 @@ final class AnalyticsViewModel {
             let cycleDay = (distance % 7 + 7) % 7
             return DailyHydration(date: summary.date, amountMl: [2, 3].contains(cycleDay) ? 1_150 : 1_850)
         }
-        weightLogs = []
-        bodyCompHistory = []
+        // A weigh-in roughly every other day with a gentle downward trend, so "Is my weight
+        // trend real?" has a smoothed line and a takeaway to compute rather than an empty chart.
+        weightLogs = stride(from: totalDays - 1, through: 0, by: -2).map { offset in
+            let date = calendar.date(byAdding: .day, value: -offset, to: today)!
+            let daysIn = Double(totalDays - 1 - offset)
+            let noise = [0.4, -0.2, 0.1][offset % 3]
+            return WeightLog(id: UUID(), userId: UUID(), loggedAt: date, weightKg: 84.0 - daysIn * 0.03 + noise, source: "manual")
+        }
+        // A scan roughly every week, trending down slightly — sparse on short ranges (honestly
+        // "too early to see a trend" there), a real trend on longer ones.
+        bodyCompHistory = stride(from: totalDays - 1, through: 0, by: -7).map { offset in
+            let date = calendar.date(byAdding: .day, value: -offset, to: today)!
+            let progress = Double(totalDays - 1 - offset) / Double(max(totalDays - 1, 1))
+            return BodyCompositionLog(
+                id: UUID(), userId: UUID(), logDate: date.isoDateString,
+                weightKg: nil, bodyFatPct: 29.0 - progress * 2.5, bmi: nil, leanBodyMassKg: nil,
+                source: "manual", createdAt: date
+            )
+        }
+        // Titrates 2.5 → 5.0 → 7.5 mg over the shots in range, so "How do shot days change my
+        // eating?" gets its cycle chart AND the weight chart gets a couple of real dose changes
+        // to mark, not just repeated shots at one dose.
+        let doseSteps: [Double] = [2.5, 2.5, 5.0, 5.0, 5.0, 7.5, 7.5, 7.5, 7.5, 7.5, 7.5, 7.5, 7.5]
         let oldestShotOffset = latestShotOffset + ((max(totalDays - 1, latestShotOffset) - latestShotOffset) / 7) * 7
-        glp1History = stride(from: oldestShotOffset, through: latestShotOffset, by: -7).map { offset in
+        glp1History = stride(from: oldestShotOffset, through: latestShotOffset, by: -7).enumerated().map { index, offset in
             let injectedAt = calendar.date(byAdding: .day, value: -offset, to: today)!
             return GLP1Log(
                 id: UUID(), userId: UUID(), injectedAt: injectedAt,
-                medication: "Zepbound", doseMg: 5, site: "Left Abdomen",
+                medication: "Zepbound", doseMg: doseSteps[min(index, doseSteps.count - 1)], site: "Left Abdomen",
                 nextDueAt: calendar.date(byAdding: .day, value: 7, to: injectedAt)
             )
         }
         shotCycleCheckIns = []
         goalCalories = 1_600
         goalProteinG = 130
+        // A handful of protein-forward foods repeated across the range, so "Where does my
+        // protein come from?" has real names, grams and counts to aggregate rather than an
+        // empty state.
+        let proteinFoods: [(name: String, protein: Double, calories: Double, carbs: Double, fat: Double, fiber: Double)] = [
+            ("Greek Yogurt", 20, 150, 8, 4, 0),
+            ("Turkey Chili", 28, 320, 22, 10, 6),
+            ("Grilled Chicken Breast", 35, 250, 0, 6, 0),
+            ("Protein Shake", 25, 180, 5, 3, 1),
+            ("Scrambled Eggs", 18, 220, 2, 15, 0),
+            ("Cottage Cheese", 14, 120, 5, 3, 0),
+        ]
+        foodLogs = (0..<min(totalDays, 30)).flatMap { offset -> [FoodLog] in
+            let date = calendar.date(byAdding: .day, value: -offset, to: today)!
+            let first = proteinFoods[offset % proteinFoods.count]
+            let second = proteinFoods[(offset + 2) % proteinFoods.count]
+            return [first, second].enumerated().map { index, food in
+                FoodLog(
+                    id: UUID(), userId: UUID(), loggedAt: date, logDate: date.isoDateString,
+                    meal: index == 0 ? .breakfast : .dinner, foodItemId: UUID(), quantity: 1,
+                    caloriesSnapshot: food.calories, proteinGSnapshot: food.protein,
+                    carbsGSnapshot: food.carbs, fatGSnapshot: food.fat, fiberGSnapshot: food.fiber,
+                    foodItems: FoodItemSummary(name: food.name, brand: nil, servingDesc: nil)
+                )
+            }
+        }
         errorMessage = nil
         isLoading = false
     }
