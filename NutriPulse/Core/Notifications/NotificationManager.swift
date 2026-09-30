@@ -4,7 +4,22 @@ import Foundation
 @MainActor
 final class NotificationManager {
     static let shared = NotificationManager()
-    private init() {}
+
+    private init() {
+        // Cancel immediately on Pulse-off rather than waiting for the next natural evaluation
+        // (a workout finishing, a repeated meal window, etc.) — that could be hours away, and a
+        // notification presenting as Pulse shouldn't outlive the toggle. Nothing to do on
+        // Pulse-on here: `scheduleSmartOpportunity`'s guard just stops blocking the next
+        // evaluation: TodayView re-runs one as soon as it sees this same notification.
+        NotificationCenter.default.addObserver(
+            forName: .pulseProfileChanged, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in
+                guard !PulseProfileStore.shared.pulseEnabled else { return }
+                NotificationManager.shared.cancelSmartNotifications()
+            }
+        }
+    }
 
     private let center = UNUserNotificationCenter.current()
 
@@ -245,6 +260,15 @@ final class NotificationManager {
     }
 
     func scheduleSmartOpportunity(_ opportunity: SmartNotificationOpportunity?) async {
+        // Smart coaching is presented to the user as a Pulse feature (Profile's "Pulse
+        // notifications" section, the "Pulse waits for a specific next step" explainer) even
+        // though its content doesn't literally say "Pulse" — so it stops the moment Pulse is
+        // turned off, same as the tab and the Strong Week outlook. It doesn't touch the AI
+        // provider, so consent doesn't factor in here, only the master switch.
+        guard PulseProfileStore.shared.pulseEnabled else {
+            cancelSmartNotifications()
+            return
+        }
         guard UserDefaults.standard.bool(forKey: Self.smartCoachingEnabledKey) else {
             cancelSmartNotifications()
             return

@@ -9,6 +9,9 @@ struct MainTabView: View {
     @State private var showLogger = false
     @State private var loggerInitialTab: FoodLoggingViewModel.LogTab = .talk
     @State private var tabBarHeight: CGFloat = 0
+    // Read directly rather than through @Environment: it's a device-cached singleton (like
+    // SyncEngine), not something a preview or test needs to substitute per-view.
+    private var pulseStore: PulseProfileStore { PulseProfileStore.shared }
 
     // Log to the day being viewed on Today; anywhere else, log to today.
     private var logDate: Date {
@@ -45,7 +48,7 @@ struct MainTabView: View {
         // each tab's content: on iOS 26, hiding it on the TabView alone leaves the Liquid Glass
         // bar drawn behind our floating one.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            MainTabBar(selected: $selectedTab, onLog: {
+            MainTabBar(selected: $selectedTab, showsPulse: pulseStore.pulseEnabled, onLog: {
                 loggerInitialTab = .talk
                 showLogger = true
             })
@@ -58,15 +61,51 @@ struct MainTabView: View {
             FoodLoggingView(selectedDate: logDate, initialTab: loggerInitialTab)
         }
         // A nudge (or any surface) handing a prompt to the coach jumps to the Pulse tab;
-        // CoachView sends it and clears it.
+        // CoachView sends it and clears it. `pendingCoachPrompt`'s setter already dropped this
+        // (or routed to the consent sheet) if Pulse can't actually take it — see AppState.
         .onChange(of: appState.pendingCoachPrompt) { _, prompt in
             if prompt != nil { selectedTab = .pulse }
+        }
+        // Landing on the Pulse tab is itself a hand-off: show the consent sheet the first time,
+        // same as asking Pulse something from elsewhere.
+        .onChange(of: selectedTab) { _, tab in
+            if tab == .pulse, pulseStore.needsConsent { appState.showPulseConsentSheet = true }
+        }
+        // Pulse turned off (from Profile, or another device) while its tab was showing —
+        // there's nowhere left to send anything on it, so back out to Today.
+        .onChange(of: pulseStore.pulseEnabled) { _, enabled in
+            if !enabled, selectedTab == .pulse { selectedTab = .today }
+        }
+        .sheet(isPresented: Binding(
+            get: { appState.showPulseConsentSheet },
+            set: { appState.showPulseConsentSheet = $0 }
+        ), onDismiss: {
+            // Closed without answering (the X, or a swipe): leave the setting alone so consent
+            // is asked again next time, and just drop whatever prompt was waiting on it.
+            appState.pendingConsentPrompt = nil
+        }) {
+            PulseConsentSheet(
+                onAgree: {
+                    try? await pulseStore.recordConsent(agreed: true)
+                    appState.showPulseConsentSheet = false
+                    if let prompt = appState.pendingConsentPrompt {
+                        appState.pendingConsentPrompt = nil
+                        appState.pendingCoachPrompt = prompt
+                    }
+                },
+                onDecline: {
+                    try? await pulseStore.recordConsent(agreed: false)
+                    appState.pendingConsentPrompt = nil
+                    appState.showPulseConsentSheet = false
+                }
+            )
         }
         .task {
             handleQuickAction()
             handleSmartNotificationRoute()
             handleWeeklyReminderRoute()
             await NotificationManager.shared.reconcileWeeklyReminder()
+            await pulseStore.load()
         }
         .onReceive(NotificationCenter.default.publisher(for: .strongWeekReminderOpened)) { _ in
             handleWeeklyReminderRoute()
@@ -79,6 +118,11 @@ struct MainTabView: View {
             handleSmartNotificationRoute()
             handleWeeklyReminderRoute()
             Task { await NotificationManager.shared.reconcileWeeklyReminder() }
+        }
+        // Another surface (Profile's toggles, the consent sheet) changed a Pulse setting —
+        // reload so this device's cache matches the server copy that saved it.
+        .onReceive(NotificationCenter.default.publisher(for: .pulseProfileChanged)) { _ in
+            Task { await pulseStore.load() }
         }
     }
 

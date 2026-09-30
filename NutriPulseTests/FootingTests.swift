@@ -587,6 +587,41 @@ final class InsightEngineTests: XCTestCase {
     }
 }
 
+final class PulseGateTests: XCTestCase {
+    func testHandoffBlockedWhenPulseIsOff() {
+        XCTAssertEqual(PulseGate.handoff(pulseEnabled: false, aiConsentAt: nil), .blocked)
+        // Even a device that's already consented drops the hand-off once Pulse itself is off —
+        // it's the master switch, not just the AI-sharing question.
+        XCTAssertEqual(PulseGate.handoff(pulseEnabled: false, aiConsentAt: .now), .blocked)
+    }
+
+    func testHandoffNeedsConsentWhenOnButNeverAgreed() {
+        XCTAssertEqual(PulseGate.handoff(pulseEnabled: true, aiConsentAt: nil), .needsConsent)
+    }
+
+    func testHandoffAllowedWhenOnAndConsented() {
+        XCTAssertEqual(PulseGate.handoff(pulseEnabled: true, aiConsentAt: .now), .allowed)
+    }
+
+    func testIsActiveMatchesAllowedHandoffOnly() {
+        XCTAssertTrue(PulseGate.isActive(pulseEnabled: true, aiConsentAt: .now))
+        XCTAssertFalse(PulseGate.isActive(pulseEnabled: true, aiConsentAt: nil))
+        XCTAssertFalse(PulseGate.isActive(pulseEnabled: false, aiConsentAt: .now))
+        XCTAssertFalse(PulseGate.isActive(pulseEnabled: false, aiConsentAt: nil))
+    }
+
+    func testTabVisibilityFollowsPulseEnabledOnly() {
+        // Not yet consented still shows the tab — that's what makes the consent sheet reachable.
+        XCTAssertTrue(PulseGate.showsPulseTab(pulseEnabled: true))
+        XCTAssertFalse(PulseGate.showsPulseTab(pulseEnabled: false))
+    }
+
+    func testTodayStripFollowsPulseOnTodayOnly() {
+        XCTAssertTrue(PulseGate.showsPulseStripOnToday(pulseOnToday: true))
+        XCTAssertFalse(PulseGate.showsPulseStripOnToday(pulseOnToday: false))
+    }
+}
+
 final class SmartNotificationEngineTests: XCTestCase {
     private let userId = UUID()
     private let foodId = UUID()
