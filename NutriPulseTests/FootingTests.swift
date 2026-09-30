@@ -1375,6 +1375,170 @@ final class PulseStructuredReplyTests: XCTestCase {
     }
 }
 
+// MARK: - What Pulse knows about you (docs/daylight-redesign.md, step 8)
+
+final class PulseProfileTests: XCTestCase {
+
+    // MARK: PulsePreferences.normalized
+
+    func testNormalizedTrimsDedupesCaseInsensitivelyAndCapsLovesAndAvoids() {
+        var prefs = PulsePreferences()
+        prefs.loves = Array(repeating: " Yogurt ", count: 5) + (1...35).map { "Food \($0)" }
+        prefs.avoids = ["  Cilantro  ", "cilantro", "CILANTRO"]
+        let normalized = prefs.normalized
+
+        // First spelling wins, case-insensitive duplicates collapse, whitespace is trimmed.
+        XCTAssertEqual(normalized.avoids, ["Cilantro"])
+        XCTAssertEqual(normalized.loves.first, "Yogurt")
+        // 1 unique "Yogurt" + 35 unique "Food N" = 36 candidates, capped at 30.
+        XCTAssertEqual(normalized.loves.count, 30)
+    }
+
+    func testNormalizedCapsAllergiesAtTwentyAndTruncatesLongItemsTo60Characters() {
+        var prefs = PulsePreferences()
+        prefs.allergies = (1...25).map { "Allergen \($0)" }
+        prefs.avoids = [String(repeating: "x", count: 100)]
+        let normalized = prefs.normalized
+
+        XCTAssertEqual(normalized.allergies.count, 20)
+        XCTAssertEqual(normalized.avoids.first?.count, 60)
+    }
+
+    func testNormalizedTruncatesTheAllergyNoteTo300Characters() {
+        var prefs = PulsePreferences()
+        prefs.allergyNote = "  " + String(repeating: "a", count: 400) + "  "
+        XCTAssertEqual(prefs.normalized.allergyNote.count, 300)
+    }
+
+    func testNormalizedDropsBlankItemsAfterTrimming() {
+        var prefs = PulsePreferences()
+        prefs.loves = ["   ", "", "Mango"]
+        XCTAssertEqual(prefs.normalized.loves, ["Mango"])
+    }
+
+    // MARK: PulsePreferences.isEmpty
+
+    func testIsEmptyIsTrueOnlyWithNothingSet() {
+        XCTAssertTrue(PulsePreferences().isEmpty)
+        var prefs = PulsePreferences()
+        prefs.avoids = ["Cilantro"]
+        XCTAssertFalse(prefs.isEmpty)
+    }
+
+    // MARK: AboutYouContext mapping
+
+    func testAboutYouContextMapsEveryFieldAndSortsEatingPatterns() {
+        let prefs = PulsePreferences(
+            allergies: ["Peanuts"],
+            allergyNote: "Carries an EpiPen",
+            eatingPatterns: [.vegan, .dairyFree],
+            loves: ["Greek yogurt"],
+            avoids: ["Cilantro"]
+        )
+        let context = AboutYouContext(prefs)
+
+        XCTAssertEqual(context.allergies, ["Peanuts"])
+        XCTAssertEqual(context.allergyNote, "Carries an EpiPen")
+        XCTAssertEqual(context.eatingPatterns, ["dairy_free", "vegan"], "sorted, so the prompt is stable across runs")
+        XCTAssertEqual(context.loves, ["Greek yogurt"])
+        XCTAssertEqual(context.avoids, ["Cilantro"])
+    }
+
+    // MARK: PulseRememberSuggestion.label
+
+    func testRememberSuggestionLabels() {
+        XCTAssertEqual(PulseRememberSuggestion(kind: .allergy, value: "Peanuts").label, "Allergy: Peanuts")
+        XCTAssertEqual(PulseRememberSuggestion(kind: .avoid, value: "Cilantro").label, "Avoid: Cilantro")
+        XCTAssertEqual(PulseRememberSuggestion(kind: .love, value: "Mango").label, "Loves: Mango")
+    }
+
+    // MARK: CoachMessagePayload.remember — decode/encode
+
+    func testCoachMessagePayloadRoundTripsRememberThroughJSON() throws {
+        let payload = CoachMessagePayload(
+            remember: [.init(kind: .avoid, value: "Cilantro"), .init(kind: .allergy, value: "Peanuts")]
+        )
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(CoachMessagePayload.self, from: data)
+        XCTAssertEqual(decoded, payload)
+    }
+
+    func testCoachMessageDecodesRememberFromAPresentPayload() throws {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "user_id": "\(UUID().uuidString)",
+          "role": "assistant",
+          "content": "Noted.",
+          "message_type": "chat",
+          "created_at": 0,
+          "payload": { "remember": [{"kind": "avoid", "value": "Cilantro"}] }
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let message = try decoder.decode(CoachMessage.self, from: json)
+        XCTAssertEqual(message.payload?.remember, [.init(kind: .avoid, value: "Cilantro")])
+    }
+
+    // A row saved before `remember` existed (or any payload missing the key) must still decode,
+    // with `remember` reading as nil rather than throwing.
+    func testCoachMessageDecodesWithoutRememberKeyAsNil() throws {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "user_id": "\(UUID().uuidString)",
+          "role": "assistant",
+          "content": "Hi",
+          "message_type": "chat",
+          "created_at": 0,
+          "payload": { "followUps": ["Plan tomorrow"] }
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let message = try decoder.decode(CoachMessage.self, from: json)
+        XCTAssertNil(message.payload?.remember)
+    }
+
+    // MARK: CoachViewModel — not re-offering what Pulse already knows
+
+    @MainActor
+    func testRememberCardsExcludesSuggestionsAlreadyInWhatPulseKnows() {
+        let restore = PulseProfileStore.shared.preferences
+        defer { PulseProfileStore.shared.setForPreview(preferences: restore) }
+        PulseProfileStore.shared.setForPreview(preferences: PulsePreferences(avoids: ["Cilantro"]))
+
+        let vm = CoachViewModel()
+        let known = PulseRememberSuggestion(kind: .avoid, value: "cilantro") // case-insensitive match
+        let new = PulseRememberSuggestion(kind: .love, value: "Mango")
+        let message = CoachMessage(
+            id: UUID(), userId: UUID(), role: "assistant", content: "Noted", messageType: "chat",
+            createdAt: .now, payload: CoachMessagePayload(remember: [known, new])
+        )
+
+        XCTAssertEqual(vm.rememberCards(for: message), [new])
+    }
+
+    @MainActor
+    func testDismissedRememberSuggestionStaysHiddenForThatMessage() {
+        let restore = PulseProfileStore.shared.preferences
+        defer { PulseProfileStore.shared.setForPreview(preferences: restore) }
+        PulseProfileStore.shared.setForPreview(preferences: PulsePreferences())
+
+        let vm = CoachViewModel()
+        let suggestion = PulseRememberSuggestion(kind: .avoid, value: "Cilantro")
+        let message = CoachMessage(
+            id: UUID(), userId: UUID(), role: "assistant", content: "Noted", messageType: "chat",
+            createdAt: .now, payload: CoachMessagePayload(remember: [suggestion])
+        )
+
+        XCTAssertEqual(vm.rememberCards(for: message), [suggestion])
+        vm.dismissRememberSuggestion(suggestion, in: message)
+        XCTAssertTrue(vm.rememberCards(for: message).isEmpty)
+    }
+}
+
 // MARK: - GLP-1 dose formatting
 
 final class GLP1DoseFormattingTests: XCTestCase {

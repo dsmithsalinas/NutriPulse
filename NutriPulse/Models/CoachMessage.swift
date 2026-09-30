@@ -23,6 +23,10 @@ struct CoachMessagePayload: Codable, Equatable {
     var foods: [FoodSuggestion]? = nil
     var followUps: [String]? = nil
     var recap: Recap? = nil
+    // 0–2 things the user just said about themselves that aren't already saved (see
+    // PulseRememberSuggestion) — offered under the bubble as "Save to what Pulse knows?".
+    // Allergies are never auto-saved; this is always an explicit user tap.
+    var remember: [PulseRememberSuggestion]? = nil
 }
 
 struct CoachMessage: Codable, Identifiable {

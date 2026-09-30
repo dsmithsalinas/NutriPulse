@@ -154,6 +154,18 @@ final class OnboardingViewModel {
     var glp1DoseMg: Double = 0.5
     var glp1LastInjected: Date = Calendar.current.startOfDay(for: .now)
 
+    // Step 9 – Anything Pulse should know? (optional, skippable). Only allergies and how they
+    // eat — loves/avoids and the kitchen situation live in AboutYouView, after onboarding.
+    var pulseAllergies: [String] = []
+    var pulseAllergyNote = ""
+    var pulseEatingPatterns: Set<EatingPattern> = []
+
+    /// What this step collected, in the shape `PulseProfileStore.savePreferences` expects.
+    var pulseAboutYou: PulsePreferences {
+        .init(allergies: pulseAllergies, allergyNote: pulseAllergyNote,
+              eatingPatterns: pulseEatingPatterns, loves: [], avoids: [])
+    }
+
     var isLoading = false
     var errorMessage: String? = nil
 
@@ -272,6 +284,14 @@ final class OnboardingViewModel {
             // who set GLP-1 up here got none until they happened to log an injection
             // manually. Failing to schedule must not fail the save, hence no `try`.
             await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
+        }
+
+        // 3.6 What Pulse knows (optional, skippable step — empty when the user skipped it).
+        //     Unlike the writes above, this never blocks onboarding: a coaching preference
+        //     is not worth stranding the user in a retry loop over, so failures are swallowed
+        //     rather than thrown. The user can always fill this in later from AboutYouView.
+        if !pulseAboutYou.isEmpty {
+            try? await PulseProfileStore.shared.savePreferences(pulseAboutYou)
         }
 
         // 3.5 Record the chosen direction. Separate from the UpdateProfile commit below

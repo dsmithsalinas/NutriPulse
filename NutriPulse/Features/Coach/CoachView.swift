@@ -16,6 +16,7 @@ struct CoachView: View {
     @FocusState private var isInputFocused: Bool
     @State private var keyboardVisible = false
     @State private var inConversation = false
+    @State private var showAboutYou = false
 
     // The Daylight tab bar floats over content, and SwiftUI doesn't inset this pinned composer
     // by it (with the keyboard up it also rides the keyboard and lands on the composer), so the
@@ -52,6 +53,9 @@ struct CoachView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.85), value: inConversation)
+            .sheet(isPresented: $showAboutYou) {
+                NavigationStack { AboutYouView() }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             withAnimation(.easeOut(duration: 0.25)) { keyboardVisible = true }
@@ -218,9 +222,24 @@ struct CoachView: View {
                         .font(Theme.Fonts.display(32, .extraBold, relativeTo: .largeTitle))
                         .foregroundStyle(Theme.Colors.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(canSeeLine)
-                        .font(Theme.Fonts.body(15))
-                        .foregroundStyle(Theme.Colors.textSecondary)
+
+                    // Opens "What Pulse knows" — the one place to see and edit everything
+                    // Pulse has been told (docs/daylight-redesign.md, step 8).
+                    Button { showAboutYou = true } label: {
+                        HStack(spacing: 4) {
+                            Text(canSeeLine)
+                                .font(Theme.Fonts.body(15))
+                                .foregroundStyle(Theme.Colors.textSecondary)
+                            Text("What I know about you ›")
+                                .font(Theme.Fonts.body(13, .semibold))
+                                .foregroundStyle(Theme.Colors.primaryText)
+                        }
+                        .multilineTextAlignment(.leading)
+                        .frame(minHeight: 44, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("What Pulse knows about you")
+                    .accessibilityHint("\(canSeeLine) Opens what Pulse knows, to review or change it.")
                 }
                 .padding(.top, 6)
                 .popIn(order: 1)
@@ -678,6 +697,9 @@ private struct MessageBubble: View {
                 if let foods = message.payload?.foods, !foods.isEmpty {
                     FoodSuggestionCards(foods: foods, vm: vm)
                 }
+                if !message.isUser {
+                    RememberSuggestionCards(message: message, vm: vm)
+                }
             }
             .padding(.horizontal, 12)
         }
@@ -808,6 +830,103 @@ private struct FoodSuggestionCard: View {
         .frame(minHeight: 56)
         .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .opacity(didLog ? 0.7 : 1)
+    }
+}
+
+// MARK: - "Save to what Pulse knows?" cards
+
+// Sits under an assistant bubble that just heard something about the user
+// (docs/daylight-redesign.md, step 8) — 0–2 cards, already deduped server-side against what's
+// saved. Saving keeps the card but shows "Saved"; "Not now" removes it. Allergies are never
+// saved except by this explicit tap.
+private struct RememberSuggestionCards: View {
+    let message: CoachMessage
+    let vm: CoachViewModel
+
+    var body: some View {
+        let suggestions = vm.rememberCards(for: message)
+        if !suggestions.isEmpty {
+            VStack(spacing: 8) {
+                ForEach(suggestions, id: \.self) { suggestion in
+                    RememberSuggestionCard(suggestion: suggestion, message: message, vm: vm)
+                }
+            }
+            .padding(.leading, 34)
+            .padding(.trailing, 48)
+        }
+    }
+}
+
+private struct RememberSuggestionCard: View {
+    let suggestion: PulseRememberSuggestion
+    let message: CoachMessage
+    let vm: CoachViewModel
+
+    var body: some View {
+        let isSaving = vm.rememberIsSaving(suggestion, in: message)
+        let isSaved = vm.rememberIsSaved(suggestion, in: message)
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Save to what Pulse knows?")
+                .font(Theme.Fonts.body(11, .bold))
+                .textCase(.uppercase)
+                .tracking(Theme.Typography.eyebrowTracking)
+                .foregroundStyle(Theme.Colors.textFaint)
+
+            HStack(spacing: 10) {
+                Text(suggestion.label)
+                    .font(Theme.Fonts.body(14, .bold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(2)
+
+                Spacer(minLength: 8)
+
+                if isSaved {
+                    Label("Saved", systemImage: "checkmark.circle.fill")
+                        .labelStyle(.titleAndIcon)
+                        .font(Theme.Fonts.body(13, .semibold))
+                        .foregroundStyle(Theme.Colors.primaryText)
+                } else {
+                    HStack(spacing: 6) {
+                        Button("Not now") {
+                            vm.dismissRememberSuggestion(suggestion, in: message)
+                        }
+                        .buttonStyle(.plain)
+                        .font(Theme.Fonts.body(13, .semibold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                        .accessibilityLabel("Not now")
+                        .accessibilityHint("Don't save \(suggestion.label) to what Pulse knows")
+
+                        Button {
+                            guard !isSaving else { return }
+                            Task { await vm.saveRememberSuggestion(suggestion, in: message) }
+                        } label: {
+                            Group {
+                                if isSaving {
+                                    ProgressView().tint(.white)
+                                } else {
+                                    Text("Save")
+                                }
+                            }
+                            .font(Theme.Fonts.body(13, .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .frame(minHeight: 44)
+                            .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.pressable)
+                        .disabled(isSaving)
+                        .accessibilityLabel("Save")
+                        .accessibilityHint("Saves \(suggestion.label) to what Pulse knows")
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
