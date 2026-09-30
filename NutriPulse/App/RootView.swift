@@ -13,6 +13,18 @@ struct RootView: View {
                 storeScreenshotPreview
             } else if isStrongWeekPreview {
                 strongWeekPreview
+            } else if isWaterPickerPreview {
+                waterPickerPreview
+            } else if isLogSheetPreview {
+                logSheetPreview
+            } else if isShotDayPreview {
+                shotDayPreview
+            } else if isProfilePreview {
+                profilePreview
+            } else if isOnboardingPreview {
+                onboardingPreview
+            } else if isWidgetPreview {
+                widgetPreview
             } else if isGoalBuilderPreview {
                 CreateGoalView(
                     vm: GoalsViewModel(),
@@ -72,6 +84,112 @@ struct RootView: View {
         #endif
     }
 
+    private var isWaterPickerPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--water-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var waterPickerPreview: some View {
+        #if DEBUG
+        WaterPickerPreview()
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--log-preview`: the Log sheet, interactive, with no account (lists show empty states).
+    private var isLogSheetPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--log-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var logSheetPreview: some View {
+        #if DEBUG
+        FoodLoggingView(selectedDate: .now)
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--shot-preview`: the Shot day screen after a sample dose a week ago (saving needs an account).
+    private var isShotDayPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--shot-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var shotDayPreview: some View {
+        #if DEBUG
+        let lastShot = Calendar.current.date(byAdding: .day, value: -7, to: .now)!
+        InjectionRitualView(latest: GLP1Log(
+            id: UUID(), userId: UUID(), injectedAt: lastShot, medication: "Zepbound", doseMg: 5,
+            site: "Left Abdomen", nextDueAt: .now
+        )) { _ in }
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--profile-preview`: Profile from fixtures (ProfileView.preview()), no account or network.
+    private var isProfilePreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--profile-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var profilePreview: some View {
+        #if DEBUG
+        ProfileView.preview()
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--onboarding-preview`: the whole onboarding flow from a fixture; never saves.
+    private var isOnboardingPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--onboarding-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var onboardingPreview: some View {
+        #if DEBUG
+        OnboardingView.preview()
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--widget-preview`: every Protein Floor widget size, as the widget draws them, with a
+    // partly-filled and a cleared floor.
+    private var isWidgetPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--widget-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var widgetPreview: some View {
+        #if DEBUG
+        WidgetGalleryPreview()
+        #else
+        EmptyView()
+        #endif
+    }
+
     private var isGoalsPreview: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--goals-preview")
@@ -91,6 +209,8 @@ struct RootView: View {
     private var isProgressPreview: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--progress-preview")
+            || ProcessInfo.processInfo.arguments.contains("--pulse-preview")
+            || DebugLaunch.tour
         #else
         false
         #endif

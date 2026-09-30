@@ -7,32 +7,31 @@ struct MealSectionView: View {
     var onDelete: (FoodLog) -> Void = { _ in }
 
     private var mealCalories: Double { logs.reduce(0) { $0 + $1.totalCalories } }
+    private var mealProtein: Double { logs.reduce(0) { $0 + $1.totalProteinG } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Section header — brand-tinted meal glyph, no more grey fill bar.
-            HStack(spacing: Theme.Spacing.sm) {
-                Image(systemName: meal.icon)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Theme.Colors.primary)
-                    .frame(width: 26, height: 26)
-                    .background(Theme.Colors.primary.opacity(0.12),
-                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                Text(meal.displayName)
-                    .font(.system(size: 15, weight: .bold))
+            // Section header: the meal as a tile label, its protein first (the number that
+            // matters here), calories after.
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                TileEyebrow(meal.displayName)
                 Spacer()
                 // .rounded() everywhere. Int(Double) truncates toward zero, and the header
                 // truncated the SUM while rows truncated each item: two 99.6 kcal rows showed
                 // "99" and "99" under a header reading "199". Quantity steps by 0.25, so
                 // fractional totals are routine — and the rings, which already used .rounded(),
                 // then disagreed with both.
+                Text("\(Int(mealProtein.rounded()))g")
+                    .font(Theme.Fonts.body(14, .bold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .monospacedDigit()
                 Text("\(Int(mealCalories.rounded())) kcal")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(13, .medium))
+                    .foregroundStyle(Theme.Colors.textFaint)
                     .monospacedDigit()
             }
             .padding(.horizontal, Theme.Spacing.md)
-            .padding(.top, Theme.Spacing.md)
+            .padding(.top, 14)
             .padding(.bottom, Theme.Spacing.xs)
 
             // Food log rows
@@ -48,7 +47,9 @@ struct MealSectionView: View {
                 }
             }
         }
-        .card()
+        .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: Theme.Radius.tileSmall, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tileSmall, style: .continuous))
+        .shadow(color: Color(hex: 0x0F172A, opacity: 0.06), radius: 1, y: 1)
     }
 }
 
@@ -66,22 +67,20 @@ private struct FoodLogRowView: View {
                 HStack(alignment: .center, spacing: Theme.Spacing.sm) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(log.displayName)
-                            .font(.subheadline.weight(.medium))
+                            .font(Theme.Fonts.body(15, .bold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
                             .lineLimit(1)
                         Text("\(servingText) · \(Int(log.totalCalories.rounded())) cal")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(Theme.Fonts.body(12))
+                            .foregroundStyle(Theme.Colors.textSecondary)
                     }
                     Spacer()
                     // Protein is the number that matters for this app's user — surface it as a
                     // prominent pill instead of burying it in a macro subtitle.
                     Text("\(Int(log.totalProteinG.rounded()))g")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(Theme.Fonts.body(14, .bold))
                         .monospacedDigit()
-                        .foregroundStyle(Theme.Colors.primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Theme.Colors.primary.opacity(0.12), in: Capsule())
+                        .foregroundStyle(Theme.Colors.primaryText)
                 }
                 .contentShape(Rectangle())
             }
@@ -116,13 +115,16 @@ private struct SwipeToDeleteRow<Content: View>: View {
             Button(role: .destructive, action: onDelete) {
                 VStack(spacing: 4) {
                     Image(systemName: "trash")
-                    Text("Delete").font(.caption2)
+                    Text("Delete").font(Theme.Fonts.body(11, .semibold))
                 }
                 .foregroundStyle(.white)
                 .frame(width: buttonWidth)
                 .frame(maxHeight: .infinity)
             }
-            .background(Color.red)
+            .background(Theme.Colors.danger)
+            // Only while swiping: at rest the red sat behind the row's rounded corner and showed
+            // as a thin edge down the right side of every food.
+            .opacity(offsetX < 0 ? 1 : 0)
 
             content()
                 .background(Theme.Colors.surfaceCard)
@@ -161,3 +163,6 @@ private struct SwipeToDeleteRow<Content: View>: View {
         }
     }
 }
+
+// Theme has no destructive-red token of its own (see ProfileView's private `danger`, which
+// isn't visible outside that file) — the swipe-to-delete affordance needs one too.

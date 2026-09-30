@@ -54,6 +54,11 @@ struct AppStoreScreenshotPreview: View {
                   foodItems: .init(name: name, brand: nil, servingDesc: "1 serving"))
         }
         vm.waterIntakeMl = 1250
+        // Mid-cycle, so the shot-cycle tile shows: last shot three days ago, next in four.
+        let lastShot = Calendar.current.date(byAdding: .day, value: -3, to: .now)!
+        vm.latestGLP1 = GLP1Log(id: UUID(), userId: sampleUser, injectedAt: lastShot, medication: "Zepbound",
+                                doseMg: 5, site: "abdomen_left",
+                                nextDueAt: Calendar.current.date(byAdding: .day, value: 7, to: lastShot))
         vm.activeCalories = 280
         vm.sleepHours = 7.5
         vm.restingHeartRate = 62
@@ -74,6 +79,28 @@ struct AppStoreScreenshotPreview: View {
                   calories: 120, proteinG: 2, carbsG: 6, fatG: 11, fiberG: 5, source: "estimated", initialQuantity: 1)
         ]
         return vm
+    }
+}
+// `--water-preview`: the water picker over an in-memory total, so adding, the usual badge and
+// Undo can be tried without an account.
+struct WaterPickerPreview: View {
+    @State private var intakeMl: Double = 1250
+    @State private var usualMl: Double = 250
+
+    var body: some View {
+        Theme.Colors.ground
+            .ignoresSafeArea()
+            .sheet(isPresented: .constant(true)) {
+                WaterPickerSheet(
+                    intakeMl: intakeMl,
+                    goalMl: 2400,
+                    unit: .ml,
+                    usualMl: $usualMl,
+                    onAdd: { ml in intakeMl += ml; return UUID() },
+                    onUndo: { _, ml in intakeMl = max(0, intakeMl - ml) }
+                )
+                .interactiveDismissDisabled()
+            }
     }
 }
 #endif

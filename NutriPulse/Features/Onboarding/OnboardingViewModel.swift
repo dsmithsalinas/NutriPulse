@@ -79,11 +79,13 @@ enum WeightGoal: String, CaseIterable, Identifiable {
         }
     }
 
-    var detail: String {
+    /// In the units the user picked on the height and weight step, so a metric user never sees
+    /// pounds here (and "~1 lb", singular).
+    func detail(imperial: Bool) -> String {
         switch self {
-        case .lose:     return "500 kcal/day deficit (~1 lb/week)"
+        case .lose:     return "500 kcal/day deficit (~\(imperial ? "1 lb" : "0.5 kg")/week)"
         case .maintain: return "Match your energy expenditure"
-        case .gain:     return "250 kcal/day surplus (~0.5 lb/week)"
+        case .gain:     return "250 kcal/day surplus (~\(imperial ? "0.5 lb" : "0.25 kg")/week)"
         }
     }
 
@@ -153,6 +155,18 @@ final class OnboardingViewModel {
     var glp1Medication: GLP1Medication = .ozempic
     var glp1DoseMg: Double = 0.5
     var glp1LastInjected: Date = Calendar.current.startOfDay(for: .now)
+
+    // Step 9 – Anything Pulse should know? (optional, skippable). Only allergies and how they
+    // eat — loves/avoids and the kitchen situation live in AboutYouView, after onboarding.
+    var pulseAllergies: [String] = []
+    var pulseAllergyNote = ""
+    var pulseEatingPatterns: Set<EatingPattern> = []
+
+    /// What this step collected, in the shape `PulseProfileStore.savePreferences` expects.
+    var pulseAboutYou: PulsePreferences {
+        .init(allergies: pulseAllergies, allergyNote: pulseAllergyNote,
+              eatingPatterns: pulseEatingPatterns, loves: [], avoids: [])
+    }
 
     var isLoading = false
     var errorMessage: String? = nil
@@ -272,6 +286,16 @@ final class OnboardingViewModel {
             // who set GLP-1 up here got none until they happened to log an injection
             // manually. Failing to schedule must not fail the save, hence no `try`.
             await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: nextDue)
+        }
+
+        // 3.6 What Pulse knows (optional, skippable step — empty when the user skipped it).
+        //     Unlike the writes above, this never blocks onboarding: a coaching preference
+        //     is not worth stranding the user in a retry loop over, so failures are swallowed
+        //     rather than thrown. The user can always fill this in later from AboutYouView.
+        if !pulseAboutYou.isEmpty {
+            // Never blocks onboarding, but never drops allergies either: a failed save waits on
+            // the device and is merged in on the next successful load.
+            await PulseProfileStore.shared.savePreferencesOrQueue(pulseAboutYou)
         }
 
         // 3.5 Record the chosen direction. Separate from the UpdateProfile commit below

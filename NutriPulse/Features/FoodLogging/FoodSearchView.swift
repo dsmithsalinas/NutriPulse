@@ -1,104 +1,38 @@
 import SwiftUI
 
+// Daylight Search tab (docs/daylight-redesign.md): filter chips (All / Protein-dense / My
+// foods), favorites-first results, a "+" that logs straight to the header meal, tapping a
+// name that opens the confirm sheet, and manual entry moved here ("Can't find it? Enter it
+// yourself").
 struct FoodSearchView: View {
     @Bindable var vm: FoodSearchViewModel
     let date: Date
-    let onLogged: (LogSource) -> Void
+    let headerMeal: Meal
+    let onLogged: (LogSource, _ keepOpen: Bool) -> Void
+    let onEnterManually: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            // ── Search bar ────────────────────────────────────────────────
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Search foods…", text: $vm.searchQuery)
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
-                if !vm.searchQuery.isEmpty {
-                    Button { vm.searchQuery = "" } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(Theme.Spacing.sm)
-            .background(Theme.Colors.surfaceInset)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-            }
-            .padding(.horizontal, Theme.Spacing.md)
-            .padding(.vertical, Theme.Spacing.sm)
+        VStack(spacing: Theme.Spacing.tileGap) {
+            searchField
+            filterChips
 
-            // ── Results ───────────────────────────────────────────────────
             Group {
                 if vm.searchQuery.isEmpty {
-                    if !vm.quickAdds.isEmpty {
-                        FavoritesQuickAddList(vm: vm, quickAdds: vm.quickAdds, date: date, onLogged: onLogged)
-                    } else {
-                        placeholder(
-                            icon: "magnifyingglass",
-                            text: "Search millions of foods from the FatSecret database"
-                        )
-                    }
+                    placeholder(icon: "magnifyingglass", text: "Search millions of foods from the FatSecret database")
                 } else if vm.isSearching {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if vm.results.isEmpty {
-                    placeholder(
-                        icon: "questionmark.circle",
-                        text: "No results for \"\(vm.searchQuery)\""
-                    )
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if vm.filteredResults.isEmpty {
+                    placeholder(icon: "questionmark.circle", text: emptyResultsText)
                 } else {
-                    List {
-                        ForEach(vm.results) { result in
-                            Button {
-                                Task { await vm.loadDetail(for: result) }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(result.name)
-                                        .font(.body)
-                                        .foregroundStyle(.primary)
-                                    if let brand = result.brand {
-                                        Text(brand)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Text(result.description)
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                        .lineLimit(1)
-                                }
-                            }
-                            // Fetch the next page when the last row comes into view. FatSecret
-                            // caps a page at 25; without this, "chicken" silently truncated and
-                            // the food the user wanted could be unreachable.
-                            .onAppear {
-                                guard result.id == vm.results.last?.id else { return }
-                                Task { await vm.loadMoreResults() }
-                            }
-                        }
-                        if vm.isLoadingMoreResults {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                Spacer()
-                            }
-                        }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
+                    resultsList
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // FatSecret licensing requires attribution on every screen that shows their
-            // data. Pinned at the bottom of the Search tab so it's always visible.
-            Divider().overlay(Theme.Colors.hairline)
+            enterManuallyButton
             FatSecretAttribution()
-                .padding(.vertical, Theme.Spacing.sm)
         }
-        .task { await vm.loadQuickAdds() }
+        .task { await vm.loadFavoritedExternalIds() }
         // SWIFT CONCEPT — .task(id:) re-runs the async block whenever `id` changes,
         // and cancels the previous run. Combined with Task.sleep this gives us
         // debounce without Combine — identical to useEffect with a cleanup fn in React.
@@ -108,7 +42,9 @@ struct FoodSearchView: View {
             await vm.search()
         }
         .sheet(item: $vm.selectedResult) { result in
-            FoodDetailSheet(vm: vm, result: result, date: date, source: .search, onLogged: onLogged)
+            FoodDetailSheet(vm: vm, result: result, date: date, source: .search, onLogged: { source in
+                onLogged(source, false)
+            })
         }
         .alert("Error", isPresented: Binding(
             get: { vm.errorMessage != nil },
@@ -120,23 +56,224 @@ struct FoodSearchView: View {
         }
     }
 
+    private var emptyResultsText: String {
+        vm.selectedFilter == .all
+            ? "No results for \"\(vm.searchQuery)\""
+            : "No \(vm.selectedFilter.rawValue.lowercased()) results for \"\(vm.searchQuery)\""
+    }
+
+    // MARK: - Search field
+
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Theme.Colors.textSecondary)
+            TextField("Search foods…", text: $vm.searchQuery)
+                .font(Theme.Fonts.body(16, .semibold))
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .accessibilityLabel("Search foods")
+            if !vm.searchQuery.isEmpty {
+                Button { vm.searchQuery = "" } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .frame(width: 36, height: 36)
+                        .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.pressable)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 52)
+        .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: Theme.Radius.tileSmall, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.Radius.tileSmall, style: .continuous)
+                .strokeBorder(vm.searchQuery.isEmpty ? Theme.Colors.hairline : Theme.Colors.primary, lineWidth: 2)
+        }
+    }
+
+    // MARK: - Filter chips
+
+    private var filterChips: some View {
+        HStack(spacing: 8) {
+            ForEach(SearchFilter.allCases) { filter in
+                let selected = vm.selectedFilter == filter
+                Button { vm.selectedFilter = filter } label: {
+                    HStack(spacing: 6) {
+                        if filter == .proteinDense && !selected {
+                            Circle().fill(Theme.Colors.primary).frame(width: 8, height: 8)
+                        }
+                        Text(filter.rawValue)
+                    }
+                    .font(Theme.Fonts.body(13, selected ? .bold : .semibold))
+                    .foregroundStyle(selected ? .white : Theme.Colors.textPrimary)
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                    .background(selected ? Theme.Colors.ink : Theme.Colors.surfaceCard, in: Capsule())
+                }
+                .buttonStyle(.pressable)
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Results
+
+    private var resultsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                ForEach(Array(vm.filteredResults.enumerated()), id: \.element.id) { index, result in
+                    SearchResultRow(
+                        result: result,
+                        isFavorited: vm.favoritedExternalIds.contains(result.id),
+                        isQuickLogging: vm.quickLoggingID == result.id,
+                        isQuickLogged: vm.quickLoggedIDs.contains(result.id),
+                        onOpen: {
+                            vm.selectedMeal = headerMeal
+                            Task { await vm.loadDetail(for: result) }
+                        },
+                        onQuickLog: {
+                            Task {
+                                await vm.quickLog(result, meal: headerMeal, on: date)
+                                onLogged(.search, true)
+                            }
+                        }
+                    )
+                    .popIn(order: index)
+                    .onAppear {
+                        guard result.id == vm.filteredResults.last?.id else { return }
+                        Task { await vm.loadMoreResults() }
+                    }
+                }
+                if vm.isLoadingMoreResults {
+                    ProgressView().frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.bottom, 4)
+        }
+    }
+
     private func placeholder(icon: String, text: String) -> some View {
         VStack(spacing: Theme.Spacing.sm) {
             Image(systemName: icon)
-                .font(.system(size: 44))
-                .foregroundStyle(.quaternary)
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.Colors.textFaint)
             Text(text)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Theme.Spacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+
+    // MARK: - Manual entry link
+
+    private var enterManuallyButton: some View {
+        Button(action: onEnterManually) {
+            HStack(spacing: 8) {
+                Image(systemName: "square.and.pencil")
+                Text("Can't find it? Enter it yourself")
+            }
+            .font(Theme.Fonts.body(14, .bold))
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .overlay {
+                RoundedRectangle(cornerRadius: Theme.Radius.tileSmall, style: .continuous)
+                    .strokeBorder(Theme.Colors.textFaint, style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+            }
+        }
+        .buttonStyle(.pressable)
+    }
+}
+
+// ─── Result row ───────────────────────────────────────────────────────────────
+
+private struct SearchResultRow: View {
+    let result: FoodSearchResult
+    let isFavorited: Bool
+    let isQuickLogging: Bool
+    let isQuickLogged: Bool
+    let onOpen: () -> Void
+    let onQuickLog: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(result.name)
+                        .font(Theme.Fonts.body(15, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        if isFavorited {
+                            Text("★ Favorite")
+                                .font(Theme.Fonts.body(11, .bold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                // A Tailwind amber-100/900 pairing (also used by the mockups) for
+                                // the accessible contrast a plain `.yellow` tint can't guarantee —
+                                // a one-off badge, not a recurring need, so it isn't a Theme token.
+                                .background(Color(hex: 0xFEF3C7), in: Capsule())
+                                .foregroundStyle(Color(hex: 0x92400E))
+                        }
+                        Text(subtitle)
+                            .font(Theme.Fonts.body(12))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if let macros = FoodSearchMacros.parse(result.description) {
+                Text("\(Int(macros.proteinG.rounded()))g")
+                    .font(Theme.Fonts.number(15))
+                    .foregroundStyle(Theme.Colors.primaryText)
+            }
+
+            Button(action: onQuickLog) {
+                Group {
+                    if isQuickLogging {
+                        ProgressView().tint(plusForeground)
+                    } else if isQuickLogged {
+                        Image(systemName: "checkmark").font(.system(size: 16, weight: .bold))
+                    } else {
+                        Image(systemName: "plus").font(.system(size: 16, weight: .bold))
+                    }
+                }
+                .foregroundStyle(plusForeground)
+                .frame(width: 44, height: 44)
+                .background(plusBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.pressable)
+            .disabled(isQuickLogging || isQuickLogged)
+            .accessibilityLabel(isQuickLogged ? "\(result.name) added to log" : "Log \(result.name)")
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 68)
+        .tile(radius: Theme.Radius.row, padding: 0)
+    }
+
+    private var plusForeground: Color { isFavorited ? .white : Theme.Colors.primaryText }
+    private var plusBackground: Color { isFavorited ? Theme.Colors.primary : Theme.Colors.surfaceInset }
+
+    private var subtitle: String {
+        var parts: [String] = [result.brand ?? "Generic"]
+        if let macros = FoodSearchMacros.parse(result.description) {
+            parts.append("\(Int(macros.calories.rounded())) cal")
+        }
+        return parts.joined(separator: " · ")
+    }
 }
 
 // ─── Detail sheet ─────────────────────────────────────────────────────────────
-// Shown after tapping a search result. Lets the user pick a serving, quantity,
+// Shown after tapping a search result's name. Lets the user pick a serving, quantity,
 // and meal before logging.
 struct FoodDetailSheet: View {
     @Bindable var vm: FoodSearchViewModel
@@ -177,8 +314,9 @@ struct FoodDetailSheet: View {
                         vm.wantsToFavorite.toggle()
                     } label: {
                         Image(systemName: vm.wantsToFavorite ? "star.fill" : "star")
-                            .foregroundStyle(vm.wantsToFavorite ? Color.yellow : Color.primary)
+                            .foregroundStyle(vm.wantsToFavorite ? Color.yellow : Theme.Colors.textPrimary)
                     }
+                    .accessibilityLabel(vm.wantsToFavorite ? "Remove from favorites" : "Add \(result.name) to favorites")
                 }
             }
             // Must live inside the sheet. Bound to the presenting view, this alert never
@@ -192,19 +330,24 @@ struct FoodDetailSheet: View {
                 Text(vm.logError ?? "")
             }
         }
+        .tint(Theme.Colors.primary)
     }
 
     private var loadFailedView: some View {
-        ContentUnavailableView {
-            Label("Couldn't load this food", systemImage: "wifi.exclamationmark")
-        } description: {
-            Text(vm.detailError ?? "Something went wrong.")
-        } actions: {
+        VStack(spacing: 12) {
+            BrandedEmptyState(
+                icon: "wifi.exclamationmark",
+                title: "Couldn't load this food",
+                message: vm.detailError ?? "Something went wrong."
+            )
             Button("Try Again") {
                 Task { await vm.loadDetail(for: result) }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.brandPrimary)
+            .padding(.horizontal, Theme.Spacing.xl)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Colors.ground.ignoresSafeArea())
     }
 
     @ViewBuilder
@@ -212,14 +355,17 @@ struct FoodDetailSheet: View {
         Form {
             // ── Serving picker ────────────────────────────────────────────
             if detail.servings.count > 1 {
-                Section("Serving size") {
+                Section {
                     Picker("Serving", selection: $vm.selectedServing) {
                         ForEach(detail.servings) { serving in
                             Text(serving.description).tag(Optional(serving))
                         }
                     }
                     .pickerStyle(.menu)
+                } header: {
+                    DaylightSectionHeader("Serving size")
                 }
+                .daylightSection()
             }
 
             // ── Meal + quantity ───────────────────────────────────────────
@@ -230,25 +376,30 @@ struct FoodDetailSheet: View {
                     }
                 }
                 HStack {
-                    Text("Servings")
+                    Text("Servings").font(Theme.Fonts.body(16))
                     Spacer()
                     Text(vm.quantity.formatted())
+                        .font(Theme.Fonts.body(16))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                     Stepper("", value: $vm.quantity, in: 0.25...20, step: 0.25)
                         .labelsHidden()
                 }
             }
+            .daylightSection()
 
             // ── Macro preview ─────────────────────────────────────────────
             if let preview = vm.macroPreview {
-                Section("Nutrition (\(vm.quantity.formatted()) × \(vm.selectedServing?.description ?? ""))") {
+                Section {
                     MacroPreviewRow(label: "Calories",  value: preview.calories,  unit: "kcal", color: Theme.NutrientColor.calories)
                     MacroPreviewRow(label: "Protein",   value: preview.proteinG,  unit: "g",    color: Theme.NutrientColor.protein)
                     MacroPreviewRow(label: "Carbs",     value: preview.carbsG,    unit: "g",    color: Theme.NutrientColor.carbs)
                     MacroPreviewRow(label: "Fat",       value: preview.fatG,      unit: "g",    color: Theme.NutrientColor.fat)
                     MacroPreviewRow(label: "Fiber",     value: preview.fiberG,    unit: "g",    color: Theme.NutrientColor.fiber)
+                } header: {
+                    DaylightSectionHeader("Nutrition (\(vm.quantity.formatted()) × \(vm.selectedServing?.description ?? ""))")
                 }
+                .daylightSection()
             }
 
             // FatSecret attribution — this sheet displays their nutrition data (from search
@@ -259,8 +410,7 @@ struct FoodDetailSheet: View {
                     .listRowBackground(Color.clear)
             }
         }
-        .scrollContentBackground(.hidden)
-        .listRowBackground(Theme.Colors.surfaceCard)
+        .daylightForm()
         .safeAreaInset(edge: .bottom) { logButton }
     }
 
@@ -290,117 +440,6 @@ struct FoodDetailSheet: View {
     }
 }
 
-// ─── Favorites quick-add section ─────────────────────────────────────────────
-
-private struct FavoritesQuickAddList: View {
-    let vm: FoodSearchViewModel
-    let quickAdds: [FavoriteQuickAdd]
-    let date: Date
-    let onLogged: (LogSource) -> Void
-
-    var body: some View {
-        List {
-            Section {
-                ForEach(quickAdds) { fav in
-                    FavoriteQuickAddRow(vm: vm, fav: fav, date: date, onLogged: onLogged)
-                }
-            } header: {
-                Label("Favorites", systemImage: "star.fill")
-                    .foregroundStyle(.yellow)
-            } footer: {
-                if vm.favoriteLogsThisSession > 0 {
-                    Text(favoritesFooter)
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                }
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .listRowBackground(Theme.Colors.surfaceCard)
-    }
-
-    private var favoritesFooter: String {
-        let count = vm.favoriteLogsThisSession
-        let noun = count == 1 ? "food" : "foods"
-        return "\(count) \(noun) added to your log. Tap Done when you’re finished."
-    }
-}
-
-private struct FavoriteQuickAddRow: View {
-    let vm: FoodSearchViewModel
-    let fav: FavoriteQuickAdd
-    let date: Date
-    let onLogged: (LogSource) -> Void
-
-    @State private var isLogging = false
-    @State private var didLog = false
-    private let repo = FavoriteRepository()
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(fav.name)
-                    .font(.subheadline)
-                    .lineLimit(1)
-                Text(servingText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            HStack(spacing: Theme.Spacing.sm) {
-                Text("\(Int(fav.totalCalories)) kcal")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button {
-                    Task { await logIt() }
-                } label: {
-                    Group {
-                        if isLogging {
-                            ProgressView().scaleEffect(0.75)
-                        } else if didLog {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(.green)
-                        } else {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(Theme.Colors.primary)
-                        }
-                    }
-                    .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.plain)
-                .disabled(isLogging || didLog)
-                .accessibilityLabel(didLog ? "\(fav.name) added to log" : "Add \(fav.name) to log")
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    private var servingText: String {
-        let qty = fav.quantity == fav.quantity.rounded() ? "\(Int(fav.quantity))" : String(format: "%.1f", fav.quantity)
-        let desc = fav.servingDesc ?? "serving"
-        return "\(qty) × \(desc)"
-    }
-
-    // The meal matches what every other logging path defaults to. Unlike them, quick-add
-    // offers no picker to correct it — worth revisiting for backdated logs, where
-    // "the meal it is right now" is meaningless.
-    @MainActor
-    private func logIt() async {
-        isLogging = true
-        defer { isLogging = false }
-        do {
-            try await repo.quickLog(fav, on: date, meal: .current)
-            didLog = true
-            onLogged(.favorite)
-        } catch {
-            // Previously `catch {}`: the spinner stopped, nothing logged, no error.
-            vm.errorMessage = "Couldn't log \(fav.name). Try again."
-        }
-    }
-}
-
 // ─── Macro preview row ────────────────────────────────────────────────────────
 
 struct MacroPreviewRow: View {
@@ -413,9 +452,12 @@ struct MacroPreviewRow: View {
         HStack {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(label)
+                .font(Theme.Fonts.body(15))
+                .foregroundStyle(Theme.Colors.textPrimary)
             Spacer()
             Text(String(format: "%.1f %@", value, unit))
-                .fontWeight(.semibold)
+                .font(Theme.Fonts.body(15, .semibold))
+                .foregroundStyle(Theme.Colors.textPrimary)
                 .monospacedDigit()
         }
     }

@@ -23,7 +23,7 @@ struct HeightWeightStepView: View {
                     MeasureField(label: "Height", value: formatImperialHeight(heightInches),
                                  onMinus: { setInches(heightInches - 1) },
                                  onPlus:  { setInches(heightInches + 1) })
-                    MeasureField(label: "Weight", value: "\(Int(weightLbs)) lb",
+                    MeasureField(label: "Weight", value: "\(Int(weightLbs)) lbs",
                                  onMinus: { setPounds(weightLbs - 1) },
                                  onPlus:  { setPounds(weightLbs + 1) })
                 } else {
@@ -77,27 +77,33 @@ private struct MeasureField: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
-                    .font(.system(size: 13))
+                    .font(Theme.Fonts.body(13))
                     .foregroundStyle(Theme.Colors.textSecondary)
                 Text(value)
-                    .font(.system(size: 22, weight: .bold))
-                    .monospacedDigit()
+                    .font(Theme.Fonts.number(22, .bold, relativeTo: .title3))
+                    .foregroundStyle(Theme.Colors.textPrimary)
             }
             Spacer(minLength: 6)
             HStack(spacing: 0) {
                 Button(action: onMinus) {
-                    Image(systemName: "minus").frame(width: 40, height: 38)
+                    Image(systemName: "minus").frame(width: 44, height: 44)
                 }
+                .accessibilityLabel("Decrease \(label.lowercased())")
                 Divider().frame(height: 20)
                 Button(action: onPlus) {
-                    Image(systemName: "plus").frame(width: 40, height: 38)
+                    Image(systemName: "plus").frame(width: 44, height: 44)
                 }
+                .accessibilityLabel("Increase \(label.lowercased())")
             }
             .font(.system(size: 18, weight: .medium))
-            .foregroundStyle(.primary)
-            .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
         .padding(14)
-        .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+        }
     }
 }

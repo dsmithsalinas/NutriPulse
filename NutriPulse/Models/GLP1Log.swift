@@ -60,6 +60,20 @@ struct GLP1DoseSchedule {
     }
 }
 
+extension GLP1Log {
+    /// Days between this shot and the next one due, from the dose schedule; weekly when that
+    /// is missing or implausible. Past it, the cycle reads as "Shot due" rather than day 8, 9…
+    var cycleLengthDays: Int {
+        guard let due = nextDueAt else { return 7 }
+        let days = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: injectedAt),
+            to: Calendar.current.startOfDay(for: due)
+        ).day ?? 7
+        return (1...14).contains(days) ? days : 7
+    }
+}
+
 extension Notification.Name {
     static let glp1DoseHistoryChanged = Notification.Name("glp1DoseHistoryChanged")
 }

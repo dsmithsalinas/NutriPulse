@@ -24,11 +24,11 @@ struct HealthStatsCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(hasTodayContext ? "TODAY'S CONTEXT" : "TODAY'S SIGNALS")
-                        .font(.system(size: 10, weight: .bold)).tracking(0.8)
-                        .foregroundStyle(hasTodayContext ? Theme.Colors.primary : Theme.Colors.textFaint)
+                    TileEyebrow(hasTodayContext ? "Today's context" : "Today's signals",
+                                color: hasTodayContext ? Theme.Colors.primaryText : Theme.Colors.textFaint)
                     Text(context?.headline ?? shotCycleHeadline ?? "Apple Health")
-                        .font(.headline)
+                        .font(Theme.Fonts.body(17, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                 }
                 Spacer()
                 Image(systemName: "waveform.path.ecg.rectangle")
@@ -38,11 +38,12 @@ struct HealthStatsCard: View {
 
             if let context {
                 Text(context.suggestion)
-                    .font(.subheadline.weight(.medium))
+                    .font(Theme.Fonts.body(15, .medium))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 if let first = context.signals.first {
                     Label(first, systemImage: "circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                         .labelStyle(TinyBulletLabelStyle())
                 }
             }
@@ -50,16 +51,15 @@ struct HealthStatsCard: View {
             if let checkIn = shotCycleCheckIn {
                 VStack(alignment: .leading, spacing: 5) {
                     Label("Your report", systemImage: "checkmark.circle.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Colors.primary)
-                    Text("Appetite \(checkIn.appetite)/5 · Energy \(checkIn.energy)/5 · Nausea \(checkIn.nausea)/5")
-                        .font(.subheadline)
+                        .font(Theme.Fonts.body(13, .semibold))
+                        .foregroundStyle(Theme.Colors.primaryText)
+                    Text("Appetite \(checkIn.appetite)/5 \u{00B7} Energy \(checkIn.energy)/5 \u{00B7} Nausea \(checkIn.nausea)/5")
+                        .font(Theme.Fonts.body(14))
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.Colors.primary.opacity(0.07))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
             }
 
             // Keep setup visible. Once Health data exists, tuck the raw numbers and supporting
@@ -70,8 +70,8 @@ struct HealthStatsCard: View {
                         if let context {
                             ForEach(context.signals.dropFirst(), id: \.self) { signal in
                                 Label(signal, systemImage: "circle.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(Theme.Fonts.body(12))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
                                     .labelStyle(TinyBulletLabelStyle())
                             }
                         }
@@ -79,16 +79,16 @@ struct HealthStatsCard: View {
                         signalChips
 
                         if context != nil {
-                            Text("Context only — not medical advice.")
-                                .font(.caption2)
+                            Text("Context only \u{2014} not medical advice.")
+                                .font(Theme.Fonts.body(11))
                                 .foregroundStyle(Theme.Colors.textFaint)
                         }
                     }
                     .padding(.top, Theme.Spacing.xs)
                 } label: {
                     Text(isExpanded ? "Hide Health details" : "Health details")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.Colors.primary)
+                        .font(Theme.Fonts.body(13, .semibold))
+                        .foregroundStyle(Theme.Colors.primaryText)
                 }
                 .tint(Theme.Colors.primary)
             } else if hasRequestedAuthorization {
@@ -97,18 +97,17 @@ struct HealthStatsCard: View {
                 connectRow
             }
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile(radius: Theme.Radius.tileSmall, padding: Theme.Spacing.md)
     }
 
     // MARK: Data view — compact chips, only for the signals we actually have.
 
     private var signalChips: some View {
         let items: [(icon: String, color: Color, value: String, label: String)] = [
-            activeCalories.map { (icon: "flame.fill",         color: Color.orange, value: "\(Int($0.rounded()))", label: "ACTIVE") },
-            sleepHours.map     { (icon: "moon.fill",          color: Color.indigo, value: formatSleep($0),        label: "SLEEP") },
-            hrv.map            { (icon: "waveform.path.ecg",  color: Color.pink,   value: "\(Int($0))ms",         label: "HRV") },
-            restingHR.map      { (icon: "heart.fill",         color: Color.red,    value: "\(Int($0))",           label: "RESTING") },
+            activeCalories.map { (icon: "flame.fill",         color: Theme.NutrientColor.calories, value: "\(Int($0.rounded()))", label: "ACTIVE") },
+            sleepHours.map     { (icon: "moon.fill",          color: Theme.Colors.primary,          value: formatSleep($0),        label: "SLEEP") },
+            hrv.map            { (icon: "waveform.path.ecg",  color: Theme.Colors.accent,           value: "\(Int($0))ms",         label: "HRV") },
+            restingHR.map      { (icon: "heart.fill",         color: Theme.Colors.listening,        value: "\(Int($0))",           label: "RESTING") },
         ].compactMap { $0 }
 
         return LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: Theme.Spacing.sm) {
@@ -124,20 +123,15 @@ struct HealthStatsCard: View {
                 .font(.system(size: 14))
                 .foregroundStyle(item.color)
             Text(item.value)
-                .font(.system(size: 14, weight: .bold))
-                .monospacedDigit()
+                .font(Theme.Fonts.number(14, .bold, relativeTo: .caption))
+                .foregroundStyle(Theme.Colors.textPrimary)
             Text(item.label)
-                .font(.system(size: 10))
+                .font(Theme.Fonts.body(10, .semibold))
                 .foregroundStyle(Theme.Colors.textFaint)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(Theme.Colors.surfaceInset)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-        }
+        .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
     }
 
     // MARK: Connect prompt
@@ -156,7 +150,7 @@ struct HealthStatsCard: View {
     private var noDataRow: some View {
         promptRow(
             title: "No Health data for this day",
-            subtitle: "Check permissions in the Health app under Sharing → Apps",
+            subtitle: "Check permissions in the Health app under Sharing \u{2192} Apps",
             action: onOpenHealthApp
         )
     }
@@ -165,22 +159,21 @@ struct HealthStatsCard: View {
         Button(action: action) {
             HStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "heart.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Theme.Colors.listening)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
+                        .font(Theme.Fonts.body(15, .medium))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.Colors.textFaint)
             }
         }
         .buttonStyle(.plain)

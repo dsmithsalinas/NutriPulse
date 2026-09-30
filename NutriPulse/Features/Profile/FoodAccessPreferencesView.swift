@@ -51,10 +51,15 @@ struct FoodAccessPreferencesView: View {
             Form {
                 Section {
                     Text("Help Pulse suggest food that fits your everyday life. Choose any that apply.")
-                        .foregroundStyle(.secondary)
-                    if vm.isLoading { ProgressView("Loading preferences…") }
-                    else if vm.loadFailed { Button("Try again") { Task { await vm.load() } } }
-                    else {
+                        .font(Theme.Fonts.body(14))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                    if vm.isLoading {
+                        ProgressView("Loading preferences…")
+                    } else if vm.loadFailed {
+                        Button("Try again") { Task { await vm.load() } }
+                            .font(Theme.Fonts.body(15, .semibold))
+                            .foregroundStyle(Theme.Colors.primary)
+                    } else {
                         ForEach(FoodAccessChoice.allCases) { choice in
                             Toggle(choice.title, isOn: Binding(
                                 get: { vm.draft.choices.contains(choice) },
@@ -65,21 +70,33 @@ struct FoodAccessPreferencesView: View {
                         }
                     }
                 }
+                .daylightSection()
+
                 if !vm.isLoading && !vm.loadFailed {
-                    Section("Anything else about getting meals ready?") {
+                    Section {
                         TextField("Optional—food access, equipment, or prep time", text: $vm.draft.note, axis: .vertical)
                             .lineLimit(3...6)
                             .onChange(of: vm.draft.note) { _, value in vm.draft.note = String(value.prefix(500)) }
+                    } header: {
+                        DaylightSectionHeader("Anything else about getting meals ready?")
                     }
+                    .daylightSection()
+
                     Section {
                         Button("Clear my preferences", role: .destructive) { vm.draft = .init() }
                     } footer: {
-                        Text("Saved preferences apply to future Pulse chats and outlooks until you change them. Refresh an existing outlook to use them. For changes just this week, use Update my week.")
+                        DaylightSectionFooter("Saved preferences apply to future Pulse chats and outlooks until you change them. Refresh an existing outlook to use them. For changes just this week, use Update my week.")
                     }
+                    .daylightSection()
                 }
-                if let error = vm.error { Text(error).foregroundStyle(.red).font(.footnote) }
+                if let error = vm.error {
+                    Text(error)
+                        .foregroundStyle(Theme.Colors.danger)
+                        .font(Theme.Fonts.body(12))
+                }
             }
             .disabled(vm.isSaving)
+            .daylightForm()
             .navigationTitle("Food preferences")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

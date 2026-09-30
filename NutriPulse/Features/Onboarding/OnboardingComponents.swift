@@ -1,8 +1,11 @@
 import SwiftUI
 
-// Shared building blocks for the Pulse-led onboarding: the animatable ring mark, the Pulse
-// avatar badge, the glowing advance arrow, progress dots, and the narrated-card shell every
-// step is built on. Kept in one file so the visual language stays consistent across steps.
+// Shared Daylight building blocks for onboarding and sign-in: the animatable ring mark, the
+// Pulse avatar badge, the primary Continue button, progress dots, and the narrated-step shell
+// every step is built on. Kept in one file so the visual language stays consistent across steps.
+// (Also used by Features/Auth, the other half of "the first thing new users see".)
+
+// Continue and other CTAs use the app-wide `.brandPrimary` (Theme.swift).
 
 // MARK: - Drawable ring mark
 
@@ -49,8 +52,9 @@ struct DrawablePulseMark: View {
 
 // MARK: - Pulse avatar badge
 
-/// The Pulse mark on the brand gradient — the "coach is here" badge at the top of every step
+/// The Pulse mark on a flat indigo fill — the "coach is here" badge at the top of every step
 /// and, larger, on the splash. Pass `drawProgress`/`dotOpacity` to animate the splash draw-in.
+/// Daylight fills are flat (Theme.swift), so this uses `hero` rather than the retired gradient.
 struct OnboardingPulseAvatar: View {
     var size: CGFloat = 46
     var drawProgress: CGFloat = 1
@@ -61,50 +65,17 @@ struct OnboardingPulseAvatar: View {
             .foregroundStyle(.white)
             .padding(size * 0.29)
             .frame(width: size, height: size)
-            .background(Theme.Colors.primaryGradient, in: Circle())
-            .shadow(color: Theme.Colors.accent.opacity(0.4), radius: size * 0.17, y: size * 0.12)
-    }
-}
-
-// MARK: - Glowing advance arrow
-
-/// The signature advance control — a gradient circle that breathes a soft glow, replacing the
-/// full-width "Continue" button. Disabled state dims and stops the pulse.
-struct GlowingArrowButton: View {
-    var enabled: Bool = true
-    let action: () -> Void
-
-    @State private var pulsing = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "arrow.right")
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 62, height: 62)
-                .background(Theme.Colors.primaryGradient, in: Circle())
-                .shadow(color: Theme.Colors.accent.opacity(enabled ? 0.55 : 0),
-                        radius: pulsing ? 20 : 11, y: 10)
-        }
-        .buttonStyle(.pressable)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.45)
-        .onAppear {
-            guard !reduceMotion, enabled else { return }
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                pulsing = true
-            }
-        }
+            .background(Theme.Colors.hero, in: Circle())
     }
 }
 
 // MARK: - Progress dots
 
-/// The step indicator — a row of capsules, the current one stretched. `current` is 1-based.
+/// The Daylight step indicator — a row of capsules, the current one stretched indigo.
+/// `current` is 1-based.
 struct OnboardingProgressDots: View {
     let current: Int
-    var total: Int = 8
+    var total: Int = 9
 
     var body: some View {
         HStack(spacing: 6) {
@@ -115,6 +86,8 @@ struct OnboardingProgressDots: View {
                     .animation(.spring(response: 0.3), value: current)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Step \(current) of \(total)")
     }
 
     private func fill(for i: Int) -> Color {
@@ -126,24 +99,26 @@ struct OnboardingProgressDots: View {
 
 // MARK: - Narrated step shell
 
-/// The shell every onboarding question is built on: a back control + progress dots, the Pulse
-/// avatar, an optional eyebrow, the narrated question and subtitle, the step's content centered
-/// in the space below, and the glowing arrow floating bottom-trailing. Back pops the nav stack.
+/// The shell every onboarding question is built on: a back control + Daylight progress dots, the
+/// Pulse avatar, an optional eyebrow, a big Bricolage question with a Figtree helper line, the
+/// step's content, and a pinned Continue button. Back pops the nav stack. Everything above the
+/// button pops in with `.popIn` on first appear.
 struct NarratedStepLayout<Content: View>: View {
     let step: Int
-    var totalSteps: Int = 8
+    var totalSteps: Int = 9
     var eyebrow: String? = nil
     var eyebrowGlow: Bool = false
     let question: String
     var subtitle: String? = nil
     var canAdvance: Bool = true
+    var continueTitle: String = "Continue"
     let onAdvance: () -> Void
     @ViewBuilder var content: () -> Content
 
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack {
             Theme.Colors.ground.ignoresSafeArea()
             if eyebrowGlow {
                 OnboardingAuroraWash().ignoresSafeArea()
@@ -155,17 +130,18 @@ struct NarratedStepLayout<Content: View>: View {
                     Button { dismiss() } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .frame(width: 34, height: 34)
-                            .background(Theme.Colors.surface, in: Circle())
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .frame(width: 44, height: 44)
+                            .background(Theme.Colors.surfaceCard, in: Circle())
                     }
                     .buttonStyle(.pressable)
+                    .accessibilityLabel("Back")
 
                     OnboardingProgressDots(current: step, total: totalSteps)
                     Spacer(minLength: 0)
                 }
                 .padding(.top, 4)
-                .padding(.horizontal, 26)
+                .padding(.horizontal, Theme.Spacing.page)
 
                 // Content region: centered when short, scrolls when it overflows.
                 GeometryReader { proxy in
@@ -173,44 +149,54 @@ struct NarratedStepLayout<Content: View>: View {
                         VStack(alignment: .leading, spacing: 0) {
                             OnboardingPulseAvatar(size: 46)
                                 .padding(.top, 20)
+                                .popIn(order: 0)
 
                             if let eyebrow {
                                 Text(eyebrow.uppercased())
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .kerning(1.4)
-                                    .foregroundStyle(Theme.Colors.primary)
+                                    .font(Theme.Fonts.body(12, .bold))
+                                    .tracking(Theme.Typography.eyebrowTracking)
+                                    .foregroundStyle(Theme.Colors.primaryText)
                                     .padding(.top, 14)
+                                    .popIn(order: 1)
                             }
 
                             Text(question)
-                                .font(.system(size: 26, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.primary)
+                                .font(Theme.Fonts.display(28, .extraBold, relativeTo: .title))
+                                .foregroundStyle(Theme.Colors.textPrimary)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .padding(.top, eyebrow == nil ? 16 : 8)
+                                .accessibilityAddTraits(.isHeader)
+                                .popIn(order: 1)
 
                             if let subtitle {
                                 Text(subtitle)
-                                    .font(.system(size: 15))
+                                    .font(Theme.Fonts.body(15))
                                     .foregroundStyle(Theme.Colors.textSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .padding(.top, 9)
+                                    .popIn(order: 2)
                             }
 
                             Spacer(minLength: 24)
                             content()
-                            Spacer(minLength: 96)
+                                .popIn(order: 3)
+                            Spacer(minLength: 24)
                         }
-                        .padding(.horizontal, 26)
+                        .padding(.horizontal, Theme.Spacing.page)
+                        .padding(.bottom, 16)
                         .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .leading)
                     }
                     .scrollBounceBehavior(.basedOnSize)
                     .scrollIndicators(.hidden)
                 }
-            }
 
-            GlowingArrowButton(enabled: canAdvance, action: onAdvance)
-                .padding(.trailing, 26)
-                .padding(.bottom, 30)
+                Button(continueTitle, action: onAdvance)
+                    .buttonStyle(.brandPrimary)
+                    .disabled(!canAdvance)
+                    .padding(.horizontal, Theme.Spacing.page)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+            }
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
@@ -219,7 +205,8 @@ struct NarratedStepLayout<Content: View>: View {
 
 // MARK: - Selectable option card (sex, activity, goal)
 
-/// A tappable choice row — title, optional detail line, selection tint + border and a checkmark.
+/// A tappable choice row, styled as a white Daylight tile: title, optional detail line, an
+/// indigo border + tint plus a checkmark when selected.
 struct OnboardingOptionCard: View {
     let title: String
     var detail: String? = nil
@@ -231,11 +218,11 @@ struct OnboardingOptionCard: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.primary)
+                        .font(Theme.Fonts.body(16, .semibold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     if let detail {
                         Text(detail)
-                            .font(.system(size: 12.5))
+                            .font(Theme.Fonts.body(13))
                             .foregroundStyle(Theme.Colors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .multilineTextAlignment(.leading)
@@ -249,20 +236,26 @@ struct OnboardingOptionCard: View {
             }
             .padding(.vertical, 15)
             .padding(.horizontal, 18)
+            .frame(minHeight: 44, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? Theme.Colors.primary.opacity(0.12) : Theme.Colors.surfaceInset,
-                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(isSelected ? Theme.Colors.primary.opacity(0.08) : Theme.Colors.surfaceCard,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(isSelected ? Theme.Colors.primary.opacity(0.55) : .clear, lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
+                    .strokeBorder(isSelected ? Theme.Colors.primary : Theme.Colors.hairline,
+                                  lineWidth: isSelected ? 2 : 1)
             }
+            .shadow(color: Color(hex: 0x0F172A, opacity: isSelected ? 0 : 0.05), radius: 1, y: 1)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 
-// MARK: - Pill (GLP-1 medication / dose)
+// MARK: - Pill (GLP-1 medication / dose, allergies, eating patterns)
 
+/// A chip matching AboutYouView's `ToggleChip` — the same selected/unselected language used
+/// everywhere else Daylight offers a fixed set of tappable options.
 struct OnboardingPill: View {
     let title: String
     let isSelected: Bool
@@ -271,18 +264,19 @@ struct OnboardingPill: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(isSelected ? Theme.Colors.primary : .primary)
-                .padding(.vertical, 11)
-                .padding(.horizontal, 16)
+                .font(Theme.Fonts.body(14, .semibold))
+                .foregroundStyle(isSelected ? Theme.Colors.primaryText : Theme.Colors.textPrimary)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
                 .background(isSelected ? Theme.Colors.primary.opacity(0.12) : Theme.Colors.surfaceInset,
-                            in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .strokeBorder(isSelected ? Theme.Colors.primary.opacity(0.55) : .clear, lineWidth: 1.5)
                 }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 
@@ -301,15 +295,15 @@ struct OnboardingSegmented: View {
                     withAnimation(.easeOut(duration: 0.18)) { selection = i }
                 } label: {
                     Text(options[i])
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(selection == i ? Color.primary : Theme.Colors.textSecondary)
+                        .font(Theme.Fonts.body(14, .semibold))
+                        .foregroundStyle(selection == i ? Theme.Colors.textPrimary : Theme.Colors.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background {
                             if selection == i {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .fill(Theme.Colors.surfaceCard)
-                                    .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
+                                    .shadow(color: Color(hex: 0x0F172A, opacity: 0.1), radius: 4, y: 2)
                             }
                         }
                 }
@@ -328,7 +322,7 @@ struct OnboardingSegmented: View {
 struct OnboardingAuroraWash: View {
     var body: some View {
         LinearGradient(
-            colors: [Theme.Colors.accent.opacity(0.28), Theme.Colors.primary.opacity(0.12), .clear],
+            colors: [Theme.Colors.accent.opacity(0.24), Theme.Colors.primary.opacity(0.1), .clear],
             startPoint: .top, endPoint: .bottom
         )
         .frame(height: 340)

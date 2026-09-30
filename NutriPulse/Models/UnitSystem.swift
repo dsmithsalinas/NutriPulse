@@ -22,6 +22,22 @@ enum UnitSystem: String {
         }
     }
 
+    // A plain linear length (waist, hips, a chart axis, …) — unlike height's whole-inch
+    // feet/inches special case, this is just "12.3 in"/"31.2 cm".
+    func formatLength(_ cm: Double) -> String {
+        String(format: "%.1f %@", lengthInput(fromCm: cm), lengthUnit)
+    }
+
+    // A signed change ("−2.4 lbs", "+1.1 kg"), or "Stable" for anything too small to call a
+    // trend. `deltaKg` is always the raw storage delta — this is the one place callers don't
+    // need to convert themselves first.
+    func formatWeightChange(_ deltaKg: Double, threshold: Double = 0.05) -> String {
+        guard abs(deltaKg) > threshold else { return "Stable" }
+        let magnitude = abs(weightInput(from: deltaKg)).formatted(.number.precision(.fractionLength(1)))
+        let sign = deltaKg < 0 ? "\u{2212}" : "+"
+        return "\(sign)\(magnitude) \(weightUnit)"
+    }
+
     // MARK: Input labels
 
     var weightUnit: String { self == .metric ? "kg" : "lbs" }
@@ -29,6 +45,11 @@ enum UnitSystem: String {
     // Tape measurements (waist, hips, …) — a plain linear length, unlike height's
     // whole-inch feet/inches special case.
     var lengthUnit: String { self == .metric ? "cm" : "in" }
+
+    // Spoken forms for VoiceOver, so an accessibility label reads "2.4 pounds" rather than
+    // "2.4 lbs" — the abbreviation is fine printed, not fine spoken.
+    var spokenWeightUnit: String { self == .metric ? "kilograms" : "pounds" }
+    var spokenLengthUnit: String { self == .metric ? "centimeters" : "inches" }
 
     // MARK: Conversion helpers (input → storage)
 

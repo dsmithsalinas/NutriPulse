@@ -189,4 +189,16 @@ struct AnalyticsRepository {
             .execute()
             .value
     }
+
+    /// The most recent weigh-in, however old (RLS scopes it to the signed-in user).
+    func fetchLatestWeightLog() async throws -> WeightLog? {
+        let rows: [WeightLog] = try await supabase
+            .from("weight_logs")
+            .select()
+            .order("logged_at", ascending: false)
+            .limit(1)
+            .execute()
+            .value
+        return rows.first
+    }
 }

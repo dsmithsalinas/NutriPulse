@@ -2,7 +2,10 @@ import SwiftUI
 
 struct LowAppetitePreparationCard: View {
     let preparation: LowAppetitePreparation
-    let onPlan: () -> Void
+    // `nil` while Pulse can't take the hand-off (off, or not yet consented) — hides the "Plan a
+    // backup with Pulse" button and keeps "I'm prepared", which never leaves the device. See
+    // PulseGate.
+    let onPlan: (() -> Void)?
     let onPrepared: () -> Void
 
     var body: some View {
@@ -12,52 +15,47 @@ struct LowAppetitePreparationCard: View {
                     .font(.title2)
                     .foregroundStyle(Theme.Colors.primary)
                     .frame(width: 42, height: 42)
-                    .background(Theme.Colors.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                    .background(Theme.Colors.primarySoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack {
-                        Text("PREP FOR TOMORROW")
-                            .font(.system(size: 10, weight: .bold)).tracking(0.8)
-                            .foregroundStyle(Theme.Colors.primary)
+                        TileEyebrow("Prep for tomorrow", color: Theme.Colors.primaryText)
                         Text(preparation.confidence.rawValue)
-                            .font(.system(size: 9, weight: .bold))
+                            .font(Theme.Fonts.body(9, .bold))
                             .padding(.horizontal, 7).padding(.vertical, 3)
-                            .background(Theme.Colors.primary.opacity(0.1), in: Capsule())
+                            .background(Theme.Colors.primarySoft, in: Capsule())
+                            .foregroundStyle(Theme.Colors.primaryText)
                     }
                     Text(preparation.headline)
-                        .font(.headline)
+                        .font(Theme.Fonts.body(17, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                 }
             }
 
             Text(preparation.detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(12))
+                .foregroundStyle(Theme.Colors.textSecondary)
 
             Text("Put one small protein-dense option you already tolerate within reach today.")
-                .font(.subheadline.weight(.medium))
+                .font(Theme.Fonts.body(15, .medium))
+                .foregroundStyle(Theme.Colors.textPrimary)
 
             VStack(spacing: Theme.Spacing.xs) {
-                Button("Plan a backup with Pulse", action: onPlan)
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.Colors.primary)
-                    .frame(maxWidth: .infinity)
+                if let onPlan {
+                    Button("Plan a backup with Pulse", action: onPlan)
+                        .buttonStyle(.brandPrimary)
+                }
 
                 Button("I'm prepared", systemImage: "checkmark.circle", action: onPrepared)
-                    .buttonStyle(.bordered)
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
                     .accessibilityHint("Hides this preparation card and cancels its notification")
             }
         }
-        .padding(Theme.Spacing.md)
-        .background {
-            LinearGradient(
-                colors: [Theme.Colors.primary.opacity(0.12), Theme.Colors.surfaceCard],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: 20).strokeBorder(Theme.Colors.hairline) }
+        .tile(radius: Theme.Radius.tileSmall, padding: Theme.Spacing.md)
     }
 }
 
@@ -69,61 +67,52 @@ struct ShotCycleCheckInCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .top, spacing: Theme.Spacing.sm) {
-                Image(systemName: "waveform.path.ecg")
+                Image(systemName: "checklist")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.Colors.lime)
                     .frame(width: 38, height: 38)
-                    .background(Theme.Colors.primaryGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Theme.Colors.limeInk, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("POST-SHOT CHECK-IN")
-                        .font(.system(size: 10, weight: .bold))
-                        .tracking(0.8)
-                        .foregroundStyle(Theme.Colors.primary)
+                    TileEyebrow("Post-shot check-in", color: Theme.Colors.limeLabel)
                     Text("How are you feeling after your shot?")
-                        .font(Theme.Typography.headline)
+                        .font(Theme.Fonts.body(17, .bold))
+                        .foregroundStyle(Theme.Colors.limeInk)
                 }
 
                 Spacer()
 
-                Text("DAY \(cycleDay)")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Theme.Colors.primary)
+                Text("Day \(cycleDay)")
+                    .font(Theme.Fonts.body(10, .bold))
+                    .foregroundStyle(Theme.Colors.limeInk)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
-                    .background(Theme.Colors.primary.opacity(0.1), in: Capsule())
+                    .background(Theme.Colors.limeInk.opacity(0.1), in: Capsule())
             }
 
             Text(detail)
-                .font(.subheadline)
-                .foregroundStyle(Theme.Colors.textSecondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundStyle(Theme.Colors.limeLabel)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: Theme.Spacing.sm) {
                 Button("Check in", action: onCheckIn)
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.Colors.primary)
+                    .font(Theme.Fonts.body(14, .bold))
+                    .foregroundStyle(Theme.Colors.lime)
+                    .padding(.horizontal, 16)
+                    .frame(height: 44)
+                    .background(Theme.Colors.limeInk, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
 
                 Button("Not now", action: onNotNow)
-                    .buttonStyle(.bordered)
+                    .font(Theme.Fonts.body(14, .bold))
+                    .foregroundStyle(Theme.Colors.limeInk)
+                    .padding(.horizontal, 16)
+                    .frame(height: 44)
+                    .background(Theme.Colors.limeInk.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
                     .accessibilityHint("Hides this check-in for today")
             }
-            .font(.subheadline.weight(.semibold))
         }
-        .padding(Theme.Spacing.md)
-        .background {
-            LinearGradient(
-                colors: [Theme.Colors.primary.opacity(0.12), Theme.Colors.surfaceCard],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Theme.Colors.primary.opacity(0.22), lineWidth: 1)
-        }
+        .tile(Theme.Colors.lime, radius: Theme.Radius.tileSmall, padding: Theme.Spacing.md, shadow: false)
     }
 
     private var detail: String {

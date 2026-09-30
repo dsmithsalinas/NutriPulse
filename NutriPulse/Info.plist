@@ -49,6 +49,16 @@
 	<string>$(SUPABASE_URL)</string>
 	<key>TELEMETRYDECK_APP_ID</key>
 	<string>$(TELEMETRYDECK_APP_ID)</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>BricolageGrotesque-Medium.ttf</string>
+		<string>BricolageGrotesque-Bold.ttf</string>
+		<string>BricolageGrotesque-ExtraBold.ttf</string>
+		<string>Figtree-Regular.ttf</string>
+		<string>Figtree-Medium.ttf</string>
+		<string>Figtree-SemiBold.ttf</string>
+		<string>Figtree-Bold.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

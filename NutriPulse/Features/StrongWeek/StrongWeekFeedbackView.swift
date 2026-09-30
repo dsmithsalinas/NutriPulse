@@ -16,29 +16,31 @@ struct StrongWeekFeedbackView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Was this useful?").font(.subheadline.weight(.semibold))
+            TileEyebrow("Was this useful?", color: Theme.Colors.textFaint)
             if loading {
                 ProgressView().controlSize(.small)
             } else if loadError {
-                Text("Couldn't load your feedback.").font(.footnote).foregroundStyle(.secondary)
+                Text("Couldn't load your feedback.")
+                    .font(Theme.Fonts.body(13))
+                    .foregroundStyle(Theme.Colors.textSecondary)
                 Button("Try again") { Task { await load() } }
+                    .font(Theme.Fonts.body(13, .semibold))
+                    .foregroundStyle(Theme.Colors.primaryText)
             } else {
-                HStack {
+                HStack(spacing: 10) {
                     ForEach(OutlookRating.allCases) { choice in
-                        Button {
+                        RatingChip(title: choice.title, symbol: choice.symbol, isSelected: saved?.rating == choice) {
                             rating = choice
                             reasons = Set(saved?.reasons ?? [])
                             saveError = nil
                             showingEditor = true
-                        } label: {
-                            Label(choice.title, systemImage: choice.symbol + (saved?.rating == choice ? ".fill" : ""))
-                        }.buttonStyle(.bordered)
-                        .accessibilityValue(saved?.rating == choice ? "Selected" : "Not selected")
+                        }
                     }
                 }
                 if saved != nil {
                     Text("Thanks for your feedback. Tap a rating to edit it.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
             }
         }
@@ -49,24 +51,40 @@ struct StrongWeekFeedbackView: View {
         .sheet(isPresented: $showingEditor) {
             NavigationStack {
                 Form {
-                    Section("Was this useful?") {
+                    Section {
                         Picker("Your rating", selection: $rating) {
                             ForEach(OutlookRating.allCases) { Text($0.title).tag($0) }
                         }.pickerStyle(.segmented)
+                    } header: {
+                        DaylightSectionHeader("Was this useful?")
                     }
+                    .daylightSection()
+
                     Section {
                         ForEach(OutlookFeedbackReason.allCases) { reason in
-                            Toggle(reason.title, isOn: Binding(
+                            Toggle(isOn: Binding(
                                 get: { reasons.contains(reason) },
-                                set: { if $0 { reasons.insert(reason) } else { reasons.remove(reason) } }))
+                                set: { if $0 { reasons.insert(reason) } else { reasons.remove(reason) } })) {
+                                Text(reason.title).font(Theme.Fonts.body(15))
+                            }
                         }
                     } header: {
-                        Text("What could be better? (optional)")
+                        DaylightSectionHeader("What could be better? (optional)")
                     } footer: {
-                        Text("Feedback helps us improve Pulse. It won't change your current outlook. Use Adjust this for me for different suggestions.")
+                        DaylightSectionFooter("Feedback helps us improve Pulse. It won't change your current outlook. Use Adjust this for me for different suggestions.")
                     }
-                    if let saveError { Text(saveError).foregroundStyle(.red) }
+                    .daylightSection()
+
+                    if let saveError {
+                        Section {
+                            Text(saveError)
+                                .font(Theme.Fonts.body(13))
+                                .foregroundStyle(Theme.Colors.danger)
+                        }
+                        .daylightSection()
+                    }
                 }
+                .daylightForm()
                 .disabled(saving)
                 .navigationTitle("Outlook feedback")
                 .navigationBarTitleDisplayMode(.inline)
@@ -107,5 +125,32 @@ struct StrongWeekFeedbackView: View {
         } catch {
             saveError = "Couldn't save your feedback. Your choices are kept here—please try again."
         }
+    }
+}
+
+/// A pill-style rating chip — filled/tinted when this is the saved rating.
+private struct RatingChip: View {
+    let title: String
+    let symbol: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol + (isSelected ? ".fill" : ""))
+                .font(Theme.Fonts.body(14, .semibold))
+                .foregroundStyle(isSelected ? Theme.Colors.primaryText : Theme.Colors.textPrimary)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .background(isSelected ? Theme.Colors.primary.opacity(0.12) : Theme.Colors.surfaceInset,
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(isSelected ? Theme.Colors.primary.opacity(0.55) : .clear, lineWidth: 1.5)
+                }
+        }
+        .buttonStyle(.pressable)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
     }
 }

@@ -1,11 +1,23 @@
 import SwiftUI
 
+// Daylight goal builder: a picker screen of suggested templates (or "build your own"), then a
+// three-step wizard — source, measurement, review — styled with the same tiles and chips as the
+// rest of Goals. Used both as a sheet from GoalsView and standalone via `--goal-builder-preview`,
+// so it keeps its own NavigationStack for the back/cancel chrome in both places.
 struct CreateGoalView: View {
     @Environment(\.dismiss) private var dismiss
     let vm: GoalsViewModel
     @State private var draft: GoalDraft?
     @State private var step = 1
     @State private var isSaving = false
+    @State private var showActiveGoalCapNote = false
+
+    @AppStorage("unitSystem") private var unitSystemRaw = "metric"
+    private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
+
+    // A weight goal's target is always stored in kg; only the editor and review screens
+    // convert, so an imperial user enters and reviews it in lbs.
+    private var isWeightGoal: Bool { draft?.sourceMetric == .weight }
 
     init(vm: GoalsViewModel, initialDraft: GoalDraft? = nil) {
         self.vm = vm
@@ -18,114 +30,112 @@ struct CreateGoalView: View {
                 Group {
                     if draft == nil { startingPoints } else { builder }
                 }
-                .padding(16)
+                .padding(Theme.Spacing.page)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
-            .navigationTitle("Create a goal")
-            .navigationBarTitleDisplayMode(.inline)
+            .daylightSubpage("Create a goal")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if draft == nil {
                         Button("Cancel") { dismiss() }
+                            .font(Theme.Fonts.body(16, .semibold))
                     } else {
                         Button {
                             if step > 1 { step -= 1 } else { draft = nil }
                         } label: {
                             Label("Back", systemImage: "chevron.left")
                         }
+                        .font(Theme.Fonts.body(16, .semibold))
                     }
                 }
             }
             .safeAreaInset(edge: .bottom) {
                 if draft != nil { bottomAction }
             }
+            .tint(Theme.Colors.primary)
         }
     }
 
     private var startingPoints: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Start with an idea, then make every part your own.")
-                .font(Theme.Typography.body)
-                .foregroundStyle(Theme.Colors.textSecondary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            DaylightPageTitle("Create a goal", subtitle: "Start with an idea, then make every part your own.")
 
-            Text("Suggested for you")
-                .font(Theme.Typography.title)
+            TileEyebrow("Suggested for you")
 
-            VStack(spacing: 0) {
-                ForEach(Array(GoalTemplate.all.enumerated()), id: \.element.id) { index, template in
-                    Button { begin(GoalDraft(template: template)) } label: {
-                        HStack(spacing: 14) {
-                            Image(systemName: template.symbol)
-                                .font(.system(size: 19))
-                                .foregroundStyle(Theme.Colors.primary)
-                                .frame(width: 42, height: 42)
-                                .background(Theme.Colors.surfaceInset)
-                                .clipShape(Circle())
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(template.title)
-                                    .font(Theme.Typography.headline)
-                                    .foregroundStyle(Theme.Colors.textPrimary)
-                                Text(sourceLabel(for: template))
-                                    .font(Theme.Typography.caption)
-                                    .foregroundStyle(Theme.Colors.textSecondary)
-                            }
-                            Spacer()
-                            Text("Edit")
-                                .font(Theme.Typography.caption.weight(.semibold))
-                                .foregroundStyle(Theme.Colors.primary)
-                                .padding(.horizontal, 11)
-                                .padding(.vertical, 7)
-                                .overlay(Capsule().stroke(Theme.Colors.primary.opacity(0.35)))
-                        }
-                        .padding(.vertical, 12)
-                    }
-                    .buttonStyle(.plain)
-
-                    if index < GoalTemplate.all.count - 1 {
-                        Divider().overlay(Theme.Colors.hairline)
-                    }
+            VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                ForEach(GoalTemplate.all) { template in
+                    templateRow(template)
                 }
             }
-            .padding(.horizontal, 14)
-            .card()
 
             Button { begin(GoalDraft()) } label: {
                 HStack(spacing: 14) {
                     Image(systemName: "plus")
-                        .font(.system(size: 20, weight: .medium))
+                        .font(.system(size: 19, weight: .bold))
                         .foregroundStyle(Theme.Colors.primary)
                         .frame(width: 44, height: 44)
-                        .overlay(Circle().stroke(Theme.Colors.primary.opacity(0.55)))
+                        .background(Theme.Colors.surfaceInset, in: Circle())
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Create my own goal")
-                            .font(Theme.Typography.headline)
-                            .foregroundStyle(Theme.Colors.primary)
+                            .font(Theme.Fonts.body(16, .bold))
+                            .foregroundStyle(Theme.Colors.primaryText)
                         Text("Choose what to track and how to measure it")
-                            .font(Theme.Typography.caption)
+                            .font(Theme.Fonts.body(13))
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Theme.Colors.primary)
                 }
-                .padding(16)
-                .background(Theme.Colors.surfaceCard)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                        .stroke(Theme.Colors.primary.opacity(0.45), style: .init(lineWidth: 1, dash: [3]))
-                }
+                .tile()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle(scale: 0.98))
+            .accessibilityLabel("Create my own goal")
+            .accessibilityHint("Choose what to track and how to measure it")
         }
+    }
+
+    private func templateRow(_ template: GoalTemplate) -> some View {
+        Button { begin(GoalDraft(template: template)) } label: {
+            HStack(spacing: 14) {
+                Image(systemName: template.symbol)
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.primary)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.Colors.surfaceInset, in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(template.title)
+                        .font(Theme.Fonts.body(16, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text(sourceLabel(for: template))
+                        .font(Theme.Fonts.body(13))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                Spacer(minLength: 8)
+                Text("Edit")
+                    .font(Theme.Fonts.body(13, .bold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .background(Theme.Colors.primarySoft, in: Capsule())
+            }
+            .tile()
+        }
+        .buttonStyle(PressableStyle(scale: 0.98))
+        .accessibilityLabel("\(template.title), \(sourceLabel(for: template))")
+        .accessibilityHint("Edit this suggested goal")
     }
 
     @ViewBuilder
     private var builder: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Step \(step) of 3")
-                .font(Theme.Typography.body.weight(.semibold))
-                .foregroundStyle(Theme.Colors.primary)
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            VStack(alignment: .leading, spacing: 6) {
+                DaylightPageTitle("Create a goal")
+                Text("Step \(step) of 3")
+                    .font(Theme.Fonts.body(13, .bold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+            }
 
             switch step {
             case 1: sourceStep
@@ -136,71 +146,67 @@ struct CreateGoalView: View {
     }
 
     private var sourceStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Suggested goal")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                TileEyebrow("Suggested goal")
                 HStack {
                     TextField("Name your goal", text: draftBinding(\.title))
-                        .font(Theme.Typography.title)
+                        .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Image(systemName: "pencil")
                         .foregroundStyle(Theme.Colors.primary)
                 }
                 .padding(14)
-                .background(Theme.Colors.surfaceCard)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Theme.Colors.primary.opacity(0.65))
-                }
+                .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 Text("Start with a suggestion, then make it yours.")
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Fonts.body(13))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
-            .padding(16)
-            .card()
+            .tile()
 
-            Text("How should Footing measure it?")
-                .font(Theme.Typography.title)
+            TileEyebrow("How should Footing measure it?")
 
-            Text("Automatic")
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Colors.textSecondary)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Automatic")
+                    .font(Theme.Fonts.body(13, .bold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
 
-            VStack(spacing: 0) {
-                ForEach(Array(GoalTrackingSource.automatic.enumerated()), id: \.element.id) { index, source in
-                    sourceRow(source)
-                    if index < GoalTrackingSource.automatic.count - 1 {
-                        Divider().padding(.leading, 58).overlay(Theme.Colors.hairline)
+                VStack(spacing: 0) {
+                    ForEach(Array(GoalTrackingSource.automatic.enumerated()), id: \.element.id) { index, source in
+                        sourceRow(source)
+                        if index < GoalTrackingSource.automatic.count - 1 {
+                            Divider().padding(.leading, 58).overlay(Theme.Colors.hairline)
+                        }
                     }
                 }
             }
-            .padding(.horizontal, 12)
-            .card()
+            .tile()
 
             if let current = draft, current.trackingSource.metrics.count > 1 {
                 metricPicker(current)
             }
 
-            Text("Manual check-in")
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Colors.textSecondary)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Manual check-in")
+                    .font(Theme.Fonts.body(13, .bold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
 
-            HStack(spacing: 10) {
-                ForEach(GoalTrackingSource.manual) { source in
-                    manualSourceButton(source)
+                HStack(spacing: 10) {
+                    ForEach(GoalTrackingSource.manual) { source in
+                        manualSourceButton(source)
+                    }
                 }
             }
         }
     }
 
     private var measurementStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
             Text("Define success")
-                .font(Theme.Typography.title)
+                .font(Theme.Fonts.display(22, .bold, relativeTo: .title2))
+                .foregroundStyle(Theme.Colors.textPrimary)
             Text("Footing will use this definition consistently and preserve it with your goal history.")
-                .font(Theme.Typography.body)
+                .font(Theme.Fonts.body(15))
                 .foregroundStyle(Theme.Colors.textSecondary)
 
             VStack(alignment: .leading, spacing: 16) {
@@ -217,6 +223,8 @@ struct CreateGoalView: View {
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 140)
                     }
+                } else if isWeightGoal {
+                    LabeledContent("Unit", value: units.weightUnit)
                 } else if let unit = draft?.unit, !unit.isEmpty {
                     LabeledContent("Unit", value: unit)
                 }
@@ -249,136 +257,146 @@ struct CreateGoalView: View {
                     }
                 }
             }
-            .padding(16)
-            .card()
+            .font(Theme.Fonts.body(16))
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .tile()
 
             VStack(alignment: .leading, spacing: 6) {
                 Label(draft?.trackingSource.title ?? "Source", systemImage: draft?.trackingSource.symbol ?? "circle")
-                    .font(Theme.Typography.headline)
+                    .font(Theme.Fonts.body(16, .bold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Text(draft?.trackingSource.detail ?? "")
-                    .font(Theme.Typography.caption)
+                    .font(Theme.Fonts.body(13))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.Colors.surfaceInset)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .tile(Theme.Colors.surfaceInset, shadow: false)
         }
     }
 
     private var reviewStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
             Text("Review your goal")
-                .font(Theme.Typography.title)
+                .font(Theme.Fonts.display(22, .bold, relativeTo: .title2))
+                .foregroundStyle(Theme.Colors.textPrimary)
 
             VStack(alignment: .leading, spacing: 16) {
                 Label(draft?.title ?? "", systemImage: draft?.trackingSource.symbol ?? "target")
-                    .font(Theme.Typography.title)
+                    .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
                     .foregroundStyle(Theme.Colors.textPrimary)
                 reviewRow("Measured with", draft?.trackingSource.title ?? "")
                 reviewRow("Metric", draft?.sourceMetric?.displayName ?? draft?.trackingSource.title ?? "")
                 reviewRow("Target", reviewTarget)
                 reviewRow("Timeframe", reviewPeriod)
             }
-            .padding(18)
-            .card()
+            .tile()
 
             Label("Missing data stays unknown and will not be counted as a failure.", systemImage: "info.circle")
-                .font(Theme.Typography.caption)
+                .font(Theme.Fonts.body(13))
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
     }
 
     private var bottomAction: some View {
         Button(isSaving ? "Creating…" : step == 3 ? "Create goal" : "Continue") {
-            guard var current = draft else { return }
+            guard draft != nil else { return }
             if step < 3 {
                 step += 1
                 return
             }
-            current.title = current.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            isSaving = true
-            Task {
-                if await vm.create(current) { dismiss() }
-                isSaving = false
+            // A calm heads-up, never a block: past the suggested count, pause for confirmation
+            // instead of silently piling on another goal.
+            if vm.shouldWarnBeforeAddingGoal {
+                showActiveGoalCapNote = true
+                return
             }
+            submit()
         }
         .buttonStyle(.brandPrimary)
         .disabled(!(draft?.isValid ?? false) || isSaving)
-        .padding(16)
+        .padding(Theme.Spacing.page)
         .background(.ultraThinMaterial)
+        .alert(
+            "You have \(vm.active.count) goals going",
+            isPresented: $showActiveGoalCapNote
+        ) {
+            Button("Not now", role: .cancel) {}
+            Button("Add anyway") { submit() }
+        } message: {
+            Text("Fewer goals tend to stick better. Add it anyway?")
+        }
+    }
+
+    private func submit() {
+        guard var current = draft else { return }
+        current.title = current.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        isSaving = true
+        Task {
+            if await vm.create(current) { dismiss() }
+            isSaving = false
+        }
     }
 
     private func sourceRow(_ source: GoalTrackingSource) -> some View {
-        Button { draft?.select(source) } label: {
+        let isSelected = draft?.trackingSource == source
+        return Button { draft?.select(source) } label: {
             HStack(spacing: 12) {
                 Image(systemName: source.symbol)
-                    .font(.system(size: 18))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Theme.Colors.primary)
                     .frame(width: 36, height: 36)
-                    .background(Theme.Colors.surfaceInset)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(source.title)
-                        .font(Theme.Typography.body.weight(.semibold))
+                        .font(Theme.Fonts.body(15, .bold))
                         .foregroundStyle(Theme.Colors.textPrimary)
                     Text(source.detail)
-                        .font(.caption2)
+                        .font(Theme.Fonts.body(12))
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .lineLimit(1)
                 }
                 Spacer()
-                Image(systemName: draft?.trackingSource == source ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(draft?.trackingSource == source ? Theme.Colors.primary : Theme.Colors.textFaint)
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Theme.Colors.primary : Theme.Colors.textFaint)
             }
             .padding(.vertical, 11)
             .padding(.horizontal, 8)
-            .background(
-                draft?.trackingSource == source
-                    ? Theme.Colors.surfaceInset
-                    : Color.clear
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(
-                        draft?.trackingSource == source
-                            ? Theme.Colors.primary.opacity(0.7)
-                            : Color.clear
-                    )
-            }
+            .background(isSelected ? Theme.Colors.primary.opacity(0.12) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityLabel("\(source.title), \(source.detail)")
     }
 
     private func manualSourceButton(_ source: GoalTrackingSource) -> some View {
-        Button { draft?.select(source) } label: {
+        let isSelected = draft?.trackingSource == source
+        return Button { draft?.select(source) } label: {
             VStack(spacing: 7) {
                 Image(systemName: source.symbol)
-                    .font(.system(size: 18))
+                    .font(.system(size: 18, weight: .semibold))
                 Text(source.title)
-                    .font(.caption.weight(.semibold))
+                    .font(Theme.Fonts.body(12, .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
-            .foregroundStyle(draft?.trackingSource == source ? Theme.Colors.primary : Theme.Colors.textSecondary)
+            .foregroundStyle(isSelected ? Theme.Colors.primaryText : Theme.Colors.textSecondary)
             .frame(maxWidth: .infinity, minHeight: 72)
-            .background(Theme.Colors.surfaceCard)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(isSelected ? Theme.Colors.primary.opacity(0.12) : Theme.Colors.surfaceInset,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(draft?.trackingSource == source ? Theme.Colors.primary : Theme.Colors.hairline)
+                    .strokeBorder(isSelected ? Theme.Colors.primary.opacity(0.55) : .clear, lineWidth: 1.5)
             }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityLabel(source.title)
     }
 
     private func metricPicker(_ current: GoalDraft) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Metric")
-                .font(Theme.Typography.caption.weight(.semibold))
-                .foregroundStyle(Theme.Colors.textSecondary)
+            TileEyebrow("Metric")
             Picker("Metric", selection: Binding(
                 get: { current.sourceMetric ?? current.trackingSource.metrics[0] },
                 set: { draft?.select($0) }
@@ -389,11 +407,12 @@ struct CreateGoalView: View {
             }
             .pickerStyle(.menu)
             .tint(Theme.Colors.primary)
+            .font(Theme.Fonts.body(15, .semibold))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(Theme.Colors.surfaceCard)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+        .tile()
     }
 
     private func begin(_ newDraft: GoalDraft) {
@@ -414,8 +433,13 @@ struct CreateGoalView: View {
 
     private var displayTargetBinding: Binding<Double> {
         Binding(
-            get: { draft?.displayTargetValue ?? 0 },
-            set: { draft?.displayTargetValue = $0 }
+            get: {
+                let stored = draft?.displayTargetValue ?? 0
+                return isWeightGoal ? units.weightInput(from: stored) : stored
+            },
+            set: { newValue in
+                draft?.displayTargetValue = isWeightGoal ? units.kgFrom(newValue) : newValue
+            }
         )
     }
 
@@ -426,9 +450,14 @@ struct CreateGoalView: View {
 
     private var reviewTarget: String {
         guard let draft else { return "" }
-        let value = draft.displayTargetValue.formatted(.number.precision(.fractionLength(0...1)))
-        if draft.trackingSource == .manualBoolean { return "At least \(value)%" }
-        return "\(value) \(draft.unit)"
+        if draft.trackingSource == .manualBoolean {
+            let value = draft.displayTargetValue.formatted(.number.precision(.fractionLength(0...1)))
+            return "At least \(value)%"
+        }
+        let displayed = isWeightGoal ? units.weightInput(from: draft.displayTargetValue) : draft.displayTargetValue
+        let value = displayed.formatted(.number.precision(.fractionLength(0...1)))
+        let unit = isWeightGoal ? units.weightUnit : draft.unit
+        return "\(value) \(unit)"
     }
 
     private var reviewPeriod: String {
@@ -438,12 +467,14 @@ struct CreateGoalView: View {
 
     private func reviewRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(label).foregroundStyle(Theme.Colors.textSecondary)
+            Text(label)
+                .font(Theme.Fonts.body(14))
+                .foregroundStyle(Theme.Colors.textSecondary)
             Spacer()
             Text(value)
+                .font(Theme.Fonts.body(14, .semibold))
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(Theme.Colors.textPrimary)
         }
-        .font(Theme.Typography.body)
     }
 }

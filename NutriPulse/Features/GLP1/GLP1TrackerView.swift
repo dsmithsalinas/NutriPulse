@@ -13,43 +13,42 @@ struct GLP1TrackerView: View {
     private var isMetric: Bool { (UnitSystem(rawValue: unitSystemRaw) ?? .metric) == .metric }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Theme.Spacing.md) {
-                    doseCard
-                    if vm.doseScheduleLoaded, vm.nextDue != nil {
-                        DoseSkipControl(schedule: vm.doseSchedule) { await vm.load() }
-                            .padding(Theme.Spacing.md).card()
-                    }
-                    if let error = vm.scheduleError {
-                        Text(error).font(.footnote).foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                SheetHeader(title: "Protein floor & today", onClose: { dismiss() })
+
+                doseCard
+                if vm.doseScheduleLoaded, vm.nextDue != nil {
+                    DoseSkipControl(schedule: vm.doseSchedule) { await vm.load() }
+                        .tile()
+                }
+                if let error = vm.scheduleError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(error)
+                            .font(Theme.Fonts.body(13))
+                            .foregroundStyle(Theme.Colors.textSecondary)
                         Button("Try again") { Task { await vm.load() } }
+                            .font(Theme.Fonts.body(14, .bold))
+                            .foregroundStyle(Theme.Colors.primaryText)
+                            .frame(minHeight: 44, alignment: .leading)
                     }
-                    if let plan = vm.cyclePlan {
-                        ShotCyclePlanCard(
-                            plan: plan,
-                            hasCheckIn: vm.todayCheckIn != nil,
-                            onCheckIn: { showCheckIn = true }
-                        )
-                    }
-                    proteinFloorCard
-                    waterCard
-                    coachCard
                 }
-                .padding(Theme.Spacing.md)
-                .padding(.bottom, Theme.Spacing.xl)
-            }
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .scrollContentBackground(.hidden)
-            .navigationTitle("GLP-1")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                if let plan = vm.cyclePlan {
+                    ShotCyclePlanCard(
+                        plan: plan,
+                        hasCheckIn: vm.todayCheckIn != nil,
+                        onCheckIn: { showCheckIn = true }
+                    )
                 }
+                proteinFloorCard
+                waterCard
+                coachCard
             }
+            .padding(Theme.Spacing.page)
+            .padding(.bottom, Theme.Spacing.xl)
         }
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .presentationDragIndicator(.visible)
         .tint(Theme.Colors.primary)
         .task { await vm.load() }
         .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
@@ -78,29 +77,32 @@ struct GLP1TrackerView: View {
     private var doseCard: some View {
         HStack(spacing: Theme.Spacing.sm) {
             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(Theme.Colors.primaryGradient)
+                .fill(Theme.Colors.hero)
                 .frame(width: 46, height: 46)
                 .overlay {
                     Image(systemName: "syringe.fill")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(.white)
                 }
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 if let log = vm.latest {
                     Text("\(log.medication) · \(log.doseMg.glp1DoseString) mg")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Theme.Fonts.number(16, .bold, relativeTo: .headline))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     if let next = vm.nextDoseText {
                         Text("\(vm.doseSchedule.latestSkip == nil ? "Next dose" : "Next reminder") · \(next)")
-                            .font(.subheadline)
-                            .foregroundStyle(vm.isOverdue ? .orange : .secondary)
+                            .font(Theme.Fonts.body(14))
+                            .foregroundStyle(vm.isOverdue ? Theme.Colors.danger : Theme.Colors.textSecondary)
                     }
                 } else {
                     Text("No dose logged yet")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(Theme.Fonts.body(16, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Text("Log a dose in Profile → GLP-1 to start tracking")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(14))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
             }
 
@@ -110,8 +112,7 @@ struct GLP1TrackerView: View {
                 reminderPill
             }
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     private var reminderPill: some View {
@@ -133,7 +134,7 @@ struct GLP1TrackerView: View {
                         .font(.system(size: 10, weight: .bold))
                 }
                 Text(reminderLabel)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Theme.Fonts.body(11, .semibold))
             }
             .foregroundStyle(reminderActive ? Theme.Colors.primary : Theme.Colors.textFaint)
             .padding(.horizontal, 10)
@@ -168,17 +169,18 @@ struct GLP1TrackerView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Text("Protein floor")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(Theme.Fonts.body(15, .bold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 if let day = vm.daysSinceShot {
                     Text("· day \(day) after your shot")
-                        .font(.caption)
+                        .font(Theme.Fonts.body(12))
                         .foregroundStyle(Theme.Colors.textFaint)
                 }
                 Spacer()
                 HStack(spacing: 4) {
                     Text("\(Int(vm.proteinToday.rounded())) / \(Int(vm.proteinGoal.rounded()))g")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .monospacedDigit()
+                        .font(Theme.Fonts.number(15, .bold, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     if vm.proteinCleared {
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
@@ -191,7 +193,7 @@ struct GLP1TrackerView: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.Colors.ringTrack)
                     Capsule()
-                        .fill(Theme.Colors.primaryGradient)
+                        .fill(Theme.Colors.primary)
                         .frame(width: max(geo.size.width * vm.proteinPct, vm.proteinPct > 0 ? 10 : 0))
                         .animation(.spring(response: 0.6, dampingFraction: 0.85), value: vm.proteinPct)
                 }
@@ -201,12 +203,11 @@ struct GLP1TrackerView: View {
             Text(vm.proteinCleared
                  ? "Floor cleared — muscle protected."
                  : "\(vm.proteinRemaining)g to go — clearing your floor protects your muscle while the medication does its part.")
-                .font(.footnote)
+                .font(Theme.Fonts.body(13))
                 .foregroundStyle(vm.proteinCleared ? Theme.NutrientColor.fiber : Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     // MARK: Water
@@ -216,13 +217,14 @@ struct GLP1TrackerView: View {
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "drop.fill").foregroundStyle(Theme.NutrientColor.water)
-                    Text("Water").font(.system(size: 15, weight: .bold))
+                    Text("Water")
+                        .font(Theme.Fonts.body(15, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                 }
                 Spacer()
                 Text(waterLabel)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                    .font(Theme.Fonts.number(14, .bold, relativeTo: .subheadline))
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             GeometryReader { geo in
@@ -236,8 +238,7 @@ struct GLP1TrackerView: View {
             }
             .frame(height: 10)
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     private var waterLabel: String {
@@ -257,12 +258,12 @@ struct GLP1TrackerView: View {
                 .foregroundStyle(.white)
                 .padding(6)
                 .frame(width: 34, height: 34)
-                .background(Theme.Colors.primaryGradient)
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .background(Theme.Colors.hero, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(vm.coachNote)
-                    .font(.system(size: 13))
+                    .font(Theme.Fonts.body(13))
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button {
@@ -279,7 +280,7 @@ struct GLP1TrackerView: View {
                         Text("Ask Pulse about today")
                         Image(systemName: "arrow.right").font(.system(size: 11, weight: .bold))
                     }
-                    .font(.system(size: 13, weight: .bold))
+                    .font(Theme.Fonts.body(13, .bold))
                     .foregroundStyle(Theme.Colors.primary)
                 }
                 .buttonStyle(.plain)
@@ -287,19 +288,7 @@ struct GLP1TrackerView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(15)
-        .frame(maxWidth: .infinity)
-        .background {
-            LinearGradient(
-                colors: [Theme.Colors.primary.opacity(0.13), Theme.Colors.surfaceCard],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Theme.Colors.primary.opacity(0.28), lineWidth: 1)
-        }
+        .tile()
     }
 }
 
@@ -314,22 +303,27 @@ struct DoseSkipControl: View {
         VStack(alignment: .leading, spacing: 8) {
             if let skip = schedule.skippedThisWeek {
                 Text("Shot marked as skipped")
-                    .font(.subheadline.weight(.semibold))
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Text("Planned for \(skip.scheduledAt.formatted(date: .abbreviated, time: .omitted)). Reminders for this dose are off.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                Button("Undo skip") { update(undo: skip) }
+                    .font(Theme.Fonts.body(13))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                skipButton("Undo skip") { update(undo: skip) }
             } else if let due = schedule.nextDue {
-                Button("Skip this week’s shot") { update(undo: nil) }
-                Text("Applies to the dose planned for \(due.formatted(date: .abbreviated, time: .omitted)).")
-                    .font(.caption).foregroundStyle(.secondary)
+                // "This week's shot" only fits a dose that's today or ahead. Once the planned day
+                // has passed (weeks ago, for a lapsed schedule), name that dose instead.
+                skipButton(schedule.isPastDueDay ? "Mark it as skipped" : "Skip this week’s shot") { update(undo: nil) }
+                Text("\(schedule.isPastDueDay ? "For" : "Applies to") the dose planned for \(due.formatted(date: .abbreviated, time: .omitted)).")
+                    .font(Theme.Fonts.body(12))
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
             if let due = schedule.nextDue, schedule.skippedThisWeek != nil {
                 Text("Next reminder date: \(due.formatted(date: .abbreviated, time: .omitted)). Your weekly reminder cadence stays the same.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(12))
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
             if isSaving { ProgressView().controlSize(.small) }
         }
-        .buttonStyle(.borderless)
         .disabled(isSaving)
         .frame(maxWidth: .infinity, alignment: .leading)
         .alert("Couldn't update your shot", isPresented: Binding(
@@ -338,6 +332,14 @@ struct DoseSkipControl: View {
         )) {
             Button("OK") { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
+    }
+
+    private func skipButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .font(Theme.Fonts.body(14, .bold))
+            .foregroundStyle(Theme.Colors.primaryText)
+            .frame(minHeight: 44, alignment: .leading)
+            .buttonStyle(.plain)
     }
 
     private func update(undo skip: GLP1SkippedDose?) {
@@ -368,3 +370,8 @@ struct DoseSkipControl: View {
         }
     }
 }
+
+// MARK: - Tokens Theme doesn't have yet
+
+// Mirrors the private `danger` token ProfileView defines for its own destructive rows — Theme has
+// no red yet, and this file needs the same red to flag an overdue dose.

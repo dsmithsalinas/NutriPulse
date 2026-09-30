@@ -29,6 +29,21 @@ final class LocalStore {
             .map(\.asFoodLog)
     }
 
+    // Daylight Favorites tab (docs/daylight-redesign.md): "Recents from the last 72 hours",
+    // grouped by day. `fetchFoodLogs(for:userId:)` above only matches a single calendar day, so
+    // this is the smallest addition that can span a rolling window — filtering and day-grouping
+    // stays in RecentFoodsGrouper, a pure function covered in FootingTests.swift.
+    func fetchFoodLogs(since: Date, userId: UUID) throws -> [FoodLog] {
+        guard let context else { return [] }
+        let descriptor = FetchDescriptor<SDFoodLog>(
+            predicate: #Predicate { $0.loggedAt >= since },
+            sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
+            .filter { $0.userId == userId && $0.syncState != "pendingDelete" }
+            .map(\.asFoodLog)
+    }
+
     func insertFoodLog(
         id: UUID,
         userId: UUID,
@@ -244,14 +259,52 @@ final class LocalStore {
         return try context.fetch(descriptor)
     }
 
+    func deletedWaterLogs() throws -> [SDWaterLog] {
+        guard let context else { return [] }
+        let descriptor = FetchDescriptor<SDWaterLog>(
+            predicate: #Predicate { $0.syncState == "pendingDelete" }
+        )
+        return try context.fetch(descriptor)
+    }
+
+    // Tombstone, never hard-delete — same reasoning as markFoodLogDeleted. A pendingCreate
+    // row may have its create request in flight right now; dropping it locally would leave
+    // the server row orphaned, and the next pull would resurrect the entry the user just
+    // undid. A DELETE against a row the server never received is a harmless no-op.
+    func markWaterLogDeleted(id: UUID) throws {
+        guard let context else { return }
+        let descriptor = FetchDescriptor<SDWaterLog>(predicate: #Predicate { $0.id == id })
+        guard let log = try context.fetch(descriptor).first else { return }
+        log.syncState = "pendingDelete"
+        try context.save()
+    }
+
+    // Water is create-only (no edit path), so unlike markFoodLogCreated there is no
+    // revision compare here: the only mid-flight mutation possible is a delete (Undo),
+    // and that flips syncState to pendingDelete, which this guard already respects. Without
+    // it, a create push that lands after the user taps Undo would flip the tombstone back
+    // to "synced" and resurrect the water on the next pull.
     func markWaterLogSynced(id: UUID) throws {
         guard let context else { return }
         let descriptor = FetchDescriptor<SDWaterLog>(predicate: #Predicate { $0.id == id })
         guard let log = try context.fetch(descriptor).first else { return }
+        guard log.syncState == "pendingCreate" else { return }
         log.syncState = "synced"
         try context.save()
     }
 
+    func removeWaterLogAfterDelete(id: UUID) throws {
+        guard let context else { return }
+        let descriptor = FetchDescriptor<SDWaterLog>(predicate: #Predicate { $0.id == id })
+        guard let log = try context.fetch(descriptor).first else { return }
+        guard log.syncState == "pendingDelete" else { return }
+        context.delete(log)
+        try context.save()
+    }
+
+    // Skips ids that already exist locally, in any sync state — including a pendingDelete
+    // tombstone for a log the user just undid. Without that, pulling today's water right
+    // after an undo would re-insert the row the user deleted seconds earlier.
     func upsertWaterLog(id: UUID, userId: UUID, logDate: String, amountMl: Double, loggedAt: Date) throws {
         guard let context else { return }
         let descriptor = FetchDescriptor<SDWaterLog>(predicate: #Predicate { $0.id == id })
@@ -567,12 +620,15 @@ final class LocalStore {
         let waterCreate = try context.fetchCount(FetchDescriptor<SDWaterLog>(
             predicate: #Predicate { $0.syncState == "pendingCreate" }
         ))
+        let waterDelete = try context.fetchCount(FetchDescriptor<SDWaterLog>(
+            predicate: #Predicate { $0.syncState == "pendingDelete" }
+        ))
         let workoutCreate = try context.fetchCount(FetchDescriptor<SDWorkoutLog>(
             predicate: #Predicate { $0.syncState == "pendingCreate" }
         ))
         let workoutDelete = try context.fetchCount(FetchDescriptor<SDWorkoutLog>(
             predicate: #Predicate { $0.syncState == "pendingDelete" }
         ))
-        return foodCreate + foodUpdate + foodDelete + waterCreate + workoutCreate + workoutDelete
+        return foodCreate + foodUpdate + foodDelete + waterCreate + waterDelete + workoutCreate + workoutDelete
     }
 }

@@ -350,6 +350,8 @@ final class TodayViewModel {
     }
 
     func loadData() async {
+        // The tour's Today is a fixture; a reload (sync, returning to the app) would wipe it.
+        if DebugLaunch.tour { return }
         if repeatTargetDate != selectedDate.isoDateString {
             repeatedMeals = []
             repeatTargetDate = selectedDate.isoDateString
@@ -418,14 +420,18 @@ final class TodayViewModel {
             SharedStore.save(ProteinFloorSnapshot(
                 proteinToday: totalProteinG,
                 proteinGoal: dailyGoal?.proteinG ?? 0,
-                updatedAt: .now
+                updatedAt: .now,
+                showsDose: GLP1TrackingStore.shared.isTracking
             ))
         }
 
         do {
             let schedule = try await glp1Task
-            latestGLP1 = schedule.latest
-            skippedDoses = schedule.skips
+            // Paused or stopped: Today acts as if there's no shot at all (no dose card, cycle
+            // tile, check-ins, or appetite-window nudges). The history itself is untouched.
+            let tracking = GLP1TrackingStore.shared.isTracking
+            latestGLP1 = tracking ? schedule.latest : nil
+            skippedDoses = tracking ? schedule.skips : []
             doseScheduleLoaded = true
             await NotificationManager.shared.reconcileGLP1Reminders(schedule: schedule)
         } catch {
@@ -433,7 +439,7 @@ final class TodayViewModel {
             errorMessage = "Couldn't refresh your shot schedule. Try again when you're connected."
         }
         if let context = try? await weekContextTask { strongWeekContext = context }
-        shotCycleCheckIns = (try? await shotCycleTask) ?? []
+        shotCycleCheckIns = GLP1TrackingStore.shared.isTracking ? ((try? await shotCycleTask) ?? []) : []
         bodyComp = await bodyCompTask
         latestWaistCm = ((try? await measurementRepo.fetchLatestPerSite()) ?? [:])[.waist]?.valueCm
         await loadHealthData()
@@ -762,11 +768,21 @@ final class TodayViewModel {
         }
     }
 
+    nonisolated static func newerWeightKg(weighIn: WeightLog?, saved: BodyCompositionLog?,
+                                          calendar: Calendar = .current) -> Double? {
+        guard let weighIn else { return saved?.weightKg }
+        guard let savedKg = saved?.weightKg,
+              let savedDay = saved.flatMap({ Date.fromISODateString($0.logDate) }) else { return weighIn.weightKg }
+        return calendar.startOfDay(for: weighIn.loggedAt) >= calendar.startOfDay(for: savedDay)
+            ? weighIn.weightKg : savedKg
+    }
+
     private func buildBodyCompData() async -> BodyCompositionData {
         let hk = HealthKitManager.shared
         var data = BodyCompositionData()
 
         async let savedTask = try? bodyCompRepo.fetchLatest()
+        async let latestWeighInTask = try? AnalyticsRepository().fetchLatestWeightLog()
         var hkWeight: HealthKitManager.HKMeasurement? = nil
         var hkBodyFat: HealthKitManager.HKMeasurement? = nil
         var hkBMI: HealthKitManager.HKMeasurement? = nil
@@ -822,8 +838,14 @@ final class TodayViewModel {
                         .execute()
                 }
             }
-        } else if let w = saved?.weightKg {
-            data.weightKg     = w
+        } else {
+            // Weigh-ins land in weight_logs (which Body and Progress read) as well as the
+            // composition table, and the two can drift. Show the newer one so Today's Body tile
+            // and the Body page agree; on the same day the timestamped weigh-in wins.
+            data.weightKg = Self.newerWeightKg(
+                weighIn: await latestWeighInTask,
+                saved: saved
+            )
             data.weightFromHK = false
         }
 
@@ -896,7 +918,7 @@ final class TodayViewModel {
     // "Connect Apple Health" button was then permanently a no-op. Asking now belongs to
     // the onboarding step and to an explicit tap; see requestHealthAuthorization().
     func loadHealthData() async {
-        guard !AppStoreScreenshotMode.active else { return }
+        guard !AppStoreScreenshotMode.active, !DebugLaunch.tour else { return }
         let hk = HealthKitManager.shared
         guard hk.isAvailable else { return }
         // Scope upgrade (e.g. v2 added workouts + steps): users who already granted the
@@ -950,18 +972,42 @@ final class TodayViewModel {
         await loadHealthData()
     }
 
-    func addWater(_ ml: Double) async {
-        guard let userId = try? await supabase.auth.session.user.id else { return }
+    @discardableResult
+    func addWater(_ ml: Double) async -> UUID? {
+        guard let userId = try? await supabase.auth.session.user.id else { return nil }
+        let id = UUID()
         do {
             try LocalStore.shared.insertWaterLog(
-                id: UUID(), userId: userId,
+                id: id, userId: userId,
                 logDate: selectedDate.isoDateString, amountMl: ml
             )
             waterIntakeMl += ml
             SyncEngine.shared.refreshPendingCount()
             Task { await SyncEngine.shared.pushPendingChanges() }
+            return id
         } catch {
             errorMessage = "Couldn't log water."
+            return nil
+        }
+    }
+
+    // Never-below-zero clamp for undoing a water log against the running total. Pulled out
+    // as a pure helper so the arithmetic (and its floor) can be unit tested without a store.
+    nonisolated static func waterIntakeAfterUndo(_ currentMl: Double, removing ml: Double) -> Double {
+        Swift.max(0, currentMl - ml)
+    }
+
+    // Undo for a just-logged glass of water. Tombstones the row (never a hard local
+    // delete — see LocalStore.markWaterLogDeleted) so an in-flight create push can't
+    // resurrect it, then pushes the delete promptly, mirroring deleteWorkout/deleteLog.
+    func undoWater(id: UUID, ml: Double) async {
+        do {
+            try LocalStore.shared.markWaterLogDeleted(id: id)
+            waterIntakeMl = Self.waterIntakeAfterUndo(waterIntakeMl, removing: ml)
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+        } catch {
+            errorMessage = "Couldn't undo water."
         }
     }
 

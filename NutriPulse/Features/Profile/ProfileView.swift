@@ -1,6 +1,11 @@
 import SwiftUI
 import UIKit
 
+// Daylight rebuild (docs/daylight-redesign.md, mockup "Daylight — Profile"): an avatar/name
+// header, an indigo "Daily targets" hero tile, a lime GLP-1 tile and a rose Apple Health tile
+// side by side, then white settings tiles grouped with eyebrow labels instead of a grouped
+// system List. Every setting, toggle, navigation link, destructive action and confirmation
+// from the previous List-based screen is preserved — only the presentation changed.
 struct ProfileView: View {
     @State private var vm = ProfileViewModel()
     @Environment(AppState.self) private var appState
@@ -9,41 +14,97 @@ struct ProfileView: View {
     @State private var showClearHistoryConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var showGLP1Tracker = false
-    @State private var showFoodPreferences = false
+    @State private var showGLP1PauseOptions = false
+    @State private var showGLP1ResumeConfirm = false
+    @State private var isSavingGLP1Tracking = false
     @State private var isSeedingHealth = false
     @State private var isReconnectingHealth = false
     @State private var showHealthPermissionsHelp = false
     @State private var showSmartNotificationExplainer = false
+    @State private var showPulseOffConfirm = false
+    @State private var showAIDataSharingInfo = false
+    @State private var isSavingPulseSetting = false
     @Environment(\.scenePhase) private var scenePhase
+    // The device-cached Pulse settings singleton (see PulseProfileStore). Read directly, like
+    // HealthKitManager.shared above — Observation tracks the read regardless of how the
+    // reference was obtained.
+    private var pulseStore: PulseProfileStore { PulseProfileStore.shared }
 
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
+    #if DEBUG
+    // Set only by `.preview()` below, to skip the network fetch and keep the fixture data
+    // already loaded into `vm`. Never true outside a debug preview.
+    private var skipInitialLoad = false
+
+    init(debugFixture: Bool = DebugLaunch.tour) {
+        if debugFixture {
+            _vm = State(initialValue: Self.fixtureViewModel())
+        }
+        skipInitialLoad = debugFixture
+    }
+    #endif
+
     var body: some View {
         NavigationStack {
-            List {
-                headerSection
-                bodyStatsSection
-                measurementsSection
-                goalsSection
-                glp1Section
-                notificationsSection
-                healthKitSection
-                coachSection
-                feedbackSection
-                #if DEBUG
-                debugSection
-                #endif
-                signOutSection
-                deleteAccountSection
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                    header
+                        .popIn(order: 0)
+
+                    dailyTargetsTile
+                        .popIn(order: 1)
+
+                    HStack(spacing: Theme.Spacing.tileGap) {
+                        glp1QuickTile
+                        healthQuickTile
+                    }
+                    .popIn(order: 2)
+
+                    pulseTile
+                        .popIn(order: 3)
+
+                    notificationsTile
+                        .popIn(order: 3)
+
+                    glp1DetailsTile
+                        .popIn(order: 4)
+
+                    healthKitDetailsTile
+                        .popIn(order: 4)
+
+                    bodyStatsTile
+                        .popIn(order: 5)
+
+                    measurementsTile
+                        .popIn(order: 5)
+
+                    supportTile
+                        .popIn(order: 6)
+
+                    #if DEBUG
+                    debugTile
+                    #endif
+
+                    accountTile
+                }
+                .padding(.horizontal, Theme.Spacing.page)
+                .padding(.top, Theme.Spacing.sm)
+                .padding(.bottom, Theme.Spacing.xl)
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
             .background(Theme.Colors.ground.ignoresSafeArea())
-            .listRowBackground(Theme.Colors.surfaceCard)
-            .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
+            // No navigation bar, so cover the status bar or scrolled tiles slide under the clock
+            // (same as Pulse). A ShapeStyle background extends into the safe area.
+            .overlay(alignment: .top) {
+                Color.clear
+                    .frame(height: 0)
+                    .background(Theme.Colors.ground)
+            }
+            .toolbar(.hidden, for: .navigationBar)
             .task {
+                #if DEBUG
+                if skipInitialLoad { return }
+                #endif
                 await vm.loadData(profile: appState.profile)
             }
             .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
@@ -93,7 +154,6 @@ struct ProfileView: View {
             .sheet(isPresented: $vm.showLogInjection) {
                 LogInjectionSheet(vm: vm)
             }
-            .sheet(isPresented: $showFoodPreferences) { FoodAccessPreferencesView() }
             .sheet(isPresented: $showGLP1Tracker) {
                 GLP1TrackerView()
             }
@@ -163,6 +223,27 @@ struct ProfileView: View {
                 Text("This permanently deletes all messages with Pulse.")
             }
             .confirmationDialog(
+                "Pause or stop GLP-1 tracking?",
+                isPresented: $showGLP1PauseOptions,
+                titleVisibility: .visible
+            ) {
+                Button("Pause for now") { setGLP1Tracking(.paused) }
+                Button("I've stopped taking it") { setGLP1Tracking(.stopped) }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Footing will hide your shot card, shot cycle, check-ins and shot reminders, and Pulse won't bring up your shot. Your dose history stays, and you can resume any time.")
+            }
+            .confirmationDialog(
+                "Resume GLP-1 tracking?",
+                isPresented: $showGLP1ResumeConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Resume tracking") { setGLP1Tracking(.active) }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Your shot card, shot cycle and check-ins come back, and Pulse can use your dose schedule again. Log your next shot when you take it.")
+            }
+            .confirmationDialog(
                 "Delete your account?",
                 isPresented: $showDeleteAccountConfirm,
                 titleVisibility: .visible
@@ -180,69 +261,67 @@ struct ProfileView: View {
 
     // MARK: - Header
 
-    private var headerSection: some View {
-        Section {
-            HStack(spacing: Theme.Spacing.md) {
-                ZStack {
-                    Circle()
-                        .fill(Theme.Colors.primaryGradient)
-                        .frame(width: 68, height: 68)
-                        .shadow(color: Theme.Colors.primary.opacity(0.4), radius: 10, y: 4)
-                    Text(initials)
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(vm.profile?.fullName ?? "Your Name")
-                        .font(.system(size: 22, weight: .bold))
-                    Text(vm.profile?.email ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    if let identity = identityLine {
-                        Text(identity)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Theme.Colors.primary)
-                            .padding(.top, 2)
-                    }
+    private var header: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            ZStack {
+                Circle()
+                    .fill(Theme.Colors.primaryGradient)
+                    .frame(width: 60, height: 60)
+                    .shadow(color: Theme.Colors.primary.opacity(0.35), radius: 8, y: 4)
+                Text(initials)
+                    .font(Theme.Fonts.display(22, .extraBold, relativeTo: .title2))
+                    .foregroundStyle(.white)
+            }
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(vm.profile?.fullName ?? "Your Name")
+                    .font(Theme.Fonts.display(26, .extraBold, relativeTo: .title))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                Text(identityLine ?? vm.profile?.email ?? " ")
+                    .font(Theme.Fonts.body(14))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                if identityLine != nil, let email = vm.profile?.email, !email.isEmpty {
+                    Text(email)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textFaint)
                 }
             }
-            .padding(.vertical, Theme.Spacing.xs)
+            Spacer(minLength: 0)
+            Button { vm.showEditProfile = true } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.Colors.surfaceCard, in: Circle())
+            }
+            .buttonStyle(.pressable)
+            .accessibilityLabel("Edit profile")
         }
     }
 
-    // One-line identity — the medication and activity that define this user's plan.
+    // "Losing · moderately active" — the aim chosen at onboarding (or Recalculate Targets)
+    // plus activity level, matching the Daylight mockup. Falls back to the email address
+    // when neither is set yet (a profile that predates the weight_goal column).
     private var identityLine: String? {
         var parts: [String] = []
-        if let med = vm.mostRecentInjection?.medication { parts.append("On \(med)") }
+        if let raw = vm.profile?.weightGoal, let goal = WeightGoal(rawValue: raw) {
+            parts.append(weightGoalProgressiveLabel(goal))
+        }
         if let raw = vm.profile?.activityLevel, let level = ActivityLevel(rawValue: raw) {
-            parts.append(level.displayName)
+            parts.append(level.displayName.lowercased())
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    #if DEBUG
-    // Dev-only: seed ~2 weeks of demo Apple Health data on this device/sim so the health signals
-    // show in demos. Never compiled into release builds.
-    private var debugSection: some View {
-        Section("Developer") {
-            Button {
-                Task {
-                    isSeedingHealth = true
-                    await HealthKitManager.shared.seedDemoHealthData()
-                    isSeedingHealth = false
-                }
-            } label: {
-                HStack {
-                    Label("Seed demo Health data", systemImage: "heart.text.square")
-                        .foregroundStyle(Theme.Colors.primary)
-                    Spacer()
-                    if isSeedingHealth { ProgressView() }
-                }
-            }
-            .disabled(isSeedingHealth)
+    private func weightGoalProgressiveLabel(_ goal: WeightGoal) -> String {
+        switch goal {
+        case .lose:     return "Losing"
+        case .maintain: return "Maintaining"
+        case .gain:     return "Gaining"
         }
     }
-    #endif
 
     private var initials: String {
         (vm.profile?.fullName ?? "?")
@@ -253,239 +332,341 @@ struct ProfileView: View {
             .uppercased()
     }
 
-    // MARK: - Body Stats
+    // MARK: - Daily targets (hero tile)
 
-    private var bodyStatsSection: some View {
-        Section("Body Stats") {
-            if let w = vm.latestWeight {
-                row(label: "Weight", value: units.formatWeight(w.weightKg))
-            }
-            if let h = vm.profile?.heightCm {
-                row(label: "Height", value: units.formatHeight(h))
-            }
-            if let dob = vm.profile?.dob, let age = ageFrom(dob) {
-                row(label: "Age", value: "\(age) years")
-            }
-            if let act = vm.profile?.activityLevel,
-               let level = ActivityLevel(rawValue: act) {
-                row(label: "Activity", value: level.displayName)
-            }
-            Button("Edit Stats") { vm.showEditProfile = true }
-                .foregroundStyle(Theme.Colors.primary)
-        }
-    }
+    private var dailyTargetsTile: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            TileEyebrow("Daily targets", color: Theme.Colors.heroLabel)
 
-    // MARK: - Measurements
-
-    // One global setting for every unit in the app, with a footer that says what it touches.
-    private var measurementsSection: some View {
-        Section {
-            Picker("Units", selection: $unitSystemRaw) {
-                Text("Metric (kg, cm, ml)").tag("metric")
-                Text("Imperial (lb, in, oz)").tag("imperial")
-            }
-        } header: {
-            Text("Measurements")
-        } footer: {
-            Text("Sets the units used everywhere in Footing — weight, height, body composition, and water.")
-        }
-    }
-
-    // MARK: - Goals
-
-    private var goalsSection: some View {
-        Section("Daily Goals") {
             if let g = vm.goal {
-                row(label: "Calories", value: "\(Int(g.calories)) kcal")
-                row(label: "Protein",  value: "\(Int(g.proteinG))g")
-                row(label: "Carbs",    value: "\(Int(g.carbsG))g")
-                row(label: "Fat",      value: "\(Int(g.fatG))g")
-                row(label: "Fiber",    value: "\(Int(g.fiberG))g")
-            }
-            Button("Edit Goals") { vm.showEditGoals = true }
-                .foregroundStyle(Theme.Colors.primary)
-            // The intent-change flow: re-asks the one onboarding question and recomputes
-            // from current stats. Doubles as "reset to recommended" for hand-tuned goals.
-            Button("Recalculate Targets") { vm.showRecalcAimDialog = true }
-                .foregroundStyle(Theme.Colors.primary)
-        }
-    }
-
-    // MARK: - GLP-1
-
-    private var glp1Section: some View {
-        Section("GLP-1 Tracker") {
-            if glp1Logs.isEmpty {
-                Button {
-                    vm.showLogInjection = true
-                } label: {
-                    Label("Set Up GLP-1 Tracker", systemImage: "syringe")
-                        .foregroundStyle(Theme.Colors.primary)
+                HStack(spacing: 8) {
+                    heroStat(value: "\(Int(g.proteinG))g", label: "protein floor")
+                    heroStat(value: "\(Int(g.calories))", label: "calories")
+                    heroStat(value: "\(Int(g.fiberG))g", label: "fiber")
                 }
+                Text("\(Int(g.carbsG))g carbs · \(Int(g.fatG))g fat")
+                    .font(Theme.Fonts.body(13, .medium))
+                    .foregroundStyle(Theme.Colors.heroSubtext)
             } else {
-                Button {
-                    showGLP1Tracker = true
-                } label: {
-                    Label("Protein floor & today", systemImage: "shield.lefthalf.filled")
-                        .foregroundStyle(Theme.Colors.primary)
-                }
+                Text("Set up your daily goals to see targets here.")
+                    .font(Theme.Fonts.body(14))
+                    .foregroundStyle(Theme.Colors.heroSubtext)
+            }
 
-                if let last = vm.mostRecentInjection {
-                    row(label: "Medication",
-                        value: "\(last.medication) \(last.doseMg.formatted())mg")
-                }
-
-                if let countdown = vm.nextInjectionCountdown,
-                   let due = vm.nextInjectionDue {
-                    HStack {
-                        Label(vm.doseSchedule.latestSkip == nil ? "Next dose" : "Next reminder", systemImage: "calendar")
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(countdown)
-                                .foregroundStyle(vm.isInjectionOverdue ? .red : .secondary)
-                                .fontWeight(vm.isInjectionOverdue ? .semibold : .regular)
-                            Text(due, style: .date)
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
-
-                if vm.doseScheduleLoaded, vm.nextInjectionDue != nil {
-                    DoseSkipControl(schedule: vm.doseSchedule) { await vm.loadData(profile: appState.profile) }
-                }
-
-                Toggle(isOn: Binding(
-                    get: { vm.remindersOn },
-                    set: { newValue in Task { await vm.setReminders(newValue) } }
-                )) {
-                    Label("Shot-day reminders", systemImage: "bell.badge")
-                }
-                .disabled(!vm.doseScheduleLoaded)
-
-                Button {
-                    vm.showLogInjection = true
-                } label: {
-                    Label("Log Dose", systemImage: "syringe")
-                        .foregroundStyle(Theme.Colors.primary)
-                }
-
-                if !glp1Logs.isEmpty {
-                    ForEach(glp1Logs.prefix(3)) { log in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(log.injectedAt, style: .date)
-                                .font(.subheadline)
-                            Text(log.site.map { "\(log.doseMg.glp1DoseString)mg · \($0)" }
-                                 ?? "\(log.doseMg.glp1DoseString)mg")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    NavigationLink {
-                        GLP1HistoryView()
-                    } label: {
-                        Text("Dose History")
-                            .foregroundStyle(Theme.Colors.primary)
-                    }
-                }
+            HStack(spacing: 8) {
+                Button("Edit goals") { vm.showEditGoals = true }
+                    .buttonStyle(HeroFilledButtonStyle())
+                Button("Recalculate") { vm.showRecalcAimDialog = true }
+                    .buttonStyle(HeroOutlineButtonStyle())
             }
         }
+        .tile(Theme.Colors.heroDeep, shadow: false)
     }
+
+    private func heroStat(value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(Theme.Fonts.number(24))
+                .foregroundStyle(.white)
+            Text(label)
+                .font(Theme.Fonts.body(12))
+                .foregroundStyle(Theme.Colors.heroLabel)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: - Quick tiles (Shots / Apple Health)
 
     private var glp1Logs: [GLP1Log] { vm.glp1Logs }
 
-    // MARK: - Notifications
-
-    private var notificationsSection: some View {
-        Section {
-            Toggle(isOn: Binding(
-                get: { vm.weeklyReminderOn },
-                set: { enabled in Task { await vm.setWeeklyReminder(enabled) } }
-            )) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Your strong week")
-                    Text("Mondays at 8 AM · your local time")
-                        .font(.caption).foregroundStyle(.secondary)
+    private var glp1QuickTile: some View {
+        Button {
+            if glp1Logs.isEmpty {
+                vm.showLogInjection = true
+            } else if !glp1Tracking.isTracking {
+                showGLP1ResumeConfirm = true
+            } else {
+                showGLP1Tracker = true
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                TileEyebrow("Shots", color: Theme.Colors.limeLabel)
+                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(glp1QuickTitle)
+                        .font(Theme.Fonts.body(16, .bold))
+                        .foregroundStyle(Theme.Colors.limeInk)
+                        .lineLimit(1)
+                    Text(glp1QuickSubtitle)
+                        .font(Theme.Fonts.body(13))
+                        .foregroundStyle(Theme.Colors.limeLabel)
+                        .lineLimit(1)
                 }
-            }.disabled(vm.weeklyReminderBusy)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
+            .background(Theme.Colors.lime, in: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
+        }
+        .buttonStyle(PressableStyle(scale: 0.97))
+        .accessibilityHint(glp1Logs.isEmpty ? "Set up GLP-1 tracking" : "Opens your GLP-1 tracker")
+    }
 
-            Toggle(isOn: Binding(
-                get: { vm.smartCoachingOn },
-                set: { value in
-                    if value {
-                        showSmartNotificationExplainer = true
-                    } else {
-                        Task { await vm.setSmartCoaching(false) }
+    private var glp1Tracking: GLP1TrackingStore { GLP1TrackingStore.shared }
+
+    private var glp1QuickTitle: String {
+        guard let last = vm.mostRecentInjection else { return "Set up tracking" }
+        if !glp1Tracking.isTracking { return glp1Tracking.status == .stopped ? "Tracking stopped" : "Tracking paused" }
+        return "\(last.medication) \(last.doseMg.formatted())mg"
+    }
+
+    private var glp1QuickSubtitle: String {
+        if glp1Logs.isEmpty { return "Track your weekly shot" }
+        if !glp1Tracking.isTracking { return "Tap to resume" }
+        return vm.nextInjectionCountdown ?? "Dose history"
+    }
+
+    private var healthQuickTile: some View {
+        Button {
+            guard HealthKitManager.shared.isAvailable else { return }
+            openHealthApp()
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                TileEyebrow("Apple Health", color: Theme.Colors.healthTileLabel)
+                Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(healthQuickTitle)
+                        .font(Theme.Fonts.body(16, .bold))
+                        .foregroundStyle(Theme.Colors.healthTileInk)
+                        .lineLimit(1)
+                    Text("Weight, workouts, sleep")
+                        .font(Theme.Fonts.body(13))
+                        .foregroundStyle(Theme.Colors.healthTileLabel)
+                        .lineLimit(1)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
+            .background(Theme.Colors.healthTile, in: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
+        }
+        .buttonStyle(PressableStyle(scale: 0.97))
+        .disabled(!HealthKitManager.shared.isAvailable)
+        .accessibilityHint("Opens the Health app")
+    }
+
+    private var healthQuickTitle: String {
+        guard HealthKitManager.shared.isAvailable else { return "Not available" }
+        if HealthKitManager.shared.isSharingAuthorized { return "Connected" }
+        if HealthKitManager.shared.hasRequestedAuthorization { return "Permissions requested" }
+        return "Not connected"
+    }
+
+    // MARK: - Pulse notifications
+
+    private var notificationsTile: some View {
+        SettingsTile(
+            eyebrow: "Pulse notifications",
+            footer: "Smart coaching sends at most one timely suggestion a day. Your Monday outlook reminder and shot-day reminders are separate."
+        ) {
+            toggleRow(
+                icon: "calendar.badge.clock",
+                title: "Your strong week",
+                subtitle: "Mondays at 8 AM · your local time",
+                isOn: Binding(
+                    get: { vm.weeklyReminderOn },
+                    set: { enabled in Task { await vm.setWeeklyReminder(enabled) } }
+                ),
+                disabled: vm.weeklyReminderBusy
+            )
+            hairline
+            toggleRow(
+                icon: "bell.and.waves.left.and.right",
+                title: "Smart coaching",
+                subtitle: pulseStore.pulseEnabled ? "At most one nudge a day" : "Off while Pulse is off",
+                isOn: Binding(
+                    get: { vm.smartCoachingOn },
+                    set: { value in
+                        if value {
+                            showSmartNotificationExplainer = true
+                        } else {
+                            Task { await vm.setSmartCoaching(false) }
+                        }
                     }
-                }
-            )) {
-                Label("Smart coaching", systemImage: "bell.and.waves.left.and.right")
+                ),
+                // These nudges come from Pulse, so with Pulse off they can't fire anyway.
+                disabled: !pulseStore.pulseEnabled
+            )
+            // Hidden while GLP-1 tracking is paused or stopped: there are no shot reminders
+            // then, and resuming puts back whatever this was set to.
+            if !glp1Logs.isEmpty, glp1Tracking.isTracking {
+                hairline
+                toggleRow(
+                    icon: "bell.badge",
+                    title: "Shot-day reminders",
+                    subtitle: "Day before and day of",
+                    isOn: Binding(
+                        get: { vm.remindersOn },
+                        set: { newValue in Task { await vm.setReminders(newValue) } }
+                    ),
+                    disabled: !vm.doseScheduleLoaded
+                )
             }
-
-            NavigationLink {
+            hairline
+            navRow(icon: "slider.horizontal.3", title: "Notification preferences", disabled: !vm.smartCoachingOn) {
                 SmartNotificationSettingsView()
-            } label: {
-                Label("Notification preferences", systemImage: "slider.horizontal.3")
             }
-            .disabled(!vm.smartCoachingOn)
-
-            NavigationLink {
+            hairline
+            navRow(icon: "clock.arrow.circlepath", title: "Pulse history") {
                 SmartNotificationHistoryView()
-            } label: {
-                Label("Pulse history", systemImage: "clock.arrow.circlepath")
             }
-        } header: {
-            Text("Pulse notifications")
-        } footer: {
-            Text("Smart coaching sends at most one timely suggestion a day. Your Monday outlook reminder and shot-day reminders are separate.")
         }
     }
 
-    // MARK: - HealthKit
+    // MARK: - GLP-1 tracker (details tile)
 
-    private var healthKitSection: some View {
-        Section("Apple Health") {
-            if HealthKitManager.shared.isAvailable {
-                HStack {
-                    // isAvailable is a device capability — true on every iPhone. Reporting
-                    // it as "Connected" told users who had denied every permission that
-                    // Health was hooked up. Read grants are never disclosed by HealthKit,
-                    // so the honest states are "we've been granted something we can verify"
-                    // and "we haven't".
-                    if HealthKitManager.shared.isSharingAuthorized {
-                        Label("Connected", systemImage: "heart.fill")
-                            .foregroundStyle(.red)
-                    } else if HealthKitManager.shared.hasRequestedAuthorization {
-                        Label("Permissions requested", systemImage: "heart")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Label("Not connected", systemImage: "heart.slash")
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    // Health permissions live in the Health app, not this app's Settings page.
-                    Button("Health App") {
-                        openHealthApp()
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+    private var glp1DetailsTile: some View {
+        SettingsTile(eyebrow: "GLP-1 tracker") {
+            if glp1Logs.isEmpty {
+                actionRow(icon: "syringe", title: "Set Up GLP-1 Tracker") {
+                    vm.showLogInjection = true
                 }
-                Button {
+            } else {
+                if glp1Tracking.isTracking {
+                    actionRow(icon: "shield.lefthalf.filled", title: "Protein floor & today", showChevron: true) {
+                        showGLP1Tracker = true
+                    }
+                    hairline
+                } else {
+                    // Paused or stopped: say so, and make resuming the obvious next step.
+                    valueRow(icon: glp1Tracking.status == .stopped ? "stop.circle" : "pause.circle",
+                             label: glp1Tracking.status == .stopped ? "Tracking stopped" : "Tracking paused",
+                             value: glp1Tracking.changedAt.map { "since \($0.formatted(.dateTime.month(.abbreviated).day()))" } ?? "")
+                    hairline
+                    actionRow(icon: "play.circle", title: "Resume tracking", isLoading: isSavingGLP1Tracking) {
+                        showGLP1ResumeConfirm = true
+                    }
+                    hairline
+                }
+
+                if let last = vm.mostRecentInjection {
+                    valueRow(icon: "pill", label: "Medication", value: "\(last.medication) \(last.doseMg.formatted())mg")
+                    hairline
+                }
+
+                if glp1Tracking.isTracking, let countdown = vm.nextInjectionCountdown, let due = vm.nextInjectionDue {
+                    HStack(spacing: 12) {
+                        iconBadge("calendar", tint: vm.isInjectionOverdue ? Theme.Colors.danger : Theme.Colors.primary)
+                        Text(vm.doseSchedule.latestSkip == nil ? "Next dose" : "Next reminder")
+                            .font(Theme.Fonts.body(15, .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                        Spacer(minLength: 8)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(countdown)
+                                .font(Theme.Fonts.body(14, .semibold))
+                                .foregroundStyle(vm.isInjectionOverdue ? Theme.Colors.danger : Theme.Colors.textSecondary)
+                            Text(due, style: .date)
+                                .font(Theme.Fonts.body(12))
+                                .foregroundStyle(Theme.Colors.textFaint)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 52)
+                    hairline
+                }
+
+                if glp1Tracking.isTracking, vm.doseScheduleLoaded, vm.nextInjectionDue != nil {
+                    DoseSkipControl(schedule: vm.doseSchedule) { await vm.loadData(profile: appState.profile) }
+                        .font(Theme.Fonts.body(13))
+                        .tint(Theme.Colors.primary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    hairline
+                }
+
+                actionRow(icon: "syringe", title: "Log Dose") {
+                    vm.showLogInjection = true
+                }
+
+                if !glp1Logs.isEmpty {
+                    hairline
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(glp1Logs.prefix(3)) { log in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(log.injectedAt, style: .date)
+                                    .font(Theme.Fonts.body(14, .semibold))
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                Text(log.site.map { "\(log.doseMg.glp1DoseString)mg · \($0)" }
+                                     ?? "\(log.doseMg.glp1DoseString)mg")
+                                    .font(Theme.Fonts.body(12))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                        }
+                    }
+                    hairline
+                    navRow(icon: "list.bullet.rectangle", title: "Dose History") {
+                        GLP1HistoryView()
+                    }
+                }
+
+                if glp1Tracking.isTracking {
+                    hairline
+                    actionRow(icon: "pause.circle", title: "Pause or stop tracking",
+                              tint: Theme.Colors.textSecondary, isLoading: isSavingGLP1Tracking) {
+                        showGLP1PauseOptions = true
+                    }
+                }
+            }
+        }
+    }
+
+    private func setGLP1Tracking(_ status: GLP1TrackingStatus) {
+        guard !isSavingGLP1Tracking else { return }
+        isSavingGLP1Tracking = true
+        Task {
+            defer { isSavingGLP1Tracking = false }
+            do {
+                try await glp1Tracking.set(status)
+            } catch {
+                vm.errorMessage = "Couldn't update GLP-1 tracking. Check your connection and try again."
+            }
+        }
+    }
+
+    // MARK: - Apple Health (details tile)
+
+    private var healthKitDetailsTile: some View {
+        SettingsTile(eyebrow: "Apple Health") {
+            if HealthKitManager.shared.isAvailable {
+                HStack(spacing: 12) {
+                    iconBadge(
+                        HealthKitManager.shared.isSharingAuthorized ? "heart.fill" : "heart",
+                        tint: HealthKitManager.shared.isSharingAuthorized ? Theme.Colors.healthTileInk : Theme.Colors.textSecondary
+                    )
+                    Text(healthQuickTitle)
+                        .font(Theme.Fonts.body(15, .semibold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Spacer(minLength: 8)
+                    Button("Health App") { openHealthApp() }
+                        .font(Theme.Fonts.body(13, .semibold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+                .padding(.horizontal, 16)
+                .frame(minHeight: 52)
+                hairline
+                actionRow(
+                    icon: "arrow.clockwise",
+                    title: "Reconnect Apple Health",
+                    isLoading: isReconnectingHealth
+                ) {
                     guard !isReconnectingHealth else { return }
                     isReconnectingHealth = true
                     Task { await reconnectHealth() }
-                } label: {
-                    HStack {
-                        Label("Reconnect Apple Health", systemImage: "arrow.clockwise")
-                        Spacer()
-                        if isReconnectingHealth { ProgressView() }
-                    }
                 }
                 .disabled(isReconnectingHealth)
             } else {
-                Label("Not available on this device", systemImage: "heart.slash")
-                    .foregroundStyle(.secondary)
+                valueRow(icon: "heart.slash", label: "Not available on this device", value: "")
             }
         }
     }
@@ -509,49 +690,177 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - Coach
+    // MARK: - Body stats
 
-    private var coachSection: some View {
-        Section("Pulse Coach") {
-            Button { showFoodPreferences = true } label: {
-                Label("Food preferences", systemImage: "fork.knife")
+    private var bodyStatsTile: some View {
+        SettingsTile(eyebrow: "Body stats") {
+            if let w = vm.latestWeight {
+                valueRow(icon: "scalemass", label: "Weight", value: units.formatWeight(w.weightKg))
+                hairline
             }
-            Button("Clear Chat History", role: .destructive) {
+            if let h = vm.profile?.heightCm {
+                valueRow(icon: "ruler", label: "Height", value: units.formatHeight(h))
+                hairline
+            }
+            if let dob = vm.profile?.dob, let age = ageFrom(dob) {
+                valueRow(icon: "calendar", label: "Age", value: "\(age) years")
+                hairline
+            }
+            if let act = vm.profile?.activityLevel, let level = ActivityLevel(rawValue: act) {
+                valueRow(icon: "figure.run", label: "Activity", value: level.displayName)
+                hairline
+            }
+            actionRow(icon: "pencil", title: "Edit Stats") {
+                vm.showEditProfile = true
+            }
+        }
+    }
+
+    // MARK: - Measurements
+
+    private var measurementsTile: some View {
+        SettingsTile(
+            eyebrow: "Measurements",
+            footer: "Sets the units used everywhere in Footing — weight, height, body composition, and water."
+        ) {
+            Picker("Units", selection: $unitSystemRaw) {
+                Text("Metric (kg, cm, ml)").tag("metric")
+                Text("Imperial (lbs, in, oz)").tag("imperial")
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.top, 2)
+            .padding(.bottom, 14)
+        }
+    }
+
+    // MARK: - Pulse (on/off, on Today, what it knows, AI data sharing)
+
+    private var pulseTile: some View {
+        SettingsTile(
+            eyebrow: "Pulse",
+            footer: "Pulse is Footing's coach: a tab of its own, a nudge on Today, and the written Strong Week outlook. Turning it off stops all three; Talk to Log's food parsing is separate and keeps working."
+        ) {
+            toggleRow(
+                // Not a heartbeat line: the design notes reserve Pulse's look for the Pulse mark.
+                icon: "bubble.left.and.text.bubble.right",
+                title: "Pulse",
+                subtitle: pulseStore.pulseEnabled ? "On" : "Off",
+                isOn: Binding(
+                    get: { pulseStore.pulseEnabled },
+                    set: { newValue in
+                        if newValue {
+                            Task { await savePulseSetting { try await pulseStore.setPulseEnabled(true) } }
+                        } else {
+                            showPulseOffConfirm = true
+                        }
+                    }
+                ),
+                disabled: isSavingPulseSetting
+            )
+            hairline
+            toggleRow(
+                icon: "sun.max",
+                title: "Pulse on Today",
+                subtitle: "Shows Pulse's nudge card on Today",
+                isOn: Binding(
+                    get: { pulseStore.pulseOnToday },
+                    set: { newValue in
+                        Task { await savePulseSetting { try await pulseStore.setPulseOnToday(newValue) } }
+                    }
+                ),
+                disabled: isSavingPulseSetting || !pulseStore.pulseEnabled
+            )
+            hairline
+            navRow(icon: "person.text.rectangle", title: "What Pulse knows") {
+                AboutYouView()
+            }
+            hairline
+            actionRow(icon: "hand.raised", title: "AI data sharing", showChevron: true) {
+                showAIDataSharingInfo = true
+            }
+            hairline
+            actionRow(icon: "trash", title: "Clear Chat History", tint: Theme.Colors.danger) {
                 showClearHistoryConfirm = true
             }
         }
-    }
-
-    // MARK: - Feedback
-
-    private var feedbackSection: some View {
-        Section {
-            Button {
-                vm.showSendFeedback = true
-            } label: {
-                Label("Send Feedback", systemImage: "envelope")
-                    .foregroundStyle(Theme.Colors.primary)
+        .confirmationDialog(
+            "Turn off Pulse?",
+            isPresented: $showPulseOffConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Turn Off Pulse", role: .destructive) {
+                Task { await savePulseSetting { try await pulseStore.setPulseEnabled(false) } }
             }
-            Link(destination: Config.privacyPolicyURL) {
-                Label("Privacy Policy", systemImage: "hand.raised")
-                    .foregroundStyle(Theme.Colors.primary)
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This turns off the Pulse tab, Pulse on Today, the written Strong Week outlook, and coaching notifications that come from Pulse. You can turn it back on any time.")
+        }
+        .sheet(isPresented: $showAIDataSharingInfo) {
+            if pulseStore.aiConsentAt != nil {
+                PulseConsentSheet()
+            } else {
+                PulseConsentSheet(onAgree: {
+                    await savePulseSetting { try await pulseStore.recordConsent(agreed: true) }
+                    showAIDataSharingInfo = false
+                })
             }
-            Link(destination: Config.termsOfUseURL) {
-                Label("Terms of Use", systemImage: "doc.text")
-                    .foregroundStyle(Theme.Colors.primary)
-            }
-        } header: {
-            Text("Support")
-        } footer: {
-            Text("Footing is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing in the app is medical advice — always consult your doctor about medication and health decisions.")
         }
     }
 
-    // MARK: - Sign Out
+    /// Optimistic saves already live in PulseProfileStore; this just surfaces a failure the
+    /// same way every other Profile toggle does.
+    private func savePulseSetting(_ save: () async throws -> Void) async {
+        isSavingPulseSetting = true
+        defer { isSavingPulseSetting = false }
+        do {
+            try await save()
+        } catch {
+            vm.errorMessage = "Couldn't update Pulse. Check your connection and try again."
+        }
+    }
 
-    private var signOutSection: some View {
-        Section {
-            Button("Sign Out", role: .destructive) {
+    // MARK: - Support
+
+    private var supportTile: some View {
+        SettingsTile(
+            eyebrow: "Support",
+            footer: "Footing is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing in the app is medical advice — always consult your doctor about medication and health decisions."
+        ) {
+            actionRow(icon: "envelope", title: "Send Feedback", showChevron: true) {
+                vm.showSendFeedback = true
+            }
+            hairline
+            linkRow(icon: "hand.raised", title: "Privacy Policy", url: Config.privacyPolicyURL)
+            hairline
+            linkRow(icon: "doc.text", title: "Terms of Use", url: Config.termsOfUseURL)
+        }
+    }
+
+    // MARK: - Developer (DEBUG only)
+
+    #if DEBUG
+    // Dev-only: seed ~2 weeks of demo Apple Health data on this device/sim so the health signals
+    // show in demos. Never compiled into release builds.
+    private var debugTile: some View {
+        SettingsTile(eyebrow: "Developer") {
+            actionRow(icon: "heart.text.square", title: "Seed demo Health data", isLoading: isSeedingHealth) {
+                Task {
+                    isSeedingHealth = true
+                    await HealthKitManager.shared.seedDemoHealthData()
+                    isSeedingHealth = false
+                }
+            }
+            .disabled(isSeedingHealth)
+        }
+    }
+    #endif
+
+    // MARK: - Account (sign out / delete)
+
+    private var accountTile: some View {
+        SettingsTile(eyebrow: "Account") {
+            actionRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", tint: Theme.Colors.danger) {
                 // `try?` swallowed the failure: the user tapped Sign Out, nothing happened,
                 // and nothing said why.
                 Task {
@@ -562,30 +871,160 @@ struct ProfileView: View {
                     }
                 }
             }
-        }
-    }
-
-    // MARK: - Delete Account
-
-    private var deleteAccountSection: some View {
-        Section {
-            Button("Delete Account", role: .destructive) {
+            hairline
+            actionRow(icon: "trash", title: "Delete Account", tint: Theme.Colors.danger, isLoading: vm.isDeletingAccount) {
                 showDeleteAccountConfirm = true
             }
             .disabled(vm.isDeletingAccount)
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Row helpers
 
-    private func row(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(value)
-                .foregroundStyle(.secondary)
-        }
+    private func iconBadge(_ systemName: String, tint: Color = Theme.Colors.primary) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 32, height: 32)
+            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .accessibilityHidden(true)
     }
+
+    private func toggleRow(
+        icon: String,
+        title: String,
+        subtitle: String? = nil,
+        isOn: Binding<Bool>,
+        disabled: Bool = false
+    ) -> some View {
+        HStack(spacing: 12) {
+            iconBadge(icon)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(Theme.Colors.primary)
+                .disabled(disabled)
+                .accessibilityLabel(title)
+                .accessibilityHint(subtitle ?? "")
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: 56)
+        .opacity(disabled ? 0.55 : 1)
+    }
+
+    private func navRow<Destination: View>(
+        icon: String,
+        title: String,
+        disabled: Bool = false,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            HStack(spacing: 12) {
+                iconBadge(icon)
+                Text(title)
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.Colors.textFaint)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.55 : 1)
+    }
+
+    private func actionRow(
+        icon: String,
+        title: String,
+        tint: Color = Theme.Colors.primary,
+        showChevron: Bool = false,
+        isLoading: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                iconBadge(icon, tint: tint)
+                // Titles read as ordinary rows, like nav and link rows; only a non-default tint
+                // (the destructive red) colors the title too.
+                Text(title)
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(tint == Theme.Colors.primary ? Theme.Colors.textPrimary : tint)
+                Spacer(minLength: 8)
+                if isLoading {
+                    ProgressView()
+                } else if showChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Theme.Colors.textFaint)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func linkRow(icon: String, title: String, url: URL) -> some View {
+        Link(destination: url) {
+            HStack(spacing: 12) {
+                iconBadge(icon)
+                Text(title)
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.Colors.textFaint)
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func valueRow(icon: String, label: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            iconBadge(icon, tint: Theme.Colors.textSecondary)
+            Text(label)
+                .font(Theme.Fonts.body(15))
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Spacer(minLength: 8)
+            if !value.isEmpty {
+                Text(value)
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: 48)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var hairline: some View {
+        Rectangle()
+            .fill(Theme.Colors.hairline)
+            .frame(height: 1)
+            .padding(.leading, 60)
+    }
+
+    // MARK: - Helpers
 
     private func ageFrom(_ dob: String) -> Int? {
         let f = DateFormatter()
@@ -595,6 +1034,136 @@ struct ProfileView: View {
         return Calendar.current.dateComponents([.year], from: date, to: .now).year
     }
 }
+
+// MARK: - Tokens Theme doesn't have yet
+
+// Theme has no destructive-red or Apple-Health-rose tokens; Profile is the only screen that
+// needs them so they live here rather than in the shared DesignSystem.
+private extension Theme.Colors {
+    /// The Daylight mockup's rose family for the Apple Health tile.
+    static let healthTile      = Color(hex: 0xFFE4E6)
+    static let healthTileInk   = Color(hex: 0x881337)
+    static let healthTileLabel = Color(hex: 0x9F1239)
+}
+
+// MARK: - Settings tile
+
+/// A white Daylight tile with an uppercase eyebrow label and stacked rows — the replacement for
+/// a grouped `Section` in the old system List. `footer`, if given, renders below the tile like a
+/// section footer.
+private struct SettingsTile<Content: View>: View {
+    let eyebrow: String
+    var footer: String? = nil
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            VStack(alignment: .leading, spacing: 0) {
+                TileEyebrow(eyebrow)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+                    .padding(.bottom, 6)
+                content
+                    .padding(.bottom, 6)
+            }
+            .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
+            .shadow(color: Color(hex: 0x0F172A, opacity: 0.06), radius: 1, y: 1)
+
+            if let footer {
+                Text(footer)
+                    .font(Theme.Fonts.body(12))
+                    .foregroundStyle(Theme.Colors.textFaint)
+                    .padding(.horizontal, 6)
+            }
+        }
+    }
+}
+
+// MARK: - Hero tile button styles
+
+/// "Edit goals" on the indigo hero tile — a solid white pill with indigo text.
+private struct HeroFilledButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.Fonts.body(14, .bold))
+            .foregroundStyle(Theme.Colors.heroDeep)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+    }
+}
+
+/// "Recalculate" on the indigo hero tile — an outlined pill, white text.
+private struct HeroOutlineButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.Fonts.body(14, .bold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background {
+                RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous)
+                    .strokeBorder(Theme.Colors.primaryText, lineWidth: 1.5)
+            }
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+    }
+}
+
+// MARK: - Debug preview fixture
+
+#if DEBUG
+extension ProfileView {
+    /// Fixture data, no network calls — lets the lead engineer preview the Daylight Profile
+    /// rebuild without a signed-in session. Not wired into RootView; call
+    /// `ProfileView.preview()` from a debug menu item, a temporary RootView branch, or a
+    /// SwiftUI `#Preview`.
+    static func preview() -> some View {
+        let appState = AppState()
+        appState.profile = fixtureProfile
+        return ProfileView(debugFixture: true)
+            .environment(appState)
+    }
+
+    /// The tour's signed-in user (MainTabView puts it on AppState).
+    static var tourProfile: UserProfile { fixtureProfile }
+
+    private static let fixtureProfile = UserProfile(
+        id: UUID(),
+        email: "dustin@example.com",
+        fullName: "Dustin Allen",
+        dob: "1990-04-12",
+        sex: "male",
+        heightCm: 180,
+        activityLevel: "moderate",
+        weightGoal: "lose",
+        dietaryPrefs: nil,
+        createdAt: .now
+    )
+
+    private static func fixtureViewModel() -> ProfileViewModel {
+        let vm = ProfileViewModel()
+        let profile = fixtureProfile
+        vm.profile = profile
+        vm.goal = DailyGoal(
+            id: UUID(), userId: profile.id, effectiveDate: Date.now.isoDateString,
+            calories: 1850, proteinG: 140, carbsG: 180, fatG: 60, fiberG: 28, waterMlTarget: 2000
+        )
+        vm.latestWeight = WeightLog(id: UUID(), userId: profile.id, loggedAt: .now, weightKg: 84, source: "manual")
+        vm.glp1Logs = [GLP1Log(
+            id: UUID(), userId: profile.id,
+            injectedAt: Date.now.addingTimeInterval(-2 * 86_400),
+            medication: "Ozempic", doseMg: 0.5, site: "Left Abdomen",
+            nextDueAt: Date.now.addingTimeInterval(5 * 86_400)
+        )]
+        vm.doseScheduleLoaded = true
+        vm.remindersOn = true
+        vm.weeklyReminderOn = true
+        vm.smartCoachingOn = true
+        return vm
+    }
+}
+#endif
 
 // MARK: - Edit Profile Sheet
 
@@ -650,10 +1219,14 @@ private struct EditProfileSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Account") {
+                Section {
                     TextField("Full name", text: $name)
+                } header: {
+                    DaylightSectionHeader("Account")
                 }
-                Section("Body") {
+                .daylightSection()
+
+                Section {
                     // `...Date.now` let a user set their DOB to today — "Age: 0 years" in Body
                     // Stats, and a nonsense BMR. Onboarding enforces 13–120; match it.
                     DatePicker("Date of birth", selection: $dob,
@@ -672,13 +1245,13 @@ private struct EditProfileSheet: View {
                                 .keyboardType(.numberPad)
                                 .focused($fieldFocused)
                                 .frame(width: 36)
-                            Text("ft").foregroundStyle(.secondary)
+                            Text("ft").foregroundStyle(Theme.Colors.textSecondary)
                             TextField("in", text: $heightInchesText)
                                 .multilineTextAlignment(.trailing)
                                 .keyboardType(.numberPad)
                                 .focused($fieldFocused)
                                 .frame(width: 36)
-                            Text("in").foregroundStyle(.secondary)
+                            Text("in").foregroundStyle(Theme.Colors.textSecondary)
                         }
                     } else {
                         HStack {
@@ -689,11 +1262,15 @@ private struct EditProfileSheet: View {
                                 .keyboardType(.decimalPad)
                                 .focused($fieldFocused)
                                 .frame(width: 60)
-                            Text("cm").foregroundStyle(.secondary)
+                            Text("cm").foregroundStyle(Theme.Colors.textSecondary)
                         }
                     }
+                } header: {
+                    DaylightSectionHeader("Body")
                 }
-                Section("Activity Level") {
+                .daylightSection()
+
+                Section {
                     Picker("Activity", selection: $activity) {
                         ForEach(ActivityLevel.allCases) { level in
                             Text(level.displayName).tag(level)
@@ -701,19 +1278,27 @@ private struct EditProfileSheet: View {
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
+                } header: {
+                    DaylightSectionHeader("Activity Level")
                 }
-                Section("Weight") {
+                .daylightSection()
+
+                Section {
                     Toggle("Log today's weight", isOn: $logWeight)
                     if logWeight {
                         HStack {
                             TextField(units.weightUnit, text: $weightText)
                                 .keyboardType(.decimalPad)
                                 .focused($fieldFocused)
-                            Text(units.weightUnit).foregroundStyle(.secondary)
+                            Text(units.weightUnit).foregroundStyle(Theme.Colors.textSecondary)
                         }
                     }
+                } header: {
+                    DaylightSectionHeader("Weight")
                 }
+                .daylightSection()
             }
+            .daylightForm()
             .navigationTitle("Edit Stats")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -758,6 +1343,7 @@ private struct EditProfileSheet: View {
                 Text("Your new stats give \(Int(suggestion.goals.calories)) kcal a day (currently \(Int(suggestion.currentCalories))).")
             }
         }
+        .tint(Theme.Colors.primary)
     }
 
     private func prefill() {
@@ -899,11 +1485,15 @@ private struct EditGoalsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Calorie Target") {
+                Section {
                     goalRow(label: "Calories", value: $calories, unit: "kcal",
                             range: 1000...5000, step: 50)
+                } header: {
+                    DaylightSectionHeader("Calorie Target")
                 }
-                Section("Macros") {
+                .daylightSection()
+
+                Section {
                     goalRow(label: "Protein", value: $proteinG, unit: "g",
                             range: 20...400, step: 5)
                     goalRow(label: "Carbs",   value: $carbsG,   unit: "g",
@@ -912,8 +1502,12 @@ private struct EditGoalsSheet: View {
                             range: 10...300, step: 5)
                     goalRow(label: "Fiber",   value: $fiberG,   unit: "g",
                             range: 5...100,  step: 1)
+                } header: {
+                    DaylightSectionHeader("Macros")
                 }
+                .daylightSection()
             }
+            .daylightForm()
             .navigationTitle("Edit Goals")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -927,6 +1521,7 @@ private struct EditGoalsSheet: View {
             }
             .onAppear { prefill() }
         }
+        .tint(Theme.Colors.primary)
     }
 
     private func prefill() {
@@ -958,7 +1553,7 @@ private struct EditGoalsSheet: View {
             Text(label)
             Spacer()
             Text("\(Int(value.wrappedValue)) \(unit)")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textSecondary)
                 .monospacedDigit()
             Stepper("", value: value, in: range, step: step)
                 .labelsHidden()
@@ -981,14 +1576,14 @@ private struct LogInjectionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Medication") {
+                Section {
                     Picker("Medication", selection: $medication) {
                         ForEach(GLP1Medication.allCases) { med in
                             VStack(alignment: .leading) {
                                 Text(med.rawValue)
                                 Text(med.activeIngredient)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(Theme.Fonts.body(12))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
                             }
                             .tag(med)
                         }
@@ -998,24 +1593,32 @@ private struct LogInjectionSheet: View {
                             Text("\(dose.glp1DoseString) mg").tag(dose)
                         }
                     }
+                } header: {
+                    DaylightSectionHeader("Medication")
                 }
+                .daylightSection()
 
-                Section("Dose") {
+                Section {
                     DatePicker("Date & Time", selection: $injectionDate, in: ...Date.now)
                     Picker("Site", selection: $site) {
                         ForEach(InjectionSite.allCases) { s in
                             Text(s.rawValue).tag(s)
                         }
                     }
+                } header: {
+                    DaylightSectionHeader("Dose")
                 }
+                .daylightSection()
 
                 Section {
                     Label("Suggested next: \(vm.suggestedNextSite.rawValue)",
                           systemImage: "arrow.triangle.2.circlepath")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
+                .daylightSection()
             }
+            .daylightForm()
             .navigationTitle("Log Dose")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1034,6 +1637,7 @@ private struct LogInjectionSheet: View {
             }
             .onAppear { prefill() }
         }
+        .tint(Theme.Colors.primary)
     }
 
     private func prefill() {
@@ -1070,8 +1674,10 @@ private struct SmartNotificationExplainerSheet: View {
     @State private var isEnabling = false
 
     var body: some View {
-        NavigationStack {
+        ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                SheetHeader(title: "Notifications", onClose: { if !isEnabling { dismiss() } })
+
                 ZStack {
                     Circle()
                         .fill(Theme.Colors.primary.opacity(0.12))
@@ -1080,13 +1686,15 @@ private struct SmartNotificationExplainerSheet: View {
                         .font(.system(size: 30, weight: .semibold))
                         .foregroundStyle(Theme.Colors.primary)
                 }
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Useful timing, fewer interruptions")
-                        .font(.title2.weight(.bold))
+                        .font(Theme.Fonts.display(22, .bold, relativeTo: .title2))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Text("Pulse waits for a specific next step instead of reminding you on a fixed clock.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(16))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
@@ -1096,10 +1704,8 @@ private struct SmartNotificationExplainerSheet: View {
                 }
 
                 Text("Shot-day reminders remain separate and keep their own setting.")
-                    .font(.caption)
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textFaint)
-
-                Spacer()
 
                 Button {
                     isEnabling = true
@@ -1111,25 +1717,19 @@ private struct SmartNotificationExplainerSheet: View {
                     HStack {
                         if isEnabling { ProgressView().tint(.white) }
                         Text("Allow useful notifications")
-                            .fontWeight(.semibold)
                     }
                     .frame(maxWidth: .infinity, minHeight: 50)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.Colors.primary)
+                .buttonStyle(.brandPrimary)
                 .disabled(isEnabling)
             }
-            .padding(Theme.Spacing.lg)
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Not now") { dismiss() }
-                        .disabled(isEnabling)
-                }
-            }
+            .padding(Theme.Spacing.page)
+            .padding(.bottom, Theme.Spacing.lg)
         }
-        .presentationDetents([.large])
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .interactiveDismissDisabled(isEnabling)
         .presentationDragIndicator(.visible)
+        .tint(Theme.Colors.primary)
     }
 
     private func explainerRow(_ icon: String, _ title: String, _ detail: String) -> some View {
@@ -1139,10 +1739,12 @@ private struct SmartNotificationExplainerSheet: View {
                 .foregroundStyle(Theme.Colors.primary)
                 .frame(width: 28, height: 28)
                 .background(Theme.Colors.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(detail).font(.caption).foregroundStyle(.secondary)
+                Text(title).font(Theme.Fonts.body(15, .semibold)).foregroundStyle(Theme.Colors.textPrimary)
+                Text(detail).font(Theme.Fonts.body(12)).foregroundStyle(Theme.Colors.textSecondary)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 }

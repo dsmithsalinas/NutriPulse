@@ -11,39 +11,56 @@ struct GLP1HistoryView: View {
 
     var body: some View {
         List {
+            Section {
+                DaylightPageTitle("Dose history")
+                    .padding(.vertical, Theme.Spacing.sm)
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+
             if !skips.isEmpty {
-                Section("Skipped doses") {
+                Section {
                     ForEach(skips) { skip in
                         VStack(alignment: .leading, spacing: 5) {
                             Text("\(logs.first(where: { $0.id == skip.injectionId })?.medication ?? "Shot") · skipped")
-                                .fontWeight(.semibold)
+                                .font(Theme.Fonts.body(15, .semibold))
+                                .foregroundStyle(Theme.Colors.textPrimary)
                             Text("Planned for \(skip.scheduledAt.formatted(date: .abbreviated, time: .omitted))")
-                                .font(.subheadline).foregroundStyle(.secondary)
+                                .font(Theme.Fonts.body(13))
+                                .foregroundStyle(Theme.Colors.textSecondary)
                             Button("Undo skip") { Task { await undo(skip) } }
-                                .buttonStyle(.borderless)
+                                .font(Theme.Fonts.body(14, .bold))
+                                .foregroundStyle(Theme.Colors.primaryText)
+                                .frame(minHeight: 44, alignment: .leading)
                         }
                     }
+                } header: {
+                    DaylightSectionHeader("Skipped doses")
                 }
+                .daylightSection()
             }
-            Section("Shots taken") {
+            Section {
                 ForEach(logs) { log in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text(log.medication)
-                                .fontWeight(.semibold)
+                                .font(Theme.Fonts.body(15, .semibold))
+                                .foregroundStyle(Theme.Colors.textPrimary)
                             Spacer()
                             Text("\(log.doseMg.glp1DoseString)mg")
-                                .foregroundStyle(.secondary)
+                                .font(Theme.Fonts.body(14))
+                                .foregroundStyle(Theme.Colors.textSecondary)
                         }
                         HStack {
                             Text(log.injectedAt, style: .date)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.Fonts.body(13))
+                                .foregroundStyle(Theme.Colors.textSecondary)
                             Spacer()
                             if let site = log.site {
                                 Text(site)
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
+                                    .font(Theme.Fonts.body(12))
+                                    .foregroundStyle(Theme.Colors.textFaint)
                             }
                         }
                     }
@@ -56,21 +73,20 @@ struct GLP1HistoryView: View {
                         }
                     }
                 }
+            } header: {
+                DaylightSectionHeader("Shots taken")
             }
+            .daylightSection()
         }
         .disabled(isSaving)
         .listStyle(.insetGrouped)
-        .navigationTitle("Dose History")
-        .navigationBarTitleDisplayMode(.inline)
+        .daylightForm()
+        .daylightSubpage("Dose history")
         .overlay {
             if isLoading {
                 ProgressView()
             } else if logs.isEmpty && skips.isEmpty {
-                ContentUnavailableView(
-                    "No Doses Logged",
-                    systemImage: "syringe",
-                    description: Text("Your dose history will appear here.")
-                )
+                BrandedEmptyState(icon: "syringe", title: "No Doses Logged", message: "Your dose history will appear here.")
             }
         }
         .alert("Couldn't update dose history", isPresented: Binding(

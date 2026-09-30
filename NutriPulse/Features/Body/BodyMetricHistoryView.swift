@@ -97,26 +97,37 @@ struct BodyMetricHistoryView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                DaylightPageTitle(metric.title)
                 if entries.count >= 2 {
                     chartCard
+                        .popIn(order: 0)
                 }
                 entriesCard
+                    .popIn(order: 1)
             }
             .padding(Theme.Spacing.md)
             .padding(.bottom, Theme.Spacing.xl)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .scrollContentBackground(.hidden)
-        .navigationTitle(metric.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
+        .daylightSubpage(metric.title)
         .task { await load() }
         .overlay { if isLoading && entries.isEmpty { ProgressView() } }
     }
 
     private var chartCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(alignment: .firstTextBaseline) {
+                TileEyebrow(metric.title, color: metric.color)
+                Spacer()
+                if let latest = entries.last {
+                    Text(metric.format(latest.value, units: units))
+                        .font(Theme.Fonts.number(20, .bold, relativeTo: .title3))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                }
+            }
+
             Chart(entries) { entry in
                 LineMark(
                     x: .value("Date", entry.date, unit: .day),
@@ -137,7 +148,7 @@ struct BodyMetricHistoryView: View {
                 // zone to be in or out of.
                 if let goalValue {
                     RuleMark(y: .value(metric.goalNoun.capitalized, displayValue(goalValue)))
-                        .foregroundStyle(.secondary.opacity(0.6))
+                        .foregroundStyle(Theme.Colors.textFaint)
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
                         .annotation(
                             position: .top,
@@ -145,29 +156,27 @@ struct BodyMetricHistoryView: View {
                             overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                         ) {
                             Text(metric.goalNoun.capitalized)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.Fonts.body(11, .semibold))
+                                .foregroundStyle(Theme.Colors.textSecondary)
                         }
                 }
             }
             .chartYScale(domain: .automatic(includesZero: false))
             .frame(height: 180)
+            .chartDrawIn()
         }
         .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     private var entriesCard: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("ENTRIES")
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(Theme.Colors.textFaint)
+            TileEyebrow("Entries")
 
             if entries.isEmpty && !isLoading {
                 Text("Nothing logged yet.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(14))
+                    .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(.vertical, Theme.Spacing.sm)
             }
 
@@ -175,11 +184,12 @@ struct BodyMetricHistoryView: View {
             ForEach(entries.suffix(30).reversed()) { entry in
                 HStack {
                     Text(entry.date.formatted(.dateTime.month(.abbreviated).day().year()))
-                        .font(.subheadline)
+                        .font(Theme.Fonts.body(14))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Spacer()
                     Text(metric.format(entry.value, units: units))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(Theme.Fonts.body(14, .semibold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                         .monospacedDigit()
                     sourceBadge(entry.source)
                 }
@@ -194,20 +204,21 @@ struct BodyMetricHistoryView: View {
                         }
                     }
                 }
-                Divider()
+                Divider().overlay(Theme.Colors.hairline)
             }
         }
         .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     private func sourceBadge(_ source: String) -> some View {
-        Text(source == "healthkit" ? "Health" : "Manual")
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(source == "healthkit" ? Color.pink : Theme.Colors.primary)
+        let color = source == "healthkit" ? Theme.Colors.listening : Theme.Colors.primary
+        return Text(source == "healthkit" ? "Health" : "Manual")
+            .font(Theme.Fonts.body(10, .semibold))
+            .foregroundStyle(color)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background((source == "healthkit" ? Color.pink : Theme.Colors.primary).opacity(0.12))
+            .background(color.opacity(0.12))
             .clipShape(Capsule())
     }
 
@@ -265,3 +276,4 @@ struct BodyMetricHistoryView: View {
         await load()
     }
 }
+

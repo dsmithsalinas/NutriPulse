@@ -26,13 +26,44 @@ final class AppState {
     // A prompt handed off from another surface (the Today under-eating nudge) for the Pulse
     // coach to pick up. MainTabView switches to the Pulse tab when it's set; CoachView sends
     // it and clears it. Keeps the deep-link one-directional and stateless.
-    var pendingCoachPrompt: String? = nil
+    //
+    // Backed by a private stored property so every write — whether through `askPulse` or a
+    // direct assignment (GoalsView sets this straight from a goal question) — passes through
+    // `PulseGate`. Nothing should reach the AI provider while Pulse is off or unconsented.
+    private var _pendingCoachPrompt: String? = nil
+    var pendingCoachPrompt: String? {
+        get { _pendingCoachPrompt }
+        set { setPendingCoachPrompt(newValue) }
+    }
+    // The prompt captured while the consent sheet is up, so agreeing fires the original
+    // hand-off instead of silently dropping it.
+    var pendingConsentPrompt: String? = nil
+    // MainTabView presents PulseConsentSheet on this — set whenever a hand-off needs consent,
+    // or the user opens the Pulse tab before ever answering.
+    var showPulseConsentSheet = false
+
     var pendingQuickAction: FootingQuickAction? = nil
     var pendingStrongWeekReminder = false
     var pendingSmartNotificationRoute: SmartNotificationRoute? = nil
 
     func askPulse(_ prompt: String) {
         pendingCoachPrompt = prompt
+    }
+
+    private func setPendingCoachPrompt(_ prompt: String?) {
+        // Clearing always goes straight through — CoachView clears this the instant it
+        // consumes a prompt, and that must never get rerouted into the consent flow.
+        guard let prompt else { _pendingCoachPrompt = nil; return }
+        let store = PulseProfileStore.shared
+        switch PulseGate.handoff(pulseEnabled: store.pulseEnabled, aiConsentAt: store.aiConsentAt) {
+        case .allowed:
+            _pendingCoachPrompt = prompt
+        case .needsConsent:
+            pendingConsentPrompt = prompt
+            showPulseConsentSheet = true
+        case .blocked:
+            break
+        }
     }
 
     // Onboarding is needed when we know the profile row exists (or genuinely doesn't
@@ -69,6 +100,11 @@ final class AppState {
 
             self.isLoading = false
             if session != nil { await NotificationManager.shared.reconcileWeeklyReminder() }
+            // The foreground sync skips while signed out (or before the keychain restores the
+            // session), so run it as soon as there's an account to sync.
+            if session != nil, event == .signedIn || event == .initialSession {
+                Task { await SyncEngine.shared.syncNow() }
+            }
         }
     }
 
@@ -84,6 +120,8 @@ final class AppState {
 
         try? LocalStore.shared.wipeAll()
         FavoritesStore.shared.reset()
+        SyncEngine.shared.clearFailure()
+        GLP1TrackingStore.shared.reset()
 
         for key in Self.accountScopedDefaultsKeys {
             UserDefaults.standard.removeObject(forKey: key)
@@ -135,6 +173,7 @@ final class AppState {
                 if let loaded = rows.first {
                     profile = loaded
                     profileLoadFailed = false
+                    GLP1TrackingStore.shared.apply(profile: loaded)
                     return
                 }
                 if attempt == 0 { try await Task.sleep(for: .milliseconds(300)) }

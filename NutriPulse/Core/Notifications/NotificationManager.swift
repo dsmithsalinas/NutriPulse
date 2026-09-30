@@ -4,7 +4,22 @@ import Foundation
 @MainActor
 final class NotificationManager {
     static let shared = NotificationManager()
-    private init() {}
+
+    private init() {
+        // Cancel immediately on Pulse-off rather than waiting for the next natural evaluation
+        // (a workout finishing, a repeated meal window, etc.) — that could be hours away, and a
+        // notification presenting as Pulse shouldn't outlive the toggle. Nothing to do on
+        // Pulse-on here: `scheduleSmartOpportunity`'s guard just stops blocking the next
+        // evaluation: TodayView re-runs one as soon as it sees this same notification.
+        NotificationCenter.default.addObserver(
+            forName: .pulseProfileChanged, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in
+                guard !PulseProfileStore.shared.pulseEnabled else { return }
+                NotificationManager.shared.cancelSmartNotifications()
+            }
+        }
+    }
 
     private let center = UNUserNotificationCenter.current()
 
@@ -121,6 +136,8 @@ final class NotificationManager {
     // Cancels any previous GLP-1 reminders and schedules fresh ones for `nextDueAt`:
     // a day-before nudge, a day-of reminder, and three daily overdue follow-ups.
     func scheduleGLP1Reminders(nextDueAt: Date) async {
+        // Paused or stopped: no shot reminders at all (GLP1TrackingStore restores them on resume).
+        guard GLP1TrackingStore.shared.isTracking else { cancelGLP1Reminders(); return }
         guard await requestPermissionIfNeeded() else { return }
 
         cancelGLP1Reminders()
@@ -162,6 +179,10 @@ final class NotificationManager {
         }
     }
 
+    func hasGLP1RemindersScheduled() async -> Bool {
+        await center.pendingNotificationRequests().contains { $0.identifier.hasPrefix("glp1-") }
+    }
+
     func cancelGLP1Reminders() {
         center.removePendingNotificationRequests(withIdentifiers: Self.allIdentifiers)
         center.removeDeliveredNotifications(withIdentifiers: Self.allIdentifiers)
@@ -170,6 +191,7 @@ final class NotificationManager {
     // Reconcile a changed schedule without turning notifications back on for someone who
     // disabled them. Used for skips, undo, history edits, and cross-device refreshes.
     func reconcileGLP1Reminders(schedule: GLP1DoseSchedule) async {
+        guard GLP1TrackingStore.shared.isTracking else { cancelGLP1Reminders(); return }
         let pending = await center.pendingNotificationRequests()
         let wasEnabled = pending.contains(where: { $0.identifier.hasPrefix("glp1-") })
         cancelGLP1Reminders()
@@ -245,6 +267,15 @@ final class NotificationManager {
     }
 
     func scheduleSmartOpportunity(_ opportunity: SmartNotificationOpportunity?) async {
+        // Smart coaching is presented to the user as a Pulse feature (Profile's "Pulse
+        // notifications" section, the "Pulse waits for a specific next step" explainer) even
+        // though its content doesn't literally say "Pulse" — so it stops the moment Pulse is
+        // turned off, same as the tab and the Strong Week outlook. It doesn't touch the AI
+        // provider, so consent doesn't factor in here, only the master switch.
+        guard PulseProfileStore.shared.pulseEnabled else {
+            cancelSmartNotifications()
+            return
+        }
         guard UserDefaults.standard.bool(forKey: Self.smartCoachingEnabledKey) else {
             cancelSmartNotifications()
             return

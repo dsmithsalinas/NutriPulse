@@ -9,11 +9,15 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf
 const fullSource = read('../supabase/functions/_shared/pulse-context.ts') + '\n' +
   read('../supabase/functions/_shared/pulse-provider.ts') + '\n' + read('../supabase/functions/coach-chat/index.ts');
 
-async function send(body: Record<string, unknown>, modelResponse: unknown, env: Record<string, string> = {}) {
+async function send(body: Record<string, unknown>, modelResponse: unknown, env: Record<string, string> = {}, settings?: Record<string, unknown> | null) {
   let handler: any, modelRequest: any;
   runInNewContext(stripTypeScriptTypes(fullSource), {
     Deno: { env: { get: (key: string) => key in env ? env[key] : key === 'ANTHROPIC_API_KEY' ? 'test-key' : undefined }, serve: (value: any) => { handler = value; } },
-    createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'test-user' } } }) } }),
+    createClient: () => ({
+      auth: { getUser: async () => ({ data: { user: { id: 'test-user' } } }) },
+      // pulse_profiles lookup; undefined settings = no from() at all (older stub), like a missing table.
+      ...(settings === undefined ? {} : { from: () => ({ select: () => ({ maybeSingle: async () => ({ data: settings }) }) }) }),
+    }),
     checkRateLimit: async () => true, corsHeaders: {}, Request, Response, AbortSignal, performance,
     fetch: async (_url: string, options: any) => { modelRequest = JSON.parse(options.body); return new Response(JSON.stringify(modelResponse), { status: 200 }); },
     console: { error: () => {} },
@@ -21,7 +25,9 @@ async function send(body: Record<string, unknown>, modelResponse: unknown, env: 
   const result = await handler(new Request('https://example.test/coach-chat', { method: 'POST', headers: { Authorization: 'Bearer test', 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
   return { result, modelRequest };
 }
-const reply = (text: string) => ({ stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '' }, { type: 'text', text }] });
+// Structured outputs: the model's text block is the JSON reply.
+const structured = (value: unknown) => ({ stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify(value) }] });
+const reply = (text: string) => structured({ reply: text, foods: [], followUps: [] });
 
 test('chat uses the chat model with effort, and caches only the user-independent system block', async () => {
   const { result, modelRequest } = await send({ message: 'Hi', messageType: 'chat', context: { user: { name: 'Sam' } } }, reply('Hello.'));
@@ -39,9 +45,53 @@ test('chat uses the chat model with effort, and caches only the user-independent
 test('PULSE_MODEL overrides chat but never the Strong Week outlook', async () => {
   const chat = await send({ message: 'Hi', messageType: 'chat' }, reply('Hello.'), { PULSE_MODEL: 'claude-sonnet-4-6' });
   assert.equal(chat.modelRequest.model, 'claude-sonnet-4-6');
-  const weekly = await send({ message: 'My week', messageType: 'weekly_outlook' }, { stop_reason: 'tool_use', content: [] }, { PULSE_MODEL: 'claude-sonnet-5-5' });
-  assert.equal(weekly.modelRequest.model, 'claude-sonnet-4-6');
-  assert.equal(weekly.modelRequest.output_config, undefined);
+  const weekly = await send({ message: 'My week', messageType: 'weekly_outlook' }, structured({}), { PULSE_MODEL: 'claude-sonnet-4-6' });
+  assert.equal(weekly.modelRequest.model, 'claude-sonnet-5-5');
+});
+
+test('every Claude request asks for the structured reply for its message type', async () => {
+  const chat = await send({ message: 'Hi', messageType: 'chat' }, reply('Hello.'));
+  assert.equal(chat.modelRequest.output_config.format.type, 'json_schema');
+  assert.deepEqual(chat.modelRequest.output_config.format.schema.required, ['reply', 'foods', 'followUps', 'remember']);
+  assert.equal(chat.modelRequest.tools, undefined);
+  const recap = await send({ message: 'Weekly recap for last week.', messageType: 'weekly_summary' }, reply('Recap.'));
+  assert.deepEqual(recap.modelRequest.output_config.format.schema.required, ['reply', 'recap', 'followUps']);
+});
+
+test('food cards and follow-ups come back clamped for the app', async () => {
+  const { result } = await send({ message: 'Dinner idea?', messageType: 'chat' }, structured({
+    reply: 'Turkey chili gets you there.',
+    foods: [{ name: 'Turkey chili (3×)', why: '31g, reheats fast' }, { name: '  ', why: 'x' }, { name: 'Cottage cheese', why: '14g' },
+      { name: 'Protein shake', why: '30g' }, { name: 'Salmon bowl', why: 'extra' }],
+    followUps: ['Give me a lighter version', '', 'Make it vegetarian', 'One more', 'Too many'],
+  }));
+  assert.equal(result.status, 200);
+  const body = await result.json();
+  assert.equal(body.reply, 'Turkey chili gets you there.');
+  assert.deepEqual(body.foods.map((f: any) => f.name), ['Turkey chili', 'Cottage cheese', 'Protein shake']);
+  assert.deepEqual(body.followUps, ['Give me a lighter version', 'Make it vegetarian', 'One more']);
+  assert.equal(body.recap, undefined);
+});
+
+test('the weekly recap returns its card, and a chat never carries one', async () => {
+  const card = { story: 'Protein held until the weekend.', wentWell: 'Yogurt breakfasts, five days.', pattern: 'Shot days ran light.', focus: 'Stage a shake for Tuesday.' };
+  const recap = await send({ message: 'Weekly recap for last week.', messageType: 'weekly_summary' }, structured({ reply: 'A steady week.', recap: card, followUps: [] }));
+  assert.deepEqual((await recap.result.json()).recap, card);
+  const chat = await send({ message: 'Hi', messageType: 'chat' }, structured({ reply: 'Hi.', recap: card, foods: [], followUps: [] }));
+  assert.equal((await chat.result.json()).recap, undefined);
+  // A partial card is dropped rather than rendered with holes; the reply still stands.
+  const partial = await send({ message: 'Weekly recap for last week.', messageType: 'weekly_summary' }, structured({ reply: 'A steady week.', recap: { ...card, focus: '' }, followUps: [] }));
+  assert.deepEqual(await partial.result.json(), { reply: 'A steady week.' });
+});
+
+test('plain text from a model without structured outputs still reads as a reply', async () => {
+  const { result } = await send({ message: 'Hi', messageType: 'chat' }, { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Hello there.' }] });
+  assert.deepEqual(await result.json(), { reply: 'Hello there.' });
+});
+
+test('truncated structured output fails visibly', async () => {
+  const { result } = await send({ message: 'Hi', messageType: 'chat' }, { stop_reason: 'max_tokens', content: [{ type: 'text', text: '{"reply":"Hel' }] });
+  assert.equal(result.status, 502);
 });
 
 test('the weekly summary reasons more than chat', async () => {
@@ -90,4 +140,55 @@ test('weekly summary context reaches the prompt through the allowlist', async ()
   assert.ok(dynamic.includes('Sep 21 – 27'));
   assert.ok(!dynamic.includes('drop me'));
   assert.ok(!dynamic.includes('injected'));
+});
+
+const about = { aboutYou: { allergies: ['Peanuts', 'Shellfish'], avoids: ['Salmon'], loves: ['Greek yogurt'], eatingPatterns: ['pescatarian', 'carnivore'], rogue: 'x' } };
+
+test('what Pulse knows reaches the prompt through the allowlist, with its rules', async () => {
+  const { modelRequest } = await send({ message: 'Hi', messageType: 'chat', context: about }, reply('Hi.'));
+  const dynamic = modelRequest.system[1].text;
+  assert.ok(dynamic.includes('Shellfish'));
+  assert.ok(dynamic.includes('pescatarian'));
+  assert.ok(!dynamic.includes('carnivore'));
+  assert.ok(!dynamic.includes('rogue'));
+  assert.ok(modelRequest.system[0].text.includes('ABOUT THE USER'));
+});
+
+test('food cards that name an allergy or an avoided food are dropped', async () => {
+  const { result } = await send({ message: 'Snack?', messageType: 'chat', context: about }, structured({
+    reply: 'A few ideas.', followUps: [], remember: [],
+    foods: [{ name: 'Peanut butter toast', why: '8g' }, { name: 'Salmon bowl', why: '42g' }, { name: 'Shrimp salad', why: '25g' },
+      { name: 'Greek yogurt', why: '20g' }],
+  }));
+  // Shrimp isn't caught by the word filter; that one rests on the prompt rule. Peanut and salmon are.
+  assert.deepEqual((await result.json()).foods.map((f: any) => f.name), ['Shrimp salad', 'Greek yogurt']);
+});
+
+test('remember offers only new, valid facts, at most two', async () => {
+  const { result } = await send({ message: 'I hate cilantro and I am allergic to shellfish', messageType: 'chat', context: about }, structured({
+    reply: 'Noted.', foods: [], followUps: [],
+    remember: [{ kind: 'avoid', value: 'Cilantro' }, { kind: 'allergy', value: 'shellfish' }, { kind: 'diet', value: 'Keto' },
+      { kind: 'love', value: '  ' }, { kind: 'love', value: 'Cottage cheese' }, { kind: 'avoid', value: 'Olives' }],
+  }));
+  assert.deepEqual((await result.json()).remember, [{ kind: 'avoid', value: 'Cilantro' }, { kind: 'love', value: 'Cottage cheese' }]);
+});
+
+test('Pulse off refuses before any model call; on, unset, or unreadable settings go through', async () => {
+  const off = await send({ message: 'Hi', messageType: 'chat' }, reply('Hi.'), {}, { pulse_enabled: false });
+  assert.equal(off.result.status, 403);
+  assert.equal((await off.result.json()).code, 'pulse_off');
+  assert.equal(off.modelRequest, undefined);
+  for (const settings of [{ pulse_enabled: true }, null, undefined]) {
+    const on = await send({ message: 'Hi', messageType: 'chat' }, reply('Hi.'), {}, settings);
+    assert.equal(on.result.status, 200);
+  }
+});
+
+test('the unit setting reaches Pulse, with a rule to answer in it', async () => {
+  const { modelRequest } = await send({ message: 'How is my weight?', messageType: 'chat', context: { user: { name: 'Sam', units: 'imperial' }, weightTrend: { mostRecent: '185.2 lbs (September 28)', sevenDayChange: '-2.4 lbs', trend: 'down' } } }, reply('Down 2.4 lbs.'));
+  assert.ok(modelRequest.system[1].text.includes('"units": "imperial"') || modelRequest.system[1].text.includes('"units":"imperial"'));
+  assert.ok(modelRequest.system[1].text.includes('185.2 lbs'));
+  assert.ok(modelRequest.system[0].text.includes('UNITS'));
+  const bogus = await send({ message: 'Hi', messageType: 'chat', context: { user: { name: 'Sam', units: 'stones' } } }, reply('Hi.'));
+  assert.ok(!bogus.modelRequest.system[1].text.includes('stones'));
 });

@@ -107,6 +107,12 @@ final class StrongWeekViewModel {
                 }
             }
             guard let week = current else { throw URLError(.badServerResponse) }
+
+            // The check-in and its adjustments are saved above regardless — that's the weekly
+            // plan input, not an AI call. Only the written outlook itself goes to the AI
+            // provider, and only Pulse sends anything there. See PulseGate.isActive.
+            guard PulseProfileStore.shared.pulseActive else { return }
+
             let foodAccess = try await FoodAccessRepository().fetch()
             let outlook: StrongWeekOutlook
             if let pendingOutlook, pendingRevision == week.contextRevision, pendingFoodAccessUpdatedAt == foodAccess?.updatedAt {

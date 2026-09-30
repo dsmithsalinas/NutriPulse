@@ -17,74 +17,108 @@ final class CoachViewModel {
     // Profile fetch failed, so the coach is answering without the user's goals/GLP-1 context.
     private(set) var profileLoadFailed = false
 
+    // MARK: Start screen
+    // Pulse opens here and never messages first (docs/daylight-redesign.md). Everything on it
+    // is built on the device; the first model call is whatever the user sends.
+    private(set) var startSuggestions: [PulseStartSuggestion] = []
+    /// Whether Pulse can see a current shot cycle, for the start screen's "what I can see" line.
+    private(set) var hasShotCycle = false
+    /// Where the current topic begins. Starting something from the start screen begins a fresh
+    /// topic, so the conversation — on screen and in the history sent to Pulse — starts there.
+    /// Marked by the last message before it rather than a timestamp: saved messages carry the
+    /// server's clock, which can trail the device's and would hide the user's first message.
+    private enum TopicStart {
+        case wholeHistory           // "Pick up where you left off"
+        case after(UUID?)           // nil: the topic started with no history at all
+    }
+    private var topicStart: TopicStart = .wholeHistory
+
     private(set) var profile: UserProfile?
     private var hasInitialized = false
-    // Whether `messages` reflects a successful history fetch. Auto-messages gate on the
-    // newest message, so they must never run against a failed (empty) load.
-    private var historyIsCurrent = false
-    private var isGeneratingAutoMessages = false
 
     private let repo = CoachRepository()
     private let contextBuilder = CoachContextBuilder()
+    private let glp1Repo = GLP1Repository()
+    private let analyticsRepo = AnalyticsRepository()
+
+    // MARK: Structured replies (docs/daylight-redesign.md)
+
+    /// The user's last 30 days of local food logs, for resolving a Pulse food suggestion to
+    /// something that can be logged again in one tap. See `PulseFoodResolver`.
+    private(set) var recentFoodLogs: [FoodLog] = []
+
+    /// Weekly recap chart data, built from the app's own local data (never from Pulse's text)
+    /// and cached per message id so scrolling the conversation doesn't re-fetch it. Lazily
+    /// loaded by the view when a recap card appears.
+    struct RecapChartData {
+        let days: [CoachContextBundle.LastWeekContext.Day]
+        let goalProteinG: Double?
+    }
+    private var recapCharts: [UUID: RecapChartData] = [:]
+
+    /// The conversation as shown: the current topic, or all history when picking up.
+    var visibleMessages: [CoachMessage] {
+        switch topicStart {
+        case .wholeHistory, .after(nil):
+            return messages
+        case .after(let boundary?):
+            guard let index = messages.firstIndex(where: { $0.id == boundary }) else { return messages }
+            return Array(messages[(index + 1)...])
+        }
+    }
+
+    private func beginTopic() {
+        topicStart = .after(messages.last?.id)
+    }
+
+    /// The newest thing the user said, for "Pick up where you left off".
+    var lastUserMessage: CoachMessage? {
+        messages.last { $0.isUser }
+    }
+
+    var firstName: String? {
+        profile?.fullName?
+            .split(separator: " ")
+            .first
+            .map(String.init)
+    }
 
     // MARK: - Initialization
 
     // Only runs once — safe to call on every tab selection; no-ops after first run.
-    func loadIfNeeded() async {
-        guard !hasInitialized else { return }
+    /// Returns whether this call did the load (and so already built the start screen).
+    @discardableResult
+    func loadIfNeeded() async -> Bool {
+        guard !hasInitialized else { return false }
         hasInitialized = true
         await loadAndInitialize()
+        return true
     }
 
-    // Called after clearing history so the tab reloads fresh.
-    //
-    // The flag must be restored. Leaving it false meant the next tap on the Pulse tab ran
-    // loadAndInitialize a second time — and worse, if the user switched to Pulse while this
-    // reload was still in flight, loadIfNeeded's guard passed (flag still false) and a
-    // concurrent init started. Both saw `messages` empty, both cleared maybeGenerateCheckin's
-    // 8-hour cutoff before either appended, and two check-ins were generated, two Claude
-    // calls billed, both persisted.
+    // Called after clearing history so the tab reloads fresh. The flag stays set so a tab
+    // switch while this is in flight can't start a second, concurrent load.
     func reload() async {
         hasInitialized = true
-        historyIsCurrent = false
         messages = []
+        topicStart = .wholeHistory
         await loadAndInitialize()
     }
 
+    // Pulse no longer generates a check-in or weekly summary when the tab opens. Those were
+    // the only model calls made without the user asking; proactive coaching now lives in
+    // notifications (smart coaching, Your Strong Week), and the recap waits for a tap.
     private func loadAndInitialize() async {
+        #if DEBUG
+        if Self.isPreview {
+            loadPreview()
+            await refreshStartSuggestions()
+            return
+        }
+        #endif
         await loadProfile()
         await refreshSuggestedPrompts()
-        let historyLoaded = await loadHistory()
-        // Same double-billing the reload() comment above describes, reached through a failed
-        // fetch instead of a race: maybeGenerateCheckin's 8-hour cutoff reads `messages.last`,
-        // so an empty history clears it and bills a duplicate Claude call for a check-in that
-        // may already exist. Without a known-good history we can't tell, so don't guess.
-        guard historyLoaded else { return }
-        await generateDueAutoMessages()
-    }
-
-    // Called every time the Pulse tab is shown and whenever Footing returns to the foreground
-    // with Pulse on screen. Check-ins and the Monday recap used to be evaluated only inside
-    // loadIfNeeded — once per process. iOS keeps Footing alive in memory for days, so a user
-    // who last cold-launched on Friday opened Pulse on Monday and got neither: that is why
-    // the Monday recap "never came". Both generators are self-gated, so calling this often
-    // costs nothing when nothing is due.
-    func refreshAutoMessages() async {
-        guard hasInitialized, historyIsCurrent else { return }
-        await generateDueAutoMessages()
-    }
-
-    // The recap goes first and stands in for that visit's check-in: once it's saved it is the
-    // newest message, so the check-in's 8-hour cutoff skips. Two automatic messages back to
-    // back read like a notification feed, not a coach.
-    private func generateDueAutoMessages() async {
-        // Not while a user message is in flight: generateAutoMessage owns `isLoading` too and
-        // would clear it underneath sendMessage.
-        guard !isGeneratingAutoMessages, !isLoading else { return }
-        isGeneratingAutoMessages = true
-        defer { isGeneratingAutoMessages = false }
-        await maybeGenerateWeeklySummary()
-        await maybeGenerateCheckin()
+        await loadHistory()
+        await refreshStartSuggestions()
     }
 
     // Retry entry point for the offline/error state.
@@ -142,6 +176,265 @@ final class CoachViewModel {
         )
     }
 
+    /// Rebuilds the start screen's tiles. Called on every visit to the tab and on returning to
+    /// the foreground, since the protein gap and shot day move through the day. Cheap: local
+    /// cache plus two small lookups, no model call.
+    /// The running personal experiment, when there is one, so the start screen's
+    /// "Experiment · day X of Y" tile can open it for today's check-in.
+    private(set) var runningExperiment: PersonalExperiment?
+
+    /// Today's experiment check-in tile, if an experiment is running and today isn't logged yet.
+    /// Any lookup failure means no tile: a missing nudge is better than a wrong one.
+    private func experimentCheckInPrompt() async -> ExperimentCheckInPrompt? {
+        guard let experiments = try? await ExperimentRepository().fetchAll(),
+              let running = experiments.first(where: { $0.status == .running }),
+              let timeline = ExperimentTimelineCalculator.timeline(
+                  interventionStart: running.interventionStart, endDate: running.endDate),
+              !timeline.hasElapsed,
+              let goals = try? await PersonalGoalRepository().fetchActiveGoals()
+        else {
+            runningExperiment = nil
+            return nil
+        }
+        runningExperiment = running
+        let today = Date.now.isoDateString
+        let checkedIn = goals.first { $0.goal.id == running.interventionGoalId }?
+            .checkins.contains { $0.localDate == today } ?? false
+        return ExperimentCheckInPrompt(dayIndex: timeline.dayIndex, totalDays: timeline.totalDays,
+                                       hasCheckedInToday: checkedIn)
+    }
+
+    func refreshStartSuggestions() async {
+        await refreshRecentFoodLogs()
+        #if DEBUG
+        if Self.isPreview {
+            hasShotCycle = true
+            startSuggestions = CoachSuggestionBuilder.startSuggestions(
+                totalProteinG: 112, proteinGoalG: 140, cycleDay: 3, recapDue: true, now: .now
+            )
+            return
+        }
+        #endif
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+
+        let logs = (try? LocalStore.shared.fetchFoodLogs(for: .now, userId: userId)) ?? []
+        let goal = try? LocalStore.shared.fetchGoal(for: .now, userId: userId)
+
+        async let latestDose = glp1Repo.fetchRecentLogs(limit: 1)
+        async let skips = glp1Repo.fetchSkippedDoses()
+        async let lastRecap = repo.lastWeeklySummaryDate()
+        async let experimentCheckIn = experimentCheckInPrompt()
+
+        var cycleDay: Int?
+        var cycleLength = 7
+        // Paused or stopped: no shot tile and no "your shot week" line.
+        if GLP1TrackingStore.shared.isTracking, let log = (try? await latestDose)?.first, let skips = try? await skips {
+            cycleLength = log.cycleLengthDays
+            let schedule = GLP1DoseSchedule(latest: log, skips: skips)
+            if !schedule.cycleInterrupted {
+                cycleDay = Calendar.current.dateComponents(
+                    [.day],
+                    from: Calendar.current.startOfDay(for: log.injectedAt),
+                    to: Calendar.current.startOfDay(for: .now)
+                ).day.flatMap { $0 >= 0 ? $0 : nil }
+            }
+        }
+        hasShotCycle = cycleDay != nil
+
+        // A failed lookup hides the tile rather than offering it: unknown is not "no recap
+        // yet", and offering it could bill a second recap for a week that already has one.
+        let recapDue: Bool
+        do {
+            recapDue = WeeklyRecapSchedule.isDue(now: .now, lastRecapAt: try await lastRecap)
+        } catch {
+            recapDue = false
+        }
+
+        startSuggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: logs.reduce(0) { $0 + $1.totalProteinG },
+            proteinGoalG: goal?.proteinG,
+            cycleDay: cycleDay,
+            cycleLength: cycleLength,
+            recapDue: recapDue,
+            now: .now,
+            experimentCheckIn: await experimentCheckIn
+        )
+    }
+
+    // MARK: - Structured replies: food cards
+
+    // Preview sets its own fixture logs directly (loadPreview); a real fetch here would
+    // overwrite them with an empty local cache.
+    private func refreshRecentFoodLogs() async {
+        #if DEBUG
+        if Self.isPreview { return }
+        #endif
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+        let since = Date.now.addingTimeInterval(-30 * 24 * 3600)
+        recentFoodLogs = (try? LocalStore.shared.fetchFoodLogs(since: since, userId: userId)) ?? []
+    }
+
+    /// The user's own log this food-card name resolves to, or nil to hide the card. Pure
+    /// matching lives in `PulseFoodResolver`; see its tests.
+    func resolveFoodLog(named name: String) -> FoodLog? {
+        PulseFoodResolver.resolve(name, in: recentFoodLogs)
+    }
+
+    /// Logs a resolved food suggestion again, to the meal for the current time of day, today —
+    /// the same local-first write `FavoritesViewModel.logAgain` uses for "log again" on a
+    /// Recents row, so a Pulse food card and a Favorites row behave identically.
+    @discardableResult
+    func logSuggestedFood(_ log: FoodLog) async -> Bool {
+        guard let userId = try? await supabase.auth.session.user.id else { return false }
+        do {
+            try LocalStore.shared.insertFoodLog(
+                id: UUID(),
+                userId: userId,
+                logDate: Date.now.isoDateString,
+                meal: Meal.current.rawValue,
+                foodItemId: log.foodItemId,
+                foodItemName: log.displayName,
+                quantity: log.quantity,
+                caloriesSnapshot: log.caloriesSnapshot,
+                proteinGSnapshot: log.proteinGSnapshot,
+                carbsGSnapshot: log.carbsGSnapshot,
+                fatGSnapshot: log.fatGSnapshot,
+                fiberGSnapshot: log.fiberGSnapshot
+            )
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    // MARK: - Structured replies: weekly recap chart
+
+    /// Already-loaded chart data for this recap message, if any. The view calls
+    /// `loadRecapChartIfNeeded` first (typically from `.task`) to populate it.
+    func recapChart(for message: CoachMessage) -> RecapChartData? {
+        recapCharts[message.id]
+    }
+
+    /// Builds the 7-day protein chart for a recap message's week from the app's own local data
+    /// — Pulse only writes the four text fields; the bars are never taken from its reply. Keyed
+    /// off the message's own `createdAt` (not `.now`) so an old recap, opened later, still shows
+    /// the week it was actually written about.
+    func loadRecapChartIfNeeded(for message: CoachMessage) async {
+        guard message.payload?.recap != nil, recapCharts[message.id] == nil else { return }
+        #if DEBUG
+        if Self.isPreview {
+            recapCharts[message.id] = Self.previewRecapChart
+            return
+        }
+        #endif
+        let interval = WeeklyRecapSchedule.lastWeek(before: message.createdAt)
+        let summaries = (try? await analyticsRepo.fetchDailySummaries(from: interval.start, through: interval.end)) ?? []
+        let userId = try? await supabase.auth.session.user.id
+        let goal = userId.flatMap { try? LocalStore.shared.fetchGoal(for: .now, userId: $0) }
+        let lastWeek = WeeklyRecapDigest.build(
+            interval: interval, summaries: summaries, movement: [], weightLogs: [], checkIns: [], foodNames: [],
+            proteinGoal: goal?.proteinG
+        )
+        recapCharts[message.id] = RecapChartData(days: lastWeek.days, goalProteinG: goal?.proteinG)
+    }
+
+    // MARK: - Structured replies: "Save to what Pulse knows?" cards
+
+    private enum RememberCardState { case saving, saved }
+    // Per message, per suggestion: saving/saved (kept visible, drawn as resolved) or dismissed
+    // (hidden). In-memory only — a fresh launch re-evaluates purely from what's saved.
+    private var rememberStates: [UUID: [PulseRememberSuggestion: RememberCardState]] = [:]
+    private var rememberDismissed: [UUID: Set<PulseRememberSuggestion>] = [:]
+
+    /// The suggestion cards still worth showing under this assistant message: never something
+    /// already in what Pulse knows (the server already dedupes; this also covers a value saved
+    /// from a different message in the same session), and not "Not now"-ed. A card already being
+    /// saved or just saved stays visible — it must not vanish out from under the "Saved" state
+    /// the instant `isAlreadyKnown` starts matching it.
+    func rememberCards(for message: CoachMessage) -> [PulseRememberSuggestion] {
+        guard let all = message.payload?.remember, !all.isEmpty else { return [] }
+        let dismissed = rememberDismissed[message.id] ?? []
+        let states = rememberStates[message.id] ?? [:]
+        return all.filter { suggestion in
+            if dismissed.contains(suggestion) { return false }
+            if states[suggestion] != nil { return true }
+            return !isAlreadyKnown(suggestion)
+        }
+    }
+
+    func rememberIsSaving(_ suggestion: PulseRememberSuggestion, in message: CoachMessage) -> Bool {
+        rememberStates[message.id]?[suggestion] == .saving
+    }
+
+    func rememberIsSaved(_ suggestion: PulseRememberSuggestion, in message: CoachMessage) -> Bool {
+        rememberStates[message.id]?[suggestion] == .saved
+    }
+
+    private func isAlreadyKnown(_ suggestion: PulseRememberSuggestion) -> Bool {
+        let prefs = PulseProfileStore.shared.preferences
+        let items: [String]
+        switch suggestion.kind {
+        case .allergy: items = prefs.allergies
+        case .avoid: items = prefs.avoids
+        case .love: items = prefs.loves
+        }
+        return items.contains { $0.caseInsensitiveCompare(suggestion.value) == .orderedSame }
+    }
+
+    /// Allergies are safety-relevant and are never saved except by this explicit tap — nothing
+    /// else in the app writes to `allergies`.
+    func saveRememberSuggestion(_ suggestion: PulseRememberSuggestion, in message: CoachMessage) async {
+        guard rememberStates[message.id]?[suggestion] == nil else { return }
+        rememberStates[message.id, default: [:]][suggestion] = .saving
+        do {
+            try await PulseProfileStore.shared.remember(suggestion)
+            rememberStates[message.id, default: [:]][suggestion] = .saved
+        } catch {
+            rememberStates[message.id]?[suggestion] = nil
+            self.error = "Couldn't save that. Try again."
+        }
+    }
+
+    func dismissRememberSuggestion(_ suggestion: PulseRememberSuggestion, in message: CoachMessage) {
+        rememberDismissed[message.id, default: []].insert(suggestion)
+    }
+
+    // MARK: - Topics
+
+    /// Starts a fresh topic from the start screen: the conversation view and the history sent
+    /// to Pulse both begin here.
+    func startTopic(_ prompt: String) async {
+        guard !isLoading else { return }
+        beginTopic()
+        await sendMessage(prompt)
+    }
+
+    /// "Pick up where you left off" and the history button: show everything saved.
+    func resumeConversation() {
+        topicStart = .wholeHistory
+    }
+
+    /// The Monday Recap tile. The only way the weekly summary is generated now.
+    func requestWeeklyRecap() async {
+        guard !isLoading else { return }
+        beginTopic()
+        do {
+            let userId = try await supabase.auth.session.user.id
+            let asked: CoachMessage = try await repo.save(
+                NewCoachMessage(userId: userId, role: "user", content: "Monday Recap", messageType: "chat")
+            )
+            messages.append(asked)
+        } catch {
+            self.error = EdgeFunctionError.message(from: error, fallback: "Couldn't reach Pulse right now. Try again.")
+            return
+        }
+        await generateAutoMessage(type: "weekly_summary", trigger: "Weekly recap for last week.")
+        // Once written, this week's recap hides the tile.
+        await refreshStartSuggestions()
+    }
+
     private static let historyPageSize = 30
 
     // Returns whether the fetch actually succeeded — callers must not treat a failed load as
@@ -153,11 +446,9 @@ final class CoachViewModel {
             // A full page means there is probably more behind it.
             canLoadOlder = messages.count == Self.historyPageSize
             historyLoadFailed = false
-            historyIsCurrent = true
             return true
         } catch {
             historyLoadFailed = true
-            historyIsCurrent = false
             return false
         }
     }
@@ -177,55 +468,50 @@ final class CoachViewModel {
         }
     }
 
-    // MARK: - Auto-generated messages
+    // MARK: - Structured requests
 
-    private func maybeGenerateCheckin() async {
-        let cutoff = Date.now.addingTimeInterval(-8 * 3600)
-        if let last = messages.last, last.createdAt > cutoff { return }
-        let hour = Calendar.current.component(.hour, from: .now)
-        let trigger: String
-        switch hour {
-        case 5..<11:  trigger = "Morning check-in."
-        case 11..<15: trigger = "Midday check-in."
-        case 15..<20: trigger = "Afternoon check-in."
-        default:      trigger = "Evening check-in."
-        }
-        await generateAutoMessage(type: "checkin", trigger: trigger)
-    }
-
-    private func maybeGenerateWeeklySummary() async {
-        // Cheap local check first so the other six-ish days of the week don't hit the network.
-        guard WeeklyRecapSchedule.isDue(now: .now, lastRecapAt: nil) else { return }
-        let lastRecap: Date?
-        do {
-            lastRecap = try await repo.lastWeeklySummaryDate()
-        } catch {
-            // `try?` here used to turn a failed lookup into "no recap yet" and bill a
-            // duplicate. Unknown is not "never" — try again next visit.
-            return
-        }
-        guard WeeklyRecapSchedule.isDue(now: .now, lastRecapAt: lastRecap) else { return }
-        await generateAutoMessage(type: "weekly_summary", trigger: "Weekly recap for last week.")
-    }
-
+    // A request Pulse answers from a trigger rather than the user's words (today, only the
+    // weekly recap). The trigger isn't saved; the reply is, tagged with `type`.
     private func generateAutoMessage(type: String, trigger: String) async {
         isLoading = true
         await ensureProfileLoaded()
         let context = await contextBuilder.build(profile: profile, includeLastWeek: type == "weekly_summary")
-        let historyItems = messages.suffix(15).map { ChatRequest.HistoryItem(role: $0.role, content: $0.content) }
+        let historyItems = visibleMessages.suffix(15).map { ChatRequest.HistoryItem(role: $0.role, content: $0.content) }
         do {
             let userId = try await supabase.auth.session.user.id
             let req = ChatRequest(message: trigger, messageType: type, history: historyItems, context: context)
             let resp: ChatResponse = try await supabase.functions.invoke("coach-chat", options: .init(body: req))
             if let reply = resp.reply {
-                let saved: CoachMessage = try await repo.save(
-                    NewCoachMessage(userId: userId, role: "assistant", content: reply, messageType: type)
+                let saved = try await saveAssistantReply(
+                    userId: userId, content: reply, messageType: type, payload: resp.payload
                 )
                 messages.append(saved)
                 Telemetry.checkinMessageViewed(messageType: type)
             }
         } catch { }
         isLoading = false
+    }
+
+    // MARK: - Saving assistant replies
+
+    /// Saves an assistant message with its structured payload (foods, follow-ups, recap). The
+    /// `coach_messages.payload` column may not exist yet in this environment (the migration
+    /// hasn't shipped to production) — if the insert fails and a payload was attached, retry
+    /// once without it, since losing a card is better than losing the whole message.
+    @discardableResult
+    private func saveAssistantReply(
+        userId: UUID, content: String, messageType: String, payload: CoachMessagePayload?
+    ) async throws -> CoachMessage {
+        do {
+            return try await repo.save(
+                NewCoachMessage(userId: userId, role: "assistant", content: content, messageType: messageType, payload: payload)
+            )
+        } catch {
+            guard payload != nil else { throw error }
+            return try await repo.save(
+                NewCoachMessage(userId: userId, role: "assistant", content: content, messageType: messageType, payload: nil)
+            )
+        }
     }
 
     // MARK: - User-initiated messages
@@ -253,8 +539,8 @@ final class CoachViewModel {
 
             await ensureProfileLoaded()
             let context = await contextBuilder.build(profile: profile)
-            // Send up to 14 prior turns (7 exchanges) as history
-            let historyItems = messages.dropLast().suffix(14).map {
+            // Send up to 14 prior turns (7 exchanges) of the current topic as history
+            let historyItems = visibleMessages.dropLast().suffix(14).map {
                 ChatRequest.HistoryItem(role: $0.role, content: $0.content)
             }
 
@@ -273,14 +559,14 @@ final class CoachViewModel {
             // and told the user "Couldn't reach Pulse" even though Pulse had answered.
             let assistantMsg = CoachMessage(
                 id: UUID(), userId: userId, role: "assistant",
-                content: reply, messageType: "chat", createdAt: .now
+                content: reply, messageType: "chat", createdAt: .now, payload: resp.payload
             )
             messages.append(assistantMsg)
             Telemetry.coachMessageSent(messageType: "chat")
 
             do {
-                _ = try await repo.save(
-                    NewCoachMessage(userId: userId, role: "assistant", content: reply, messageType: "chat")
+                _ = try await saveAssistantReply(
+                    userId: userId, content: reply, messageType: "chat", payload: resp.payload
                 )
             } catch {
                 // The reply is on screen and useful; it just won't survive a relaunch.
@@ -315,6 +601,125 @@ final class CoachViewModel {
     }
 }
 
+// MARK: - Preview
+
+#if DEBUG
+extension CoachViewModel {
+    // `--pulse-preview`: the start screen and a short conversation from fixtures, with no
+    // account or network, so the redesign can be checked in the simulator.
+    static var isPreview: Bool {
+        DebugLaunch.has("--pulse-preview")
+    }
+
+    fileprivate func loadPreview() {
+        let user = UUID()
+        let yesterday = Date.now.addingTimeInterval(-26 * 3600)
+        profile = UserProfile(
+            id: user, email: "preview@example.com", fullName: "Dustin Smith-Salinas", dob: nil, sex: nil,
+            heightCm: nil, activityLevel: nil, weightGoal: nil, dietaryPrefs: nil, createdAt: .now
+        )
+        messages = [
+            CoachMessage(id: UUID(), userId: user, role: "user",
+                         content: "Not very hungry tonight. What's easy?", messageType: "chat", createdAt: yesterday),
+            CoachMessage(
+                id: UUID(), userId: user, role: "assistant",
+                content: "Go small and dense. Any of these covers most of the last 28g without a big plate: the shake alone gets you there.",
+                messageType: "chat", createdAt: yesterday.addingTimeInterval(20),
+                payload: CoachMessagePayload(
+                    foods: [
+                        .init(name: "Protein shake", why: "1 bottle · you log this often"),
+                        .init(name: "Greek yogurt", why: "1 cup, 20g"),
+                    ],
+                    followUps: ["Something warm?", "Plan tomorrow", "Dessert ideas"],
+                    recap: nil
+                )
+            ),
+            CoachMessage(id: UUID(), userId: user, role: "user",
+                         content: "Monday Recap", messageType: "chat", createdAt: yesterday.addingTimeInterval(3600)),
+            CoachMessage(
+                id: UUID(), userId: user, role: "assistant",
+                content: """
+                Steady all week, until the weekend took the protein.
+                Went well: three floor days mid-week, mostly thanks to yogurt breakfasts.
+                Pattern: your lightest days matched your low-appetite check-ins.
+                This week's focus: stage a small yogurt bowl for Saturday morning.
+                """,
+                messageType: "weekly_summary", createdAt: yesterday.addingTimeInterval(3620),
+                payload: CoachMessagePayload(
+                    foods: nil,
+                    followUps: ["Plan Saturday", "Low-appetite ideas", "Explain the weekend dip"],
+                    recap: .init(
+                        story: "Steady all week, until the weekend took the protein.",
+                        wentWell: "Three floor days mid-week, mostly thanks to yogurt breakfasts.",
+                        pattern: "Your lightest days matched your low-appetite check-ins.",
+                        focus: "Stage a small yogurt bowl for Saturday morning."
+                    )
+                )
+            ),
+            CoachMessage(id: UUID(), userId: user, role: "user",
+                         content: "Also, I can't do cilantro — tastes like soap to me.",
+                         messageType: "chat", createdAt: yesterday.addingTimeInterval(7200)),
+            CoachMessage(
+                id: UUID(), userId: user, role: "assistant",
+                content: "Good to know — I'll steer suggestions away from it.",
+                messageType: "chat", createdAt: yesterday.addingTimeInterval(7220),
+                payload: CoachMessagePayload(
+                    foods: nil,
+                    followUps: ["Give me another idea", "Plan my dinner"],
+                    recap: nil,
+                    remember: [.init(kind: .avoid, value: "Cilantro")]
+                )
+            ),
+        ]
+
+        // What Pulse already knows, so the start screen's link and AboutYouView have
+        // content — and so the Cilantro card above reads as new, not a repeat.
+        PulseProfileStore.shared.setForPreview(preferences: .init(
+            allergies: ["Peanuts"],
+            allergyNote: "",
+            eatingPatterns: [.pescatarian],
+            loves: ["Greek yogurt"],
+            avoids: []
+        ))
+
+        // Lets the food cards above resolve to something loggable, the same way a real
+        // conversation resolves against the last 30 days of local logs.
+        recentFoodLogs = [
+            FoodLog(
+                id: UUID(), userId: user, loggedAt: yesterday, logDate: yesterday.isoDateString,
+                meal: .snack, foodItemId: UUID(), quantity: 1,
+                caloriesSnapshot: 160, proteinGSnapshot: 30, carbsGSnapshot: 6, fatGSnapshot: 3, fiberGSnapshot: 0,
+                foodItems: .init(name: "Protein shake", brand: nil, servingDesc: nil)
+            ),
+            FoodLog(
+                id: UUID(), userId: user, loggedAt: yesterday.addingTimeInterval(-3600), logDate: yesterday.isoDateString,
+                meal: .breakfast, foodItemId: UUID(), quantity: 1,
+                caloriesSnapshot: 150, proteinGSnapshot: 20, carbsGSnapshot: 9, fatGSnapshot: 4, fiberGSnapshot: 0,
+                foodItems: .init(name: "Greek yogurt", brand: nil, servingDesc: nil)
+            ),
+        ]
+    }
+
+    // Fixture chart for the preview recap card — the only place fabricated protein numbers are
+    // allowed; a real recap always builds this from local data (`loadRecapChartIfNeeded`).
+    fileprivate static var previewRecapChart: RecapChartData {
+        let days: [(String, Bool, Int?, Bool?)] = [
+            ("Mon", true, 138, true), ("Tue", true, 121, false), ("Wed", true, 145, true),
+            ("Thu", true, 140, true), ("Fri", true, 118, false), ("Sat", false, nil, nil), ("Sun", true, 95, false),
+        ]
+        return RecapChartData(
+            days: days.map { day in
+                CoachContextBundle.LastWeekContext.Day(
+                    day: day.0, logged: day.1, calories: day.2.map { $0 * 12 }, proteinG: day.2,
+                    proteinFloorHit: day.3, workoutMinutes: nil, cycleDay: nil, appetite: nil
+                )
+            },
+            goalProteinG: 140
+        )
+    }
+}
+#endif
+
 // MARK: - Private request / response types
 
 private struct ChatRequest: Encodable {
@@ -329,7 +734,23 @@ private struct ChatRequest: Encodable {
     }
 }
 
+// Mirrors `coach-chat`'s response shape (supabase/functions/_shared/pulse-context.ts): `reply`
+// is always present when the call succeeds; the extras are absent whenever Pulse didn't produce
+// them (no length/count constraints server-side — `parsePulseReply` already clamps counts before
+// this ever reaches the client).
 private struct ChatResponse: Decodable {
     let reply: String?
     let error: String?
+    let foods: [CoachMessagePayload.FoodSuggestion]?
+    let followUps: [String]?
+    let recap: CoachMessagePayload.Recap?
+    // 0–2 things Pulse heard the user say about themselves, already deduped server-side
+    // against what's saved (supabase/functions/_shared/pulse-context.ts).
+    let remember: [PulseRememberSuggestion]?
+
+    /// nil when none of the extras are present, so a save never attaches an empty payload.
+    var payload: CoachMessagePayload? {
+        guard foods != nil || followUps != nil || recap != nil || remember != nil else { return nil }
+        return CoachMessagePayload(foods: foods, followUps: followUps, recap: recap, remember: remember)
+    }
 }

@@ -20,6 +20,10 @@ struct CoachContextBundle: Encodable {
     var strongWeek: StrongWeekContext? = nil
     var weeklyEvidence: StrongWeekEvidence? = nil
     var foodAccess: FoodAccessContext? = nil
+    // What Pulse knows about the user (docs/daylight-redesign.md, step 8): allergies, how they
+    // eat, foods they love/avoid. nil when the user hasn't told Pulse anything yet, so the
+    // "ABOUT THE USER" prompt section can be omitted entirely rather than sent empty.
+    var aboutYou: AboutYouContext? = nil
     // Only for Pulse's weekly summary message (nil otherwise, and omitted from the JSON). The
     // rolling seven-day window ends today — on a Monday morning that's six days of last week
     // plus an empty day — so the summary was describing the wrong week.
@@ -30,6 +34,9 @@ struct CoachContextBundle: Encodable {
         let sex: String?
         let activityLevel: String?
         let weightGoal: String?   // "lose" | "maintain" | "gain" — nil until chosen post-onboarding
+        /// "metric" | "imperial" — the Profile unit setting, so Pulse answers in the units the
+        /// app shows (lbs and inches for imperial), never a mix.
+        let units: String
     }
 
     struct GoalContext: Encodable {
@@ -248,6 +255,7 @@ struct CoachContextBuilder {
         // 30 days so CelebrationEngine can see streaks longer than a week;
         // the "7-day history" narrative below just slices the tail of this.
         async let foodAccessTask = FoodAccessRepository().fetch()
+        async let aboutYouTask = loadAboutYou()
         async let strongWeekTask = StrongWeekRepository().context()
         async let summariesTask = analyticsRepo.fetchDailySummaries(days: 30)
         async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
@@ -289,8 +297,11 @@ struct CoachContextBuilder {
         }
 
         let summaries = (try? await summariesTask) ?? []
-        let glp1Logs = (try? await glp1Task) ?? []
-        let shotCheckIns = (try? await shotCheckInTask) ?? []
+        // Paused or stopped: Pulse isn't told about the shot at all (no medication, cycle day,
+        // dose status or check-ins), so it coaches as it would anyone not on GLP-1.
+        let tracking = await MainActor.run { GLP1TrackingStore.shared.isTracking }
+        let glp1Logs = tracking ? ((try? await glp1Task) ?? []) : []
+        let shotCheckIns = tracking ? ((try? await shotCheckInTask) ?? []) : []
         let weightLogs = (try? await weightTask) ?? []
         let bodyGoals = (try? await bodyGoalsTask) ?? nil
         let activeCal = await activeCalTask
@@ -317,7 +328,7 @@ struct CoachContextBuilder {
             summaries: summaries,
             goal: goal,
             glp1Log: glp1Logs.first,
-            skippedDoses: try? await skippedDosesTask,
+            skippedDoses: tracking ? try? await skippedDosesTask : nil,
             shotCheckIn: shotCheckIns.first { $0.checkinDate == Date.now.isoDateString },
             weightLogs: weightLogs,
             bodyGoals: bodyGoals,
@@ -332,11 +343,23 @@ struct CoachContextBuilder {
         context.strongWeek = try? await strongWeekTask
         do { context.foodAccess = .make(try await foodAccessTask) }
         catch { context.foodAccess = .unavailable }
+        context.aboutYou = await aboutYouTask
         if includeWeeklyEvidence {
             context.weeklyEvidence = await StrongWeekEvidenceBuilder().build(proteinTarget: goal?.proteinG)
         }
         context.lastWeek = lastWeek
         return context
+    }
+
+    // What Pulse knows about the user (PulseProfileStore). Loaded on demand — most surfaces
+    // that build context never otherwise touch the store — and nil when there's nothing saved,
+    // so an empty aboutYou block never reaches the prompt.
+    private func loadAboutYou() async -> AboutYouContext? {
+        if await !PulseProfileStore.shared.isLoaded {
+            await PulseProfileStore.shared.load()
+        }
+        let prefs = await PulseProfileStore.shared.preferences
+        return prefs.isEmpty ? nil : AboutYouContext(prefs)
     }
 
     // Everything the Monday recap needs about the completed Mon–Sun week, fetched together.
@@ -367,10 +390,16 @@ struct CoachContextBuilder {
             summaries: (try? await summariesTask) ?? [],
             movement: (try? await movementTask) ?? [],
             weightLogs: (try? await weightTask) ?? [],
-            checkIns: (try? await checkInTask) ?? [],
+            checkIns: await MainActor.run { GLP1TrackingStore.shared.isTracking } ? ((try? await checkInTask) ?? []) : [],
             foodNames: (try? await foodNamesTask) ?? [],
-            proteinGoal: goal?.proteinG
+            proteinGoal: goal?.proteinG,
+            units: units
         )
+    }
+
+    /// The Profile unit setting (`@AppStorage("unitSystem")`); metric when unset.
+    private var units: UnitSystem {
+        UnitSystem(rawValue: UserDefaults.standard.string(forKey: "unitSystem") ?? "metric") ?? .metric
     }
 
     // MARK: - Private assembly
@@ -402,7 +431,8 @@ struct CoachContextBuilder {
             name: profile?.fullName?.components(separatedBy: " ").first ?? "there",
             sex: profile?.sex,
             activityLevel: profile?.activityLevel,
-            weightGoal: profile?.weightGoal
+            weightGoal: profile?.weightGoal,
+            units: units.rawValue
         )
 
         // Goals
@@ -548,13 +578,14 @@ struct CoachContextBuilder {
         if let latest = weightLogs.last {
             let df = DateFormatter()
             df.dateFormat = "MMMM d"
-            let latestStr = "\(String(format: "%.1f", latest.weightKg)) kg (\(df.string(from: latest.loggedAt)))"
+            // In the user's units, so Pulse quotes the same numbers the app shows.
+            let latestStr = "\(units.formatWeight(latest.weightKg)) (\(df.string(from: latest.loggedAt)))"
             if weightLogs.count > 1, let first = weightLogs.first {
                 let delta = latest.weightKg - first.weightKg
                 let dir = delta < -0.05 ? "down" : delta > 0.05 ? "up" : "stable"
                 weightTrend = .init(
                     mostRecent: latestStr,
-                    sevenDayChange: "\(delta >= 0 ? "+" : "")\(String(format: "%.1f", delta)) kg",
+                    sevenDayChange: "\(delta >= 0 ? "+" : "")\(String(format: "%.1f", units.weightInput(from: delta))) \(units.weightUnit)",
                     trend: dir
                 )
             } else {

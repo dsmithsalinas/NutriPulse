@@ -12,25 +12,22 @@ struct RecoveryCoachCard: View {
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 38, height: 38)
-                    .background(Theme.Colors.primaryGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(opportunity.hasGap ? "Feed the work" : "Recovery covered")
-                        .font(Theme.Typography.headline)
-                    Text("\(opportunity.workoutName) · \(opportunity.durationMinutes) min")
-                        .font(Theme.Typography.caption)
+                        .font(Theme.Fonts.body(17, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Text("\(opportunity.workoutName) \u{00B7} \(opportunity.durationMinutes) min")
+                        .font(Theme.Fonts.body(13))
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
                 Spacer()
-                Text("RECOVERY")
-                    .font(.system(size: 10, weight: .bold))
-                    .tracking(0.8)
-                    .foregroundStyle(Theme.Colors.primary)
+                TileEyebrow("Recovery", color: Theme.Colors.primaryText)
             }
 
             Text(detail)
-                .font(.subheadline)
+                .font(Theme.Fonts.body(14))
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -38,30 +35,24 @@ struct RecoveryCoachCard: View {
                 HStack(spacing: Theme.Spacing.sm) {
                     if opportunity.proteinGap > 0 {
                         Button("Close \(opportunity.proteinGap)g gap", action: onCloseGap)
-                            .buttonStyle(.borderedProminent)
-                            .tint(Theme.Colors.primary)
+                            .font(Theme.Fonts.body(14, .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .frame(height: 44)
+                            .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
                     }
                     if opportunity.waterGapMl > 0 {
                         Button("+ Water") { onAddWater(min(Double(opportunity.waterGapMl), 500)) }
-                            .buttonStyle(.bordered)
+                            .font(Theme.Fonts.body(14, .semibold))
+                            .foregroundStyle(Theme.Colors.skyAction)
+                            .padding(.horizontal, 14)
+                            .frame(height: 44)
+                            .background(Theme.Colors.sky, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
                     }
                 }
-                .font(.subheadline.weight(.semibold))
             }
         }
-        .padding(Theme.Spacing.md)
-        .background {
-            LinearGradient(
-                colors: [Theme.Colors.primary.opacity(0.11), Theme.Colors.surfaceCard],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Theme.Colors.primary.opacity(0.22), lineWidth: 1)
-        }
+        .tile(radius: Theme.Radius.tileSmall, padding: Theme.Spacing.md)
     }
 
     private var detail: String {
@@ -84,9 +75,10 @@ struct RepeatYesterdayCard: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Same as yesterday?")
-                        .font(Theme.Typography.headline)
+                        .font(Theme.Fonts.body(17, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                     Text("Bring back a whole meal in one tap.")
-                        .font(Theme.Typography.caption)
+                        .font(Theme.Fonts.body(13))
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
                 Spacer()
@@ -107,14 +99,14 @@ struct RepeatYesterdayCard: View {
                                     Image(systemName: entry.meal.icon)
                                 }
                                 Text(entry.meal.displayName)
-                                Text("· \(entry.itemCount)")
-                                    .foregroundStyle(.secondary)
+                                Text("\u{00B7} \(entry.itemCount)")
+                                    .foregroundStyle(Theme.Colors.textSecondary)
                             }
-                            .font(.subheadline.weight(.semibold))
+                            .font(Theme.Fonts.body(14, .semibold))
+                            .foregroundStyle(Theme.Colors.textPrimary)
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
-                            .background(Theme.Colors.surfaceInset)
-                            .clipShape(Capsule())
+                            .frame(height: 44)
+                            .background(Theme.Colors.surfaceInset, in: Capsule())
                         }
                         .buttonStyle(.plain)
                         .disabled(busyMeal != nil)
@@ -122,7 +114,6 @@ struct RepeatYesterdayCard: View {
                 }
             }
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile(radius: Theme.Radius.tileSmall, padding: Theme.Spacing.md)
     }
 }

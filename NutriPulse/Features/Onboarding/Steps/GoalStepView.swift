@@ -15,7 +15,7 @@ struct GoalStepView: View {
                 ForEach(WeightGoal.allCases) { goal in
                     OnboardingOptionCard(
                         title: goal.displayName,
-                        detail: goal.detail,
+                        detail: goal.detail(imperial: vm.useImperialUnits),
                         isSelected: vm.goal == goal
                     ) {
                         vm.goal = goal

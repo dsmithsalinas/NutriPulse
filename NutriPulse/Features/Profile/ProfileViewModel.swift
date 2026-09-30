@@ -350,6 +350,7 @@ final class ProfileViewModel {
         // with past-dated ones that never fire.
         glp1Logs.append(saved)
         glp1Logs.sort { $0.injectedAt > $1.injectedAt }
+        await GLP1TrackingStore.shared.doseLogged(at: saved.injectedAt)
         if let latestDue = doseSchedule.nextDue {
             await NotificationManager.shared.scheduleGLP1Reminders(nextDueAt: latestDue)
         }

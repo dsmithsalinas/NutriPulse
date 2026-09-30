@@ -8,12 +8,31 @@ enum ProgressRange: Int, CaseIterable, Identifiable, Hashable {
     var id: Int { rawValue }
     var label: String { "\(rawValue) days" }
 
+    /// Short label for the Daylight pill switcher ("Week", "Month", "3 months").
+    var pillLabel: String {
+        switch self {
+        case .week: "Week"
+        case .month: "Month"
+        case .quarter: "3 months"
+        }
+    }
+
     var analyticsRange: AnalyticsViewModel.TimeRange {
         switch self {
         case .week: .week
         case .month: .month
         case .quarter: .quarter
         }
+    }
+
+    /// The window immediately preceding this range's trailing window, same length — used to
+    /// compare this period's floor days against the prior one (e.g. this week vs. last week).
+    func previousWindow(now: Date = .now, calendar: Calendar = .current) -> ClosedRange<Date> {
+        let end = calendar.startOfDay(for: now)
+        let currentStart = calendar.date(byAdding: .day, value: -(rawValue - 1), to: end) ?? end
+        let previousEnd = calendar.date(byAdding: .day, value: -1, to: currentStart) ?? currentStart
+        let previousStart = calendar.date(byAdding: .day, value: -(rawValue - 1), to: previousEnd) ?? previousEnd
+        return previousStart...previousEnd
     }
 
     var summaryPeriod: ProgressSummaryPeriod {
@@ -213,6 +232,62 @@ enum ProgressNoticeBuilder {
         let hasTwoCycles = insights.contains { $0.sampleCount >= 2 }
         if hasTwoCycles { return "Your shot-cycle pattern is becoming clearer as you log." }
         return "Log across at least two shot cycles and patterns will appear here."
+    }
+}
+
+/// The floor-days hero tile's trend pill ("Up from 3") — this period's protein-floor days
+/// against the immediately preceding period of the same length.
+struct ProgressTrend: Equatable {
+    enum Direction { case up, down, flat }
+
+    let currentMet: Int
+    let previousMet: Int
+
+    var direction: Direction {
+        if currentMet > previousMet { return .up }
+        if currentMet < previousMet { return .down }
+        return .flat
+    }
+
+    var label: String {
+        switch direction {
+        case .up: "Up from \(previousMet)"
+        case .down: "Down from \(previousMet)"
+        case .flat: "Same as last period"
+        }
+    }
+}
+
+enum ProgressTrendBuilder {
+    /// Trailing mean over up to `window` values ending at each index; same length as `values`.
+    static func rollingAverage(_ values: [Double], window: Int) -> [Double] {
+        guard window > 1 else { return values }
+        return values.indices.map { index in
+            let slice = values[max(0, index - window + 1)...index]
+            return slice.reduce(0, +) / Double(slice.count)
+        }
+    }
+
+    /// Only meaningful with a protein goal and at least one measured day in the prior period —
+    /// otherwise there's nothing real to compare against, and the pill stays hidden.
+    static func trend(current: ProgressMetrics, previous: ProgressMetrics) -> ProgressTrend? {
+        guard current.hasGoal, previous.hasGoal, !previous.logged.isEmpty else { return nil }
+        return ProgressTrend(currentMet: current.metCount, previousMet: previous.metCount)
+    }
+}
+
+/// The "Try this" tile's suggestion — a single, data-derived nudge (never a canned line),
+/// mirroring the logic `SummaryReviewCard`'s "one thing to try" already uses.
+enum ProgressTryThisBuilder {
+    static func text(_ metrics: ProgressMetrics) -> String {
+        guard metrics.hasGoal, let goal = metrics.proteinGoal, goal > 0, !metrics.logged.isEmpty else {
+            return "Log nutrition on a few more days and a suggestion will show up here."
+        }
+        if metrics.averageProtein < goal {
+            let gap = Int((goal - metrics.averageProtein).rounded())
+            return "You're averaging \(gap)g under your floor. Stage one protein-dense option the night before."
+        }
+        return "You're clearing your floor most days — keep repeating what's working."
     }
 }
 

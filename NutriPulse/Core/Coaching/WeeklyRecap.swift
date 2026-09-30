@@ -76,6 +76,7 @@ enum WeeklyRecapDigest {
         checkIns: [ShotCycleCheckIn],
         foodNames: [String],
         proteinGoal: Double?,
+        units: UnitSystem = .metric,
         calendar: Calendar = WeeklyRecapSchedule.isoCalendar()
     ) -> CoachContextBundle.LastWeekContext {
         let week = summaries.filter { $0.date >= interval.start && $0.date <= interval.end }
@@ -120,7 +121,8 @@ enum WeeklyRecapDigest {
         let weightChange: String? = {
             guard weekWeights.count >= 2, let first = weekWeights.first, let last = weekWeights.last else { return nil }
             let delta = last.weightKg - first.weightKg
-            return "\(delta >= 0 ? "+" : "")\(String(format: "%.1f", delta)) kg across \(weekWeights.count) weigh-ins"
+            let shown = units.weightInput(from: delta)
+            return "\(shown >= 0 ? "+" : "")\(String(format: "%.1f", shown)) \(units.weightUnit) across \(weekWeights.count) weigh-ins"
         }()
 
         let rangeFormatter = DateFormatter()

@@ -11,7 +11,7 @@ struct SendFeedbackSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Type") {
+                Section {
                     Picker("Category", selection: $category) {
                         ForEach(FeedbackCategory.allCases) { c in
                             Text(c.displayName).tag(c)
@@ -19,17 +19,28 @@ struct SendFeedbackSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                } header: {
+                    DaylightSectionHeader("Type")
                 }
-                Section("What's on your mind?") {
+                .daylightSection()
+
+                Section {
                     TextEditor(text: $message)
                         .frame(minHeight: 140)
+                        .scrollContentBackground(.hidden)
+                } header: {
+                    DaylightSectionHeader("What's on your mind?")
                 }
+                .daylightSection()
+
                 Section {
                     Text("Your app version is included automatically to help us track down issues.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
+                .daylightSection()
             }
+            .daylightForm()
             .navigationTitle("Send Feedback")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -42,6 +53,7 @@ struct SendFeedbackSheet: View {
                 }
             }
         }
+        .tint(Theme.Colors.primary)
     }
 
     private func send() async {

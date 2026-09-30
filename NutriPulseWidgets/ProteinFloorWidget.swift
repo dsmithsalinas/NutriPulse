@@ -2,15 +2,6 @@ import WidgetKit
 import SwiftUI
 import AppIntents
 
-// Brand colors, duplicated locally — the widget extension can't pull in the app's Theme.
-private extension Color {
-    static let pulseIndigo = Color(red: 0x63 / 255, green: 0x66 / 255, blue: 0xF1 / 255)
-    static let pulseViolet = Color(red: 0x8B / 255, green: 0x5C / 255, blue: 0xF6 / 255)
-}
-private let pulseGradient = LinearGradient(
-    colors: [.pulseIndigo, .pulseViolet], startPoint: .topLeading, endPoint: .bottomTrailing
-)
-
 // MARK: - Timeline
 
 struct ProteinFloorEntry: TimelineEntry {
@@ -38,145 +29,13 @@ struct ProteinFloorProvider: TimelineProvider {
 
 // MARK: - Views
 
+// The views live in Shared/ProteinFloorWidgetViews.swift (Daylight), so the app can preview them.
 struct ProteinFloorWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
     var entry: ProteinFloorEntry
-    private var snap: ProteinFloorSnapshot { entry.snapshot }
 
     var body: some View {
-        switch family {
-        case .accessoryCircular:    circular
-        case .accessoryRectangular: rectangular
-        case .accessoryInline:      inline
-        case .systemMedium:         medium
-        default:                    small
-        }
-    }
-
-    // Home Screen — small: the protein ring, hero.
-    private var small: some View {
-        VStack(spacing: 6) {
-            ring(size: 74, line: 9)
-            Text(snap.cleared ? "Floor cleared" : "\(snap.remaining)g to go")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(snap.cleared ? Color.green : .secondary)
-                .minimumScaleFactor(0.8)
-        }
-    }
-
-    // Home Screen — medium: ring + framing text side by side.
-    private var medium: some View {
-        HStack(spacing: 12) {
-            ring(size: 84, line: 10)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("PROTEIN FLOOR")
-                    .font(.system(size: 11, weight: .bold)).tracking(0.8)
-                    .foregroundStyle(Color.pulseIndigo)
-                Text("\(Int(snap.proteinToday.rounded())) / \(Int(snap.proteinGoal.rounded()))g")
-                    .font(.system(size: 21, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                Text(snap.cleared
-                     ? "Floor cleared — muscle protected."
-                     : "\(snap.remaining)g to go protects your muscle.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-            VStack(spacing: 6) {
-                Button(intent: FootingQuickActionIntent(action: primaryAction)) {
-                    VStack(spacing: 3) {
-                        Image(systemName: primaryIcon)
-                            .font(.system(size: 15, weight: .bold))
-                        Text(primaryLabel)
-                            .font(.system(size: 10, weight: .bold))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: 96, height: 48)
-                    .background(pulseGradient, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                }
-                .buttonStyle(.plain)
-
-                HStack(spacing: 6) {
-                    quickAction(.addWater, icon: "drop.fill", label: "Add water")
-                    quickAction(.logDose, icon: "syringe.fill", label: "Log dose")
-                }
-            }
-        }
-    }
-
-    private var primaryAction: FootingQuickAction {
-        !snap.cleared && snap.remaining <= 45 ? .logFavorite : .talkToLog
-    }
-
-    private var primaryIcon: String {
-        primaryAction == .logFavorite ? "star.fill" : "waveform"
-    }
-
-    private var primaryLabel: String {
-        primaryAction == .logFavorite ? "Close floor" : "Log food"
-    }
-
-    private func quickAction(_ action: FootingQuickAction, icon: String, label: String) -> some View {
-        Button(intent: FootingQuickActionIntent(action: action)) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .frame(width: 44, height: 44)
-                .background(Color.pulseIndigo.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .tint(.pulseIndigo)
-        .accessibilityLabel(label)
-    }
-
-    // Lock Screen — circular gauge.
-    private var circular: some View {
-        Gauge(value: snap.pct) {
-            Text("P")
-        } currentValueLabel: {
-            Text("\(Int(snap.proteinToday.rounded()))")
-                .minimumScaleFactor(0.6)
-        }
-        .gaugeStyle(.accessoryCircularCapacity)
-    }
-
-    // Lock Screen — rectangular.
-    private var rectangular: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Protein floor").font(.system(size: 13, weight: .semibold))
-            Text("\(Int(snap.proteinToday.rounded())) / \(Int(snap.proteinGoal.rounded()))g")
-                .font(.system(size: 15, weight: .bold)).monospacedDigit()
-            Text(snap.cleared ? "Cleared ✓" : "\(snap.remaining)g to go")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-        }
-    }
-
-    // Lock Screen — inline (next to the clock).
-    private var inline: some View {
-        Text(snap.cleared
-             ? "Protein floor cleared"
-             : "Protein \(Int(snap.proteinToday.rounded()))/\(Int(snap.proteinGoal.rounded()))g")
-    }
-
-    // Shared ring.
-    private func ring(size: CGFloat, line: CGFloat) -> some View {
-        ZStack {
-            Circle().stroke(Color.gray.opacity(0.2), lineWidth: line)
-            Circle()
-                .trim(from: 0, to: snap.pct)
-                .stroke(pulseGradient, style: StrokeStyle(lineWidth: line, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            VStack(spacing: 0) {
-                Text("\(Int(snap.proteinToday.rounded()))")
-                    .font(.system(size: size * 0.30, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                Text("/\(Int(snap.proteinGoal.rounded()))g")
-                    .font(.system(size: size * 0.15, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(width: size, height: size)
+        ProteinFloorWidgetView(snapshot: entry.snapshot, family: family)
     }
 }
 
@@ -186,7 +45,9 @@ struct ProteinFloorWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: proteinFloorWidgetKind, provider: ProteinFloorProvider()) { entry in
             ProteinFloorWidgetEntryView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(for: .widget) {
+                    ContainerBackground(snapshot: entry.snapshot)
+                }
         }
         .configurationDisplayName("Protein Floor")
         .description("Your protein for today and how much is left to protect your muscle.")
@@ -194,6 +55,21 @@ struct ProteinFloorWidget: Widget {
             .systemSmall, .systemMedium,
             .accessoryCircular, .accessoryRectangular, .accessoryInline,
         ])
+    }
+}
+
+/// Small: the protein tile's indigo and liquid fill. Medium: the Today page ground, with the tile
+/// drawn inside. Lock Screen families ignore this (the system tints them).
+private struct ContainerBackground: View {
+    @Environment(\.widgetFamily) private var family
+    let snapshot: ProteinFloorSnapshot
+
+    var body: some View {
+        if family == .systemSmall {
+            ProteinFloorWidgetBackground(snapshot: snapshot)
+        } else {
+            Theme.Colors.ground
+        }
     }
 }
 

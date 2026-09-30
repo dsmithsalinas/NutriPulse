@@ -267,4 +267,17 @@ extension GoalMeasurement {
         case nil: "hand.tap.fill"
         }
     }
+
+    // Weight goals and check-ins are always stored in kg, regardless of the user's unit
+    // choice — these two convert at the display edge so a goal card, review sheet, or day
+    // detail never leaks the raw stored kilograms to an imperial user.
+    func displayValue(_ storageValue: Double, units: UnitSystem) -> Double {
+        sourceMetric == .weight ? units.weightInput(from: storageValue) : storageValue
+    }
+
+    // The stored `unit` string is always "kg" for a weight goal (it describes storage, not
+    // display), so it's ignored here in favor of whatever the user's current unit choice is.
+    func displayUnit(_ units: UnitSystem) -> String {
+        sourceMetric == .weight ? units.weightUnit : (unit ?? "")
+    }
 }

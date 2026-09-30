@@ -12,15 +12,24 @@ struct SmartNotificationSettingsView: View {
     var body: some View {
         Form {
             Section {
+                DaylightPageTitle("Notification preferences")
+                    .padding(.vertical, Theme.Spacing.sm)
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+
+            Section {
                 notificationToggle("Workout recovery", "figure.strengthtraining.traditional", $workoutEnabled)
                 notificationToggle("Protein closeout", "bolt.heart.fill", $proteinEnabled)
                 notificationToggle("Low-appetite preparation", "takeoutbag.and.cup.and.straw.fill", $appetiteEnabled)
                 notificationToggle("Usual meals", "fork.knife", $mealEnabled)
             } header: {
-                Text("Opportunity types")
+                DaylightSectionHeader("Opportunity types")
             } footer: {
-                Text("Pulse still sends at most one coaching notification per day. These controls decide which opportunities can compete for that slot.")
+                DaylightSectionFooter("Pulse still sends at most one coaching notification per day. These controls decide which opportunities can compete for that slot.")
             }
+            .daylightSection()
 
             Section {
                 Picker("Starts", selection: $quietStart) {
@@ -30,15 +39,16 @@ struct SmartNotificationSettingsView: View {
                     ForEach(0..<24, id: \.self) { Text(hourLabel($0)).tag($0) }
                 }
             } header: {
-                Text("Quiet hours")
+                DaylightSectionHeader("Quiet hours")
             } footer: {
-                Text(quietStart == quietEnd
+                DaylightSectionFooter(quietStart == quietEnd
                      ? "Quiet hours are off."
                      : "Pulse will not schedule coaching between \(hourLabel(quietStart)) and \(hourLabel(quietEnd)). Shot-day reminders are separate.")
             }
+            .daylightSection()
         }
-        .navigationTitle("Notification preferences")
-        .navigationBarTitleDisplayMode(.inline)
+        .daylightForm()
+        .daylightSubpage("Notification preferences")
         .disabled(!masterEnabled)
         .onChange(of: workoutEnabled) { _, _ in settingsChanged() }
         .onChange(of: proteinEnabled) { _, _ in settingsChanged() }
@@ -71,44 +81,55 @@ struct SmartNotificationHistoryView: View {
     var body: some View {
         Group {
             if entries.isEmpty {
-                ContentUnavailableView(
-                    "No Pulse notifications yet",
-                    systemImage: "bell.slash",
-                    description: Text("When Pulse finds and schedules a useful opportunity, its reasoning will appear here.")
-                )
+                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                    DaylightPageTitle("Pulse history")
+                        .padding(.horizontal, Theme.Spacing.page)
+                        .padding(.top, Theme.Spacing.sm)
+                    BrandedEmptyState(icon: "bell.slash", title: "No Pulse notifications yet", message: "When Pulse finds and schedules a useful opportunity, its reasoning will appear here.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             } else {
                 List {
                     Section {
-                        Text("Each entry shows the exact signal that earned Footing's one daily coaching slot. Feedback is saved on this device.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        DaylightPageTitle("Pulse history")
+                            .padding(.vertical, Theme.Spacing.sm)
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+
+                    Section {
+                        Text("Each entry shows the exact signal that earned Footing's one daily coaching slot. Feedback is saved on this device.")
+                            .font(Theme.Fonts.body(12))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    .daylightSection()
 
                     ForEach(entries) { entry in
                         Section {
                             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                                 HStack(alignment: .top) {
                                     Label(kindTitle(entry.kind), systemImage: kindIcon(entry.kind))
-                                        .font(.caption.weight(.semibold))
+                                        .font(Theme.Fonts.body(12, .semibold))
                                         .foregroundStyle(Theme.Colors.primary)
                                     Spacer()
                                     Text(entry.fireDate, style: .relative)
-                                        .font(.caption2)
+                                        .font(Theme.Fonts.body(11))
                                         .foregroundStyle(Theme.Colors.textFaint)
                                 }
 
                                 Label(statusTitle(entry.status), systemImage: statusIcon(entry.status))
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
+                                    .font(Theme.Fonts.body(12, .semibold))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
 
-                                Text(entry.title).font(.headline)
-                                Text(entry.body).font(.subheadline).foregroundStyle(.secondary)
+                                Text(entry.title).font(Theme.Fonts.body(16, .bold)).foregroundStyle(Theme.Colors.textPrimary)
+                                Text(entry.body).font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
 
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text("WHY YOU GOT THIS")
-                                        .font(.system(size: 9, weight: .bold)).tracking(0.7)
+                                        .font(Theme.Fonts.body(9, .bold)).tracking(0.7)
                                         .foregroundStyle(Theme.Colors.textFaint)
-                                    Text(entry.rationale).font(.caption)
+                                    Text(entry.rationale).font(Theme.Fonts.body(12)).foregroundStyle(Theme.Colors.textPrimary)
                                 }
                                 .padding(Theme.Spacing.sm)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -117,7 +138,8 @@ struct SmartNotificationHistoryView: View {
                                 if entry.status != .scheduled {
                                     HStack {
                                         Text("Was this useful?")
-                                            .font(.caption.weight(.semibold))
+                                            .font(Theme.Fonts.body(12, .semibold))
+                                            .foregroundStyle(Theme.Colors.textPrimary)
                                         Spacer()
                                         feedbackButton("Yes", "hand.thumbsup.fill", .helpful, entry)
                                         feedbackButton("No", "hand.thumbsdown.fill", .notHelpful, entry)
@@ -126,13 +148,16 @@ struct SmartNotificationHistoryView: View {
                             }
                             .padding(.vertical, 4)
                         }
+                        .daylightSection()
                     }
                 }
                 .listStyle(.insetGrouped)
+                .daylightForm()
             }
         }
-        .navigationTitle("Pulse history")
-        .navigationBarTitleDisplayMode(.inline)
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .tint(Theme.Colors.primary)
+        .daylightSubpage("Pulse history")
         .toolbar {
             if !entries.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -183,7 +208,7 @@ struct SmartNotificationHistoryView: View {
                 .frame(width: 32, height: 32)
         }
         .buttonStyle(.bordered)
-        .tint(entry.feedback == feedback ? Theme.Colors.primary : .secondary)
+        .tint(entry.feedback == feedback ? Theme.Colors.primary : Theme.Colors.textFaint)
         .accessibilityLabel(feedback == .helpful ? "Yes, helpful" : "No, not helpful")
         .accessibilityValue(entry.feedback == feedback ? "Selected" : "Not selected")
     }

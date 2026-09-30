@@ -5,26 +5,31 @@ import Supabase
 @Observable
 @MainActor
 final class FoodLoggingViewModel {
+    // Daylight (docs/daylight-redesign.md): Favorites replaces Manual — manual entry moved
+    // into Search ("Can't find it? Enter it yourself").
     enum LogTab: String, CaseIterable {
-        case talk     = "Talk"
-        case manual   = "Manual"
-        case search   = "Search"
-        case scan     = "Scan"
+        case talk      = "Talk"
+        case search    = "Search"
+        case scan      = "Scan"
+        case favorites = "Favorites"
 
         // The tab selected when the sheet opens — used only for the
         // `logIntentStarted` telemetry signal (the eventual `logConfirmed`
         // source is whichever method actually completes the log).
         var telemetrySource: LogSource {
             switch self {
-            case .talk:   .talk
-            case .manual: .manual
-            case .search: .search
-            case .scan:   .scan
+            case .talk:      .talk
+            case .search:    .search
+            case .scan:      .scan
+            case .favorites: .favorite
             }
         }
     }
 
     var selectedTab: LogTab = .talk
+    // The Daylight log sheet's header meal ("Adding to Dinner ▾") — shared across every tab.
+    // + buttons log straight to it; tapping a food's name opens the confirm step, which starts
+    // pre-filled from this but can be overridden for that one log.
     var selectedMeal: Meal = .current   // pre-selects based on time of day
     var quantity: Double = 1.0
 

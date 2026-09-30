@@ -1,48 +1,21 @@
 import SwiftUI
 import Charts
 
-struct WeeklyReviewCard: View {
-    let review: WeeklyReview
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Label("Your week, from Pulse", systemImage: "sparkles")
-                .font(.headline)
-                .foregroundStyle(Theme.Colors.primary)
-            reviewRow("What went well", review.wentWell, "checkmark.circle.fill", .green)
-            reviewRow("Where it got difficult", review.gotDifficult, "arrow.down.right.circle.fill", .orange)
-            reviewRow("Pattern noticed", review.pattern, "waveform.path.ecg", Theme.Colors.primary)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("ONE THING TO TRY")
-                    .font(.system(size: 10, weight: .bold)).tracking(0.7)
-                    .foregroundStyle(Theme.Colors.textFaint)
-                Text(review.experiment)
-                    .font(.subheadline.weight(.semibold))
-            }
-            .padding(Theme.Spacing.sm)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.Colors.primary.opacity(0.09))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .padding(Theme.Spacing.md)
-        .card()
-    }
-
-    private func reviewRow(_ title: String, _ detail: String, _ icon: String, _ color: Color) -> some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: icon).foregroundStyle(color).frame(width: 18).padding(.top, 1)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text(detail).font(.subheadline)
-            }
-        }
-    }
+// A gold accent for "Energy" in the by-day-since-dose chart — distinct from the amber used for
+// Appetite (Theme.NutrientColor.fat) and from Nausea's rose (Theme.Colors.listening).
+private extension Theme.Colors {
+    static let energyGold = Color(hex: 0xCA8A04)
 }
 
+
+// The chart inside the "How do shot days change my eating?" question. No outer `.tile()` or
+// question heading here — AnalyticsQuestionCard (AnalyticsView.swift) supplies both, along with
+// the takeaway line, so this only owns the metric picker and the chart itself.
 struct CycleAwareAnalyticsCard: View {
     let insights: [CycleDayInsight]
     let proteinGoal: Double?
+    /// The question's plain-English takeaway, read out as the chart's accessibility summary.
+    let accessibilitySummary: String
     @State private var selectedMetric: Metric = .protein
 
     private enum Metric: String, CaseIterable, Identifiable {
@@ -65,11 +38,11 @@ struct CycleAwareAnalyticsCard: View {
         var color: Color {
             switch self {
             case .protein: Theme.NutrientColor.protein
-            case .hydration: .blue
-            case .appetite: .orange
-            case .energy: .yellow
-            case .nausea: .pink
-            case .movement: .green
+            case .hydration: Theme.NutrientColor.water
+            case .appetite: Theme.NutrientColor.fat
+            case .energy: Theme.Colors.energyGold
+            case .nausea: Theme.Colors.listening
+            case .movement: Theme.NutrientColor.fiber
             }
         }
         var explanation: String {
@@ -138,7 +111,9 @@ struct CycleAwareAnalyticsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                Text("By day since dose").font(.headline)
+                Text("By day since dose")
+                    .font(Theme.Fonts.body(13, .semibold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
                 Spacer()
                 Picker("Metric", selection: $selectedMetric) {
                     ForEach(Metric.allCases) { metric in
@@ -149,27 +124,24 @@ struct CycleAwareAnalyticsCard: View {
                 .tint(Theme.Colors.primary)
             }
             Text(selectedMetric.explanation)
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(13))
+                .foregroundStyle(Theme.Colors.textSecondary)
 
             if !points.isEmpty {
                 HStack(spacing: 7) {
                     Text(confidence.label)
-                        .font(.system(size: 10, weight: .bold))
+                        .font(Theme.Fonts.body(11, .bold))
                         .foregroundStyle(confidence.color)
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(confidence.color.opacity(0.1), in: Capsule())
                     Text(confidence.detail)
-                        .font(.caption2)
+                        .font(Theme.Fonts.body(11))
                         .foregroundStyle(Theme.Colors.textFaint)
                 }
             }
 
             if points.isEmpty {
-                ContentUnavailableView(
-                    "No \(selectedMetric.rawValue.lowercased()) data yet",
-                    systemImage: "chart.xyaxis.line",
-                    description: Text("This view fills in as you log across dose cycles.")
-                )
+                BrandedEmptyState(icon: "chart.xyaxis.line", title: "No \(selectedMetric.rawValue.lowercased()) data yet", message: "This view fills in as you log across dose cycles.")
                 .frame(height: 210)
             } else {
                 Chart {
@@ -189,42 +161,46 @@ struct CycleAwareAnalyticsCard: View {
                             .lineStyle(.init(lineWidth: 1, dash: [4, 4]))
                             .annotation(position: .top, alignment: .trailing) {
                                 Text("Goal")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .font(Theme.Fonts.body(11))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
                             }
                     }
                 }
                 .chartXAxis {
                     AxisMarks(values: insights.map(\.cycleDay)) { value in
                         AxisValueLabel { if let day = value.as(Int.self) { Text("D\(day)") } }
-                        AxisGridLine()
+                            .foregroundStyle(Theme.Colors.textFaint)
+                        AxisGridLine().foregroundStyle(Theme.Colors.hairline)
                     }
                 }
                 .chartYAxis {
                     AxisMarks { value in
-                        AxisGridLine()
+                        AxisGridLine().foregroundStyle(Theme.Colors.hairline)
                         AxisValueLabel {
                             if let number = value.as(Double.self) {
                                 Text(axisLabel(number))
                             }
                         }
+                        .foregroundStyle(Theme.Colors.textFaint)
                     }
                 }
                 .frame(height: 210)
+                .chartDrawIn()
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Chart of \(selectedMetric.rawValue.lowercased()) by day since dose")
+                .accessibilityValue(accessibilitySummary)
             }
 
             if let notablePoint {
                 Label(insightCopy(notablePoint), systemImage: "lightbulb.fill")
-                    .font(.caption.weight(.medium))
+                    .font(Theme.Fonts.body(13, .semibold))
                     .foregroundStyle(Theme.Colors.primary)
             }
 
             Text("Your pattern, not a readiness score or medical guidance.")
-                .font(.caption2)
+                .font(Theme.Fonts.body(11))
                 .foregroundStyle(Theme.Colors.textFaint)
         }
-        .padding(Theme.Spacing.md)
-        .card()
     }
 
     private func axisLabel(_ value: Double) -> String {

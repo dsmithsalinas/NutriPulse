@@ -131,6 +131,82 @@ final class ProgressSummaryTests: XCTestCase {
     }
 }
 
+// MARK: - Daylight Progress hero (trend pill, "Try this" suggestion)
+
+final class ProgressTrendTests: XCTestCase {
+    func testRollingAverageSmoothsATrailingWindow() {
+        XCTAssertEqual(ProgressTrendBuilder.rollingAverage([100, 140, 120, 160], window: 3),
+                       [100, 120, 120, 140])
+        XCTAssertEqual(ProgressTrendBuilder.rollingAverage([5, 7], window: 1), [5, 7])
+    }
+
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .iso8601)
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        return value
+    }
+
+    private func date(_ day: Int) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 8, day: day))!
+    }
+
+    private func summary(_ day: Int, protein: Double) -> DailySummary {
+        DailySummary(date: date(day), calories: 1_400, proteinG: protein, carbsG: 120, fatG: 50, fiberG: 20)
+    }
+
+    func testTrendComparesMetCountsBetweenPeriods() {
+        let current = ProgressMetrics(
+            summaries: [summary(8, protein: 140), summary(9, protein: 140), summary(10, protein: 90)],
+            proteinGoal: 130
+        )
+        let previous = ProgressMetrics(
+            summaries: [summary(1, protein: 90), summary(2, protein: 90), summary(3, protein: 140)],
+            proteinGoal: 130
+        )
+        let trend = ProgressTrendBuilder.trend(current: current, previous: previous)
+        XCTAssertEqual(trend?.currentMet, 2)
+        XCTAssertEqual(trend?.previousMet, 1)
+        XCTAssertEqual(trend?.direction, .up)
+        XCTAssertEqual(trend?.label, "Up from 1")
+    }
+
+    func testTrendIsNilWithoutAGoal() {
+        let current = ProgressMetrics(summaries: [summary(8, protein: 140)], proteinGoal: nil)
+        let previous = ProgressMetrics(summaries: [summary(1, protein: 90)], proteinGoal: nil)
+        XCTAssertNil(ProgressTrendBuilder.trend(current: current, previous: previous))
+    }
+
+    func testTrendIsNilWithNoMeasuredPreviousDays() {
+        let current = ProgressMetrics(summaries: [summary(8, protein: 140)], proteinGoal: 130)
+        let previous = ProgressMetrics(summaries: [], proteinGoal: 130)
+        XCTAssertNil(ProgressTrendBuilder.trend(current: current, previous: previous))
+    }
+
+    func testPreviousWindowIsSameLengthImmediatelyBeforeCurrent() {
+        let window = ProgressRange.week.previousWindow(now: date(30), calendar: calendar)
+        // .week covers the trailing 7 days ending "now" (Aug 24...Aug 30), so the previous
+        // window is the 7 days immediately before that.
+        XCTAssertEqual(window.lowerBound, date(17))
+        XCTAssertEqual(window.upperBound, date(23))
+    }
+
+    func testTryThisFlagsAverageBelowFloor() {
+        let metrics = ProgressMetrics(
+            summaries: [summary(8, protein: 100), summary(9, protein: 100)],
+            proteinGoal: 130
+        )
+        XCTAssertTrue(ProgressTryThisBuilder.text(metrics).contains("under your floor"))
+    }
+
+    func testTryThisPraisesWhenFloorIsCleared() {
+        let metrics = ProgressMetrics(
+            summaries: [summary(8, protein: 140), summary(9, protein: 150)],
+            proteinGoal: 130
+        )
+        XCTAssertTrue(ProgressTryThisBuilder.text(metrics).contains("keep repeating"))
+    }
+}
+
 // MARK: - Health data quality
 
 final class HealthDataQualityEngineTests: XCTestCase {
@@ -445,6 +521,219 @@ final class GoalDraftTests: XCTestCase {
         draft.title = "Stretch after lunch"
         XCTAssertTrue(draft.isValid)
     }
+
+    // A weight goal always stores kg (its target is compared directly against weightKg log
+    // values by GoalProgressCalculator) — the unit system only converts at the display edge,
+    // in CreateGoalView and GoalsView.
+    func testWeightGoalDefaultsToKilogramStorage() {
+        var draft = GoalDraft()
+        draft.select(.bodyLogs)
+        XCTAssertEqual(draft.sourceMetric, .weight)
+        XCTAssertEqual(draft.targetValue, 75)
+        XCTAssertEqual(draft.unit, "kg")
+        XCTAssertEqual(draft.displayTargetValue, 75, accuracy: 0.0001)
+    }
+}
+
+// MARK: - GoalMeasurement display conversion (weight goals always store kg)
+
+final class GoalMeasurementUnitDisplayTests: XCTestCase {
+    private func weightMeasurement(target: Double = 75) -> GoalMeasurement {
+        GoalMeasurement(
+            id: UUID(), goalVersionId: UUID(), userId: UUID(), role: "primary",
+            name: "Reach a weight", kind: .target, aggregation: .latest,
+            comparison: .reach, targetValue: target, unit: "kg",
+            sourceType: .automatic, sourceMetric: .weight,
+            minimumCoverage: 0, createdAt: .now
+        )
+    }
+
+    func testWeightDisplayValueConvertsStoredKilogramsToPoundsForImperial() {
+        let measurement = weightMeasurement()
+        XCTAssertEqual(measurement.displayValue(75, units: .metric), 75, accuracy: 0.001)
+        XCTAssertEqual(measurement.displayValue(75, units: .imperial), 75 * 2.20462, accuracy: 0.01)
+    }
+
+    // The stored "kg" descriptor never reflects the user's choice — displayUnit always
+    // derives the label from `units` instead for a weight goal.
+    func testWeightDisplayUnitIgnoresTheStoredKgStringForImperial() {
+        let measurement = weightMeasurement()
+        XCTAssertEqual(measurement.displayUnit(.metric), "kg")
+        XCTAssertEqual(measurement.displayUnit(.imperial), "lbs")
+    }
+
+    func testNonWeightMeasurementPassesValueAndUnitThroughUnchanged() {
+        let sleep = GoalMeasurement(
+            id: UUID(), goalVersionId: UUID(), userId: UUID(), role: "primary",
+            name: "Sleep", kind: .average, aggregation: .average,
+            comparison: .atLeast, targetValue: 8, unit: "hours",
+            sourceType: .automatic, sourceMetric: .sleepDuration,
+            minimumCoverage: 0, createdAt: .now
+        )
+        XCTAssertEqual(sleep.displayValue(8, units: .imperial), 8)
+        XCTAssertEqual(sleep.displayUnit(.imperial), "hours")
+    }
+}
+
+// MARK: - Protein floor (built-in goal)
+
+final class ProteinFloorGoalTests: XCTestCase {
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .iso8601)
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        return value
+    }
+
+    private func date(_ value: String) -> Date {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        return calendar.date(from: .init(year: parts[0], month: parts[1], day: parts[2]))!
+    }
+
+    private func summary(_ date: Date, protein: Double) -> DailySummary {
+        DailySummary(date: date, calories: 1_500, proteinG: protein, carbsG: 100, fatG: 50, fiberG: 20)
+    }
+
+    func testNoEffectiveFloorMeansNoCard() {
+        let result = ProteinFloorGoal.summary(
+            from: [], floorTarget: nil, today: date("2026-08-30"), calendar: calendar
+        )
+        XCTAssertNil(result)
+
+        let zeroTarget = ProteinFloorGoal.summary(
+            from: [], floorTarget: 0, today: date("2026-08-30"), calendar: calendar
+        )
+        XCTAssertNil(zeroTarget)
+    }
+
+    func testDaysWithoutLogsAreNoDataNeverBelow() {
+        let today = date("2026-08-30")
+        // Only today has a summary; every other day of the window is unlogged.
+        let result = ProteinFloorGoal.summary(
+            from: [summary(today, protein: 150)], floorTarget: 130, today: today, calendar: calendar
+        )!
+        XCTAssertEqual(result.days.count, ProteinFloorGoal.windowDays)
+        XCTAssertEqual(result.days.dropLast().allSatisfy { $0.state == .missing }, true)
+        XCTAssertEqual(result.days.last?.state, .met)
+        XCTAssertEqual(result.loggedDays, 1)
+        XCTAssertEqual(result.totalDays, ProteinFloorGoal.windowDays)
+    }
+
+    func testStreakSkipsMissingDaysButStopsAtAConfirmedMiss() {
+        let today = date("2026-08-30")
+        let summaries = [
+            summary(calendar.date(byAdding: .day, value: -3, to: today)!, protein: 90),   // below
+            // -2 days ago: no log at all (missing, skipped)
+            summary(calendar.date(byAdding: .day, value: -1, to: today)!, protein: 140),  // met
+            summary(today, protein: 150),                                                 // met
+        ]
+        let result = ProteinFloorGoal.summary(from: summaries, floorTarget: 130, today: today, calendar: calendar)!
+        XCTAssertEqual(result.currentStreak, 2)
+    }
+
+    func testTodayProgressAndCaption() {
+        let today = date("2026-08-30")
+        let underFloor = ProteinFloorGoal.summary(
+            from: [summary(today, protein: 90)], floorTarget: 130, today: today, calendar: calendar
+        )!
+        XCTAssertEqual(underFloor.todayCaption, "40g to go")
+        XCTAssertFalse(underFloor.todayMet)
+        XCTAssertEqual(underFloor.todayProgress, 90.0 / 130.0, accuracy: 0.0001)
+
+        let clearedFloor = ProteinFloorGoal.summary(
+            from: [summary(today, protein: 160)], floorTarget: 130, today: today, calendar: calendar
+        )!
+        XCTAssertEqual(clearedFloor.todayCaption, "Floor cleared")
+        XCTAssertTrue(clearedFloor.todayMet)
+        XCTAssertEqual(clearedFloor.todayProgress, 1, accuracy: 0.0001)
+    }
+
+    func testNoLogTodayShowsFullRemainingFloor() {
+        let today = date("2026-08-30")
+        let result = ProteinFloorGoal.summary(from: [], floorTarget: 130, today: today, calendar: calendar)!
+        XCTAssertEqual(result.todayProteinG, 0)
+        XCTAssertEqual(result.todayCaption, "130g to go")
+        XCTAssertFalse(result.todayMet)
+    }
+}
+
+// MARK: - Gentle cap on active goals
+
+final class GoalCreationPolicyTests: XCTestCase {
+    func testWarnsAtAndAboveTheSuggestedLimitButNotBelowIt() {
+        XCTAssertFalse(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 0))
+        XCTAssertFalse(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 2))
+        XCTAssertTrue(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 3))
+        XCTAssertTrue(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 4))
+    }
+
+    func testCustomLimitIsRespected() {
+        XCTAssertFalse(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 3, limit: 5))
+        XCTAssertTrue(GoalCreationPolicy.shouldWarnBeforeAdding(activeGoalCount: 5, limit: 5))
+    }
+}
+
+// MARK: - Goal wins
+
+final class GoalWinsTests: XCTestCase {
+    func testCompletionWinsOnceThenStopsWithoutRelitigating() {
+        let first = GoalWins.newWin(completed: true, currentStreak: 0, alreadyCelebrated: [])
+        XCTAssertEqual(first?.kind, .completed)
+
+        let repeatCall = GoalWins.newWin(completed: true, currentStreak: 0, alreadyCelebrated: [GoalWins.Keys.completed])
+        XCTAssertNil(repeatCall)
+    }
+
+    func testStreakMilestoneFiresExactlyOnceAtEachMilestone() {
+        let sevenDay = GoalWins.newWin(completed: false, currentStreak: 7, alreadyCelebrated: [])
+        XCTAssertEqual(sevenDay?.kind, .streak(days: 7))
+        XCTAssertEqual(sevenDay?.key, GoalWins.Keys.streak(7))
+
+        let alreadyShown = GoalWins.newWin(
+            completed: false, currentStreak: 7, alreadyCelebrated: [GoalWins.Keys.streak(7)]
+        )
+        XCTAssertNil(alreadyShown)
+    }
+
+    func testStreakWinsCelebrateTheHighestMilestoneReachedOnce() {
+        // Missing the exact day doesn't lose the win: first opened on day 9, the 7 still plays.
+        XCTAssertEqual(GoalWins.newWin(completed: false, currentStreak: 9, alreadyCelebrated: [])?.kind, .streak(days: 7))
+        // Past 14 before ever looking: celebrate 14, and 7 never fires afterward.
+        XCTAssertEqual(GoalWins.newWin(completed: false, currentStreak: 16, alreadyCelebrated: [])?.kind, .streak(days: 14))
+        XCTAssertNil(GoalWins.newWin(completed: false, currentStreak: 16, alreadyCelebrated: [GoalWins.Keys.streak(14)]))
+        XCTAssertNil(GoalWins.newWin(completed: false, currentStreak: 6, alreadyCelebrated: []))
+        XCTAssertNil(GoalWins.newWin(completed: false, currentStreak: 0, alreadyCelebrated: []))
+    }
+
+    func testCompletionTakesPriorityWhenBothLandOnTheSameDay() {
+        let win = GoalWins.newWin(completed: true, currentStreak: 14, alreadyCelebrated: [])
+        XCTAssertEqual(win?.kind, .completed)
+    }
+}
+
+final class GoalWinStoreTests: XCTestCase {
+    private func makeStore() -> GoalWinStore {
+        let suiteName = "GoalWinStoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        return GoalWinStore(defaults: defaults)
+    }
+
+    func testUncelebratedGoalStartsEmpty() {
+        let store = makeStore()
+        XCTAssertTrue(store.celebrated(for: UUID()).isEmpty)
+    }
+
+    func testMarkingCelebratedPersistsPerGoalAndKey() {
+        let store = makeStore()
+        let goalA = UUID()
+        let goalB = UUID()
+        store.markCelebrated(GoalWins.Keys.completed, for: goalA)
+        store.markCelebrated(GoalWins.Keys.streak(7), for: goalA)
+        store.markCelebrated(GoalWins.Keys.streak(7), for: goalB)
+
+        XCTAssertEqual(store.celebrated(for: goalA), [GoalWins.Keys.completed, GoalWins.Keys.streak(7)])
+        XCTAssertEqual(store.celebrated(for: goalB), [GoalWins.Keys.streak(7)])
+    }
 }
 
 // MARK: - Explainable insights
@@ -508,6 +797,251 @@ final class InsightEngineTests: XCTestCase {
             waist: []
         )
         XCTAssertTrue(milestones.contains { $0.title == "Lean mass held" })
+    }
+
+    // Defaults to metric so existing callers that don't pass `units` keep their old behavior.
+    func testBodyMilestoneWaistDetailDefaultsToCentimeters() {
+        let milestones = BodyMilestoneEngine.detect(
+            weight: [], leanMass: [],
+            waist: [(day(-30), 90), (day(0), 87)]
+        )
+        let waist = milestones.first { $0.title == "Waist trend moved" }
+        XCTAssertEqual(waist?.detail, "Your waist measurement is down 3.0 cm across this view.")
+    }
+
+    func testBodyMilestoneWaistDetailConvertsToInchesForImperial() {
+        let milestones = BodyMilestoneEngine.detect(
+            weight: [], leanMass: [],
+            waist: [(day(-30), 90), (day(0), 87)],
+            units: .imperial
+        )
+        let waist = milestones.first { $0.title == "Waist trend moved" }
+        // 3 cm is 1.18 in.
+        XCTAssertEqual(waist?.detail, "Your waist measurement is down 1.2 in across this view.")
+    }
+}
+
+final class ExperimentComparisonEngineTests: XCTestCase {
+    func testDaysJoinsOutcomeAndInterventionByDate() {
+        let days = ExperimentComparisonEngine.days(
+            outcomeByDate: ["2026-09-01": 7.0, "2026-09-02": 6.0, "2026-09-04": 5.5],
+            interventionByDate: ["2026-09-01": true, "2026-09-03": false]
+        )
+        XCTAssertEqual(days.map(\.localDate), ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"])
+        XCTAssertEqual(days[0].didIntervene, true)
+        XCTAssertEqual(days[0].outcomeValue, 7.0)
+        XCTAssertNil(days[1].didIntervene)
+        XCTAssertEqual(days[2].didIntervene, false)
+        XCTAssertNil(days[2].outcomeValue)
+    }
+
+    func testCompareReturnsNilWithoutDataOnBothSides() {
+        let onlyIntervention = (0..<6).map {
+            ExperimentDayObservation(localDate: "day\($0)", didIntervene: true, outcomeValue: 7)
+        }
+        XCTAssertNil(ExperimentComparisonEngine.compare(onlyIntervention))
+    }
+
+    func testCompareIsUnreadableBelowFiveMeasuredDaysPerSide() {
+        // 4 intervention days, 4 non-intervention days — under the floor on both sides.
+        var days: [ExperimentDayObservation] = []
+        for i in 0..<4 {
+            days.append(.init(localDate: "with\(i)", didIntervene: true, outcomeValue: 8.0))
+            days.append(.init(localDate: "without\(i)", didIntervene: false, outcomeValue: 6.0))
+        }
+        let result = try! XCTUnwrap(ExperimentComparisonEngine.compare(days))
+        XCTAssertFalse(result.isReadable)
+        XCTAssertEqual(result.interventionCount, 4)
+        XCTAssertEqual(result.nonInterventionCount, 4)
+    }
+
+    func testCompareIsUnreadableWhenDifferenceIsWithinNormalVariation() {
+        // Five measured days each side, but the values are noisy enough that a ~0.2 gap is not
+        // distinguishable from ordinary day-to-day variation.
+        let interventionValues: [Double] = [6.0, 7.5, 6.5, 7.2, 6.3]
+        let nonInterventionValues: [Double] = [6.1, 7.3, 6.4, 7.0, 6.2]
+        var days: [ExperimentDayObservation] = []
+        for (i, v) in interventionValues.enumerated() {
+            days.append(.init(localDate: "with\(i)", didIntervene: true, outcomeValue: v))
+        }
+        for (i, v) in nonInterventionValues.enumerated() {
+            days.append(.init(localDate: "without\(i)", didIntervene: false, outcomeValue: v))
+        }
+        let result = try! XCTUnwrap(ExperimentComparisonEngine.compare(days))
+        XCTAssertFalse(result.isReadable)
+    }
+
+    func testCompareIsReadableWithEnoughDaysAndAClearDifference() {
+        let interventionValues: [Double] = [7.8, 8.0, 7.9, 8.1, 7.7, 8.0]
+        let nonInterventionValues: [Double] = [6.2, 6.0, 6.3, 6.1, 6.4, 6.0]
+        var days: [ExperimentDayObservation] = []
+        for (i, v) in interventionValues.enumerated() {
+            days.append(.init(localDate: "with\(i)", didIntervene: true, outcomeValue: v))
+        }
+        for (i, v) in nonInterventionValues.enumerated() {
+            days.append(.init(localDate: "without\(i)", didIntervene: false, outcomeValue: v))
+        }
+        let result = try! XCTUnwrap(ExperimentComparisonEngine.compare(days))
+        XCTAssertTrue(result.isReadable)
+        XCTAssertEqual(result.interventionCount, 6)
+        XCTAssertEqual(result.nonInterventionCount, 6)
+        XCTAssertEqual(result.interventionMean, 7.9166, accuracy: 0.01)
+        XCTAssertEqual(result.nonInterventionMean, 6.1666, accuracy: 0.01)
+        XCTAssertEqual(result.difference, result.interventionMean - result.nonInterventionMean, accuracy: 0.0001)
+    }
+}
+
+final class ExperimentInterventionDaysTests: XCTestCase {
+    func testBuildReadsBooleanObservationsByLocalDate() {
+        let measurementId = UUID()
+        let otherMeasurementId = UUID()
+        let checkinA = UUID(); let checkinB = UUID(); let checkinC = UUID()
+        let userId = UUID()
+        let checkins = [
+            GoalCheckin(id: checkinA, goalId: UUID(), userId: userId, observedAt: .now, localDate: "2026-09-01", note: nil, createdAt: .now),
+            GoalCheckin(id: checkinB, goalId: UUID(), userId: userId, observedAt: .now, localDate: "2026-09-02", note: nil, createdAt: .now),
+            GoalCheckin(id: checkinC, goalId: UUID(), userId: userId, observedAt: .now, localDate: "2026-09-03", note: nil, createdAt: .now),
+        ]
+        let observations = [
+            GoalObservation(id: UUID(), checkinId: checkinA, measurementId: measurementId, userId: userId, valueBoolean: true, valueNumber: nil, valueText: nil, createdAt: .now),
+            GoalObservation(id: UUID(), checkinId: checkinB, measurementId: measurementId, userId: userId, valueBoolean: false, valueNumber: nil, valueText: nil, createdAt: .now),
+            // Different measurement — must be ignored.
+            GoalObservation(id: UUID(), checkinId: checkinC, measurementId: otherMeasurementId, userId: userId, valueBoolean: true, valueNumber: nil, valueText: nil, createdAt: .now),
+        ]
+        let result = ExperimentInterventionDays.build(checkins: checkins, observations: observations, measurementId: measurementId)
+        XCTAssertEqual(result, ["2026-09-01": true, "2026-09-02": false])
+    }
+}
+
+final class ExperimentTimelineCalculatorTests: XCTestCase {
+    private func date(_ y: Int, _ m: Int, _ d: Int) -> Date {
+        Calendar.current.date(from: DateComponents(year: y, month: m, day: d))!
+    }
+
+    func testTimelineComputesDayIndexAndTotalDays() {
+        let timeline = try! XCTUnwrap(ExperimentTimelineCalculator.timeline(
+            interventionStart: "2026-09-01", endDate: "2026-09-21", today: date(2026, 9, 8)
+        ))
+        XCTAssertEqual(timeline.dayIndex, 8)
+        XCTAssertEqual(timeline.totalDays, 21)
+        XCTAssertEqual(timeline.progress, 8.0 / 21.0, accuracy: 0.0001)
+        XCTAssertFalse(timeline.hasElapsed)
+    }
+
+    func testTimelineHasElapsedOncePastTheWindow() {
+        let timeline = try! XCTUnwrap(ExperimentTimelineCalculator.timeline(
+            interventionStart: "2026-09-01", endDate: "2026-09-07", today: date(2026, 9, 30)
+        ))
+        XCTAssertTrue(timeline.hasElapsed)
+        XCTAssertEqual(timeline.progress, 1.0, accuracy: 0.0001)
+    }
+
+    func testTimelineWithoutEndDateHasNoTotalAndNeverElapses() {
+        let timeline = try! XCTUnwrap(ExperimentTimelineCalculator.timeline(
+            interventionStart: "2026-09-01", endDate: nil, today: date(2026, 10, 1)
+        ))
+        XCTAssertNil(timeline.totalDays)
+        XCTAssertFalse(timeline.hasElapsed)
+    }
+}
+
+final class ExperimentSuggestionEngineTests: XCTestCase {
+    private func insight(
+        day: Int, protein: Double?, energy: Double? = nil,
+        nutritionSamples: Int = 3, checkInSamples: Int = 3
+    ) -> CycleDayInsight {
+        CycleDayInsight(
+            cycleDay: day, sampleCount: max(nutritionSamples, checkInSamples),
+            averageProteinG: protein, averageCalories: nil, averageWaterMl: nil,
+            averageWorkoutMinutes: nil, averageAppetite: nil, averageEnergy: energy,
+            averageNausea: nil, averageWeightKg: nil,
+            nutritionSampleCount: nutritionSamples, hydrationSampleCount: 0,
+            movementSampleCount: 0, checkInSampleCount: checkInSamples, weightSampleCount: 0
+        )
+    }
+
+    func testNoSuggestionsWithoutAClearDip() {
+        let flat = (0...6).map { insight(day: $0, protein: 130, energy: 4) }
+        XCTAssertTrue(ExperimentSuggestionEngine.suggestions(from: flat).isEmpty)
+    }
+
+    func testNoSuggestionWhenDippingDayIsUnderSampled() {
+        var insights = (0...6).map { insight(day: $0, protein: 130) }
+        // Day 2 dips hard, but only appears once — not enough to call it a pattern.
+        insights[2] = insight(day: 2, protein: 60, nutritionSamples: 1)
+        XCTAssertTrue(ExperimentSuggestionEngine.suggestions(from: insights).isEmpty)
+    }
+
+    func testProteinDipSuggestionNamesTheRangeAndNumbers() {
+        var insights = (0...6).map { insight(day: $0, protein: 140) }
+        insights[2] = insight(day: 2, protein: 90)
+        insights[3] = insight(day: 3, protein: 95)
+        let suggestions = ExperimentSuggestionEngine.suggestions(from: insights)
+        let protein = try! XCTUnwrap(suggestions.first { $0.outcome == .protein })
+        XCTAssertTrue(protein.why.contains("2–3"), protein.why)
+        XCTAssertTrue(protein.why.contains("shot day"), protein.why)
+        XCTAssertEqual(protein.suggestedDurationDays, ExperimentSuggestionEngine.defaultDurationDays)
+    }
+
+    func testSingleDayDipUsesSingularPhrasingNotARange() {
+        var insights = (0...6).map { insight(day: $0, protein: 140) }
+        insights[5] = insight(day: 5, protein: 80)
+        let suggestions = ExperimentSuggestionEngine.suggestions(from: insights)
+        let protein = try! XCTUnwrap(suggestions.first { $0.outcome == .protein })
+        XCTAssertTrue(protein.why.contains("shot day 5"), protein.why)
+        XCTAssertFalse(protein.why.contains("–"))
+    }
+
+    func testEnergyDipSuggestionIsIndependentOfProtein() {
+        var insights = (0...6).map { insight(day: $0, protein: 130, energy: 4.0) }
+        insights[1] = insight(day: 1, protein: 130, energy: 2.0)
+        let suggestions = ExperimentSuggestionEngine.suggestions(from: insights)
+        let energy = try! XCTUnwrap(suggestions.first { $0.outcome == .energy })
+        XCTAssertTrue(energy.why.contains("energy"), energy.why)
+        XCTAssertFalse(suggestions.contains { $0.outcome == .protein })
+    }
+
+    func testSuggestionsCapAtThree() {
+        var insights = (0...6).map { insight(day: $0, protein: 140, energy: 4.0) }
+        insights[2] = insight(day: 2, protein: 90, energy: 4.0)
+        insights[5] = insight(day: 5, protein: 140, energy: 2.0)
+        let suggestions = ExperimentSuggestionEngine.suggestions(from: insights)
+        XCTAssertLessThanOrEqual(suggestions.count, 3)
+    }
+}
+
+final class PulseGateTests: XCTestCase {
+    func testHandoffBlockedWhenPulseIsOff() {
+        XCTAssertEqual(PulseGate.handoff(pulseEnabled: false, aiConsentAt: nil), .blocked)
+        // Even a device that's already consented drops the hand-off once Pulse itself is off —
+        // it's the master switch, not just the AI-sharing question.
+        XCTAssertEqual(PulseGate.handoff(pulseEnabled: false, aiConsentAt: .now), .blocked)
+    }
+
+    func testHandoffNeedsConsentWhenOnButNeverAgreed() {
+        XCTAssertEqual(PulseGate.handoff(pulseEnabled: true, aiConsentAt: nil), .needsConsent)
+    }
+
+    func testHandoffAllowedWhenOnAndConsented() {
+        XCTAssertEqual(PulseGate.handoff(pulseEnabled: true, aiConsentAt: .now), .allowed)
+    }
+
+    func testIsActiveMatchesAllowedHandoffOnly() {
+        XCTAssertTrue(PulseGate.isActive(pulseEnabled: true, aiConsentAt: .now))
+        XCTAssertFalse(PulseGate.isActive(pulseEnabled: true, aiConsentAt: nil))
+        XCTAssertFalse(PulseGate.isActive(pulseEnabled: false, aiConsentAt: .now))
+        XCTAssertFalse(PulseGate.isActive(pulseEnabled: false, aiConsentAt: nil))
+    }
+
+    func testTabVisibilityFollowsPulseEnabledOnly() {
+        // Not yet consented still shows the tab — that's what makes the consent sheet reachable.
+        XCTAssertTrue(PulseGate.showsPulseTab(pulseEnabled: true))
+        XCTAssertFalse(PulseGate.showsPulseTab(pulseEnabled: false))
+    }
+
+    func testTodayStripFollowsPulseOnTodayOnly() {
+        XCTAssertTrue(PulseGate.showsPulseStripOnToday(pulseOnToday: true))
+        XCTAssertFalse(PulseGate.showsPulseStripOnToday(pulseOnToday: false))
     }
 }
 
@@ -781,6 +1315,809 @@ final class CoachSuggestionTests: XCTestCase {
         )
 
         XCTAssertTrue(suggestions.allSatisfy { !$0.hasSuffix("?") })
+    }
+
+    // MARK: - Pulse start screen tiles
+
+    private func pacificCalendar() -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        return calendar
+    }
+
+    private func pacificDate(year: Int, month: Int, day: Int, hour: Int, minute: Int = 0, calendar: Calendar) -> Date {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        return calendar.date(from: components)!
+    }
+
+    func testProteinGapOver15gShowsEveningDinnerPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 18, calendar: calendar) // Tuesday evening
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 50,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "70g to go",
+                prompt: "Give me an easy dinner to close my protein"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Plan ahead", prompt: "Help me plan tomorrow's meals"),
+        ])
+    }
+
+    func testProteinGapOver15gShowsMorningBreakfastPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 10, day: 1, hour: 9, calendar: calendar) // Thursday morning
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 20,
+            proteinGoalG: 100,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "80g to go",
+                prompt: "Give me an easy breakfast to close my protein"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Plan ahead", prompt: "Help me plan tomorrow's meals"),
+        ])
+    }
+
+    func testProteinGapAtOrUnder15gShowsNoProteinTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        // 10g gap: comfortably under the threshold.
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+
+        // 15g gap exactly: the threshold is exclusive, so this still shows no protein tile.
+        let atThreshold = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 105,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertFalse(atThreshold.contains { $0.kind == .proteinGap })
+    }
+
+    func testNilProteinGoalShowsNoProteinTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 10,
+            proteinGoalG: nil,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    func testShotDayZeroEyebrowAndPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: 0,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .shotCycle, eyebrow: "Shot day", prompt: "Help me plan around today's shot"),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    func testShotCycleDayTwoEyebrowAndNotHungryPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: 2,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .shotCycle,
+                eyebrow: "Shot day 2",
+                prompt: "Help me get protein in when I'm not hungry"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    func testShotCycleLaterWeekEyebrowAndPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: 5,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .shotCycle,
+                eyebrow: "Shot day 5",
+                prompt: "Make the most of my appetite this week"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    // A lapsed schedule (last shot six weeks ago) read "Shot day 42 · Make the most of my
+    // appetite this week". Past the cycle length the tile says the shot is due instead.
+    func testShotTilePastCycleLengthSaysDue() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+        for cycleDay in [7, 42] {
+            let tile = CoachSuggestionBuilder.startSuggestions(
+                totalProteinG: 110, proteinGoalG: 120, cycleDay: cycleDay,
+                recapDue: false, now: now, calendar: calendar
+            ).first { $0.kind == .shotCycle }
+            XCTAssertEqual(tile?.eyebrow, "Shot due")
+            XCTAssertEqual(tile?.prompt, "Help me plan around my next shot")
+        }
+        let biweekly = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110, proteinGoalG: 120, cycleDay: 9, cycleLength: 14,
+            recapDue: false, now: now, calendar: calendar
+        ).first { $0.kind == .shotCycle }
+        XCTAssertEqual(biweekly?.eyebrow, "Shot day 9")
+    }
+
+    // With only the protein tile, the pad used to repeat it ("easy breakfast to close my
+    // protein" beside "easy protein breakfast").
+    func testPadTileDoesNotRepeatTheProteinTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 30, hour: 8, calendar: calendar)
+        let tiles = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 0, proteinGoalG: 200, cycleDay: nil, recapDue: false, now: now, calendar: calendar
+        )
+        XCTAssertEqual(tiles.map(\.kind), [.proteinGap, .meal])
+        XCTAssertEqual(tiles.last?.prompt, "Help me plan tomorrow's meals")
+    }
+
+    func testNilCycleDayShowsNoShotTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar) // Tuesday, midday
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 30,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: true,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "90g to go",
+                prompt: "Give me an easy lunch to close my protein"
+            ),
+            PulseStartSuggestion(kind: .mondayRecap, eyebrow: "It's Tuesday", prompt: "Monday Recap"),
+        ])
+        XCTAssertFalse(suggestions.contains { $0.kind == .shotCycle })
+    }
+
+    func testRecapDueShowsMondayRecapTileWithWeekdayEyebrow() {
+        let calendar = pacificCalendar()
+        // Midday so the weekday the recap eyebrow reads (in the device's time zone) matches
+        // this Pacific-built date regardless of which US time zone the test runs in.
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: true,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .mondayRecap, eyebrow: "It's Tuesday", prompt: "Monday Recap"),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    func testRecapNotDueShowsNoRecapTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 18, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 50,
+            proteinGoalG: 120,
+            cycleDay: 2,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "70g to go",
+                prompt: "Give me an easy dinner to close my protein"
+            ),
+            PulseStartSuggestion(
+                kind: .shotCycle,
+                eyebrow: "Shot day 2",
+                prompt: "Help me get protein in when I'm not hungry"
+            ),
+        ])
+        XCTAssertFalse(suggestions.contains { $0.kind == .mondayRecap })
+    }
+
+    func testFewerThanTwoTilesArePaddedWithMealFallback() {
+        let calendar = pacificCalendar()
+        // No protein gap, no shot cycle, no recap: nothing but the meal fallback.
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 20, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .meal, eyebrow: "Dinner", prompt: "Give me a dinner idea"),
+        ])
+        XCTAssertFalse(suggestions.isEmpty)
+        XCTAssertLessThanOrEqual(suggestions.count, 3)
+    }
+
+    func testAllThreeSignalsProduceOrderedGridCappedAtThree() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 30,
+            proteinGoalG: 120,
+            cycleDay: 2,
+            recapDue: true,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "90g to go",
+                prompt: "Give me an easy lunch to close my protein"
+            ),
+            PulseStartSuggestion(
+                kind: .shotCycle,
+                eyebrow: "Shot day 2",
+                prompt: "Help me get protein in when I'm not hungry"
+            ),
+            PulseStartSuggestion(kind: .mondayRecap, eyebrow: "It's Tuesday", prompt: "Monday Recap"),
+        ])
+        XCTAssertEqual(suggestions.count, 3)
+    }
+
+    func testStartSuggestionsAreCommandsNotEngagementQuestions() {
+        let calendar = pacificCalendar()
+        var allPrompts: [String] = []
+
+        // Every meal bucket, for both the protein-gap prompt and the meal-fallback prompt.
+        for hour in [9, 12, 16, 20] {
+            let now = pacificDate(year: 2026, month: 9, day: 29, hour: hour, calendar: calendar)
+            let suggestions = CoachSuggestionBuilder.startSuggestions(
+                totalProteinG: 10,
+                proteinGoalG: 120,
+                cycleDay: nil,
+                recapDue: false,
+                now: now,
+                calendar: calendar
+            )
+            allPrompts.append(contentsOf: suggestions.map(\.prompt))
+        }
+
+        // Every shot-cycle prompt branch.
+        for cycleDay in [0, 2, 5] {
+            let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+            let suggestions = CoachSuggestionBuilder.startSuggestions(
+                totalProteinG: 110,
+                proteinGoalG: 120,
+                cycleDay: cycleDay,
+                recapDue: false,
+                now: now,
+                calendar: calendar
+            )
+            allPrompts.append(contentsOf: suggestions.map(\.prompt))
+        }
+
+        // The Monday Recap prompt.
+        let recapNow = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+        let recapSuggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: true,
+            now: recapNow,
+            calendar: calendar
+        )
+        allPrompts.append(contentsOf: recapSuggestions.map(\.prompt))
+
+        XCTAssertFalse(allPrompts.isEmpty)
+        XCTAssertTrue(allPrompts.allSatisfy { !$0.hasSuffix("?") })
+    }
+
+    func testTopicsExposeTheFourFixedChipsInOrder() {
+        XCTAssertEqual(CoachSuggestionBuilder.topics.map(\.label), [
+            "Meal ideas",
+            "How I'm trending",
+            "Eating out",
+            "Workouts & recovery",
+        ])
+    }
+
+    // MARK: - Experiment check-in tile
+
+    func testExperimentCheckInTileLeadsWhenDueToday() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 9, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar,
+            experimentCheckIn: ExperimentCheckInPrompt(dayIndex: 4, totalDays: 14, hasCheckedInToday: false)
+        )
+
+        XCTAssertEqual(suggestions.first, PulseStartSuggestion(
+            kind: .experimentCheckIn,
+            eyebrow: "Experiment · day 4 of 14",
+            prompt: "Log today's check-in"
+        ))
+    }
+
+    func testExperimentCheckInTileHidesOnceLoggedToday() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 9, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar,
+            experimentCheckIn: ExperimentCheckInPrompt(dayIndex: 4, totalDays: 14, hasCheckedInToday: true)
+        )
+
+        XCTAssertFalse(suggestions.contains { $0.kind == .experimentCheckIn })
+    }
+
+    func testExperimentCheckInWithoutATotalStillShowsADay() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 9, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 0,
+            proteinGoalG: nil,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar,
+            experimentCheckIn: ExperimentCheckInPrompt(dayIndex: 2, totalDays: nil, hasCheckedInToday: false)
+        )
+
+        XCTAssertEqual(suggestions.first?.eyebrow, "Experiment · day 2")
+    }
+
+    // Every existing call site omits `experimentCheckIn`; the new parameter must default away
+    // to nothing so those calls and their expected results are unaffected.
+    func testOmittingExperimentCheckInLeavesExistingBehaviorUnchanged() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 18, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 50,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "70g to go",
+                prompt: "Give me an easy dinner to close my protein"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Plan ahead", prompt: "Help me plan tomorrow's meals"),
+        ])
+    }
+}
+
+// MARK: - Structured Pulse replies (docs/daylight-redesign.md)
+//
+// The wire contract lives in supabase/functions/_shared/pulse-context.ts (`pulseReplySchema`,
+// `pulseRecapSchema`); these cover the app's side of it: a missing `payload` key decodes to nil
+// (older rows, and any environment where the payload migration hasn't run yet), a nil payload
+// encodes with no key at all (so a save against that same environment looks unchanged), and the
+// pure presentation logic that decides which food cards and chips actually show.
+final class PulseStructuredReplyTests: XCTestCase {
+
+    // MARK: CoachMessagePayload round-trip
+
+    func testCoachMessagePayloadRoundTripsThroughJSON() throws {
+        let payload = CoachMessagePayload(
+            foods: [.init(name: "Protein shake", why: "30g, no cooking")],
+            followUps: ["Something warm?", "Plan tomorrow"],
+            recap: .init(story: "s", wentWell: "w", pattern: "p", focus: "f")
+        )
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(CoachMessagePayload.self, from: data)
+        XCTAssertEqual(decoded, payload)
+    }
+
+    // MARK: CoachMessage: a missing `payload` key decodes to nil
+
+    func testCoachMessageDecodesWithoutPayloadKeyAsNil() throws {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "user_id": "\(UUID().uuidString)",
+          "role": "assistant",
+          "content": "Hi",
+          "message_type": "chat",
+          "created_at": 0
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let message = try decoder.decode(CoachMessage.self, from: json)
+        XCTAssertNil(message.payload)
+    }
+
+    func testCoachMessageDecodesAPresentPayload() throws {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "user_id": "\(UUID().uuidString)",
+          "role": "assistant",
+          "content": "Hi",
+          "message_type": "chat",
+          "created_at": 0,
+          "payload": { "followUps": ["Plan tomorrow"] }
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let message = try decoder.decode(CoachMessage.self, from: json)
+        XCTAssertEqual(message.payload?.followUps, ["Plan tomorrow"])
+        XCTAssertNil(message.payload?.foods)
+        XCTAssertNil(message.payload?.recap)
+    }
+
+    // MARK: NewCoachMessage: nil payload sends no key, a present one encodes fully
+
+    func testNewCoachMessageEncodesNilPayloadWithNoKeyAtAll() throws {
+        let message = NewCoachMessage(userId: UUID(), role: "assistant", content: "Hi", messageType: "chat", payload: nil)
+        let data = try JSONEncoder().encode(message)
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNil(obj["payload"], "a nil payload must not appear as a JSON null either")
+        XCTAssertFalse(obj.keys.contains("payload"))
+    }
+
+    func testNewCoachMessageEncodesAPresentPayloadAndOmitsItsNilFields() throws {
+        let payload = CoachMessagePayload(
+            foods: [.init(name: "Greek yogurt", why: "20g")],
+            followUps: nil,
+            recap: nil
+        )
+        let message = NewCoachMessage(userId: UUID(), role: "assistant", content: "Hi", messageType: "chat", payload: payload)
+        let data = try JSONEncoder().encode(message)
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let payloadObj = try XCTUnwrap(obj["payload"] as? [String: Any])
+        let foods = try XCTUnwrap(payloadObj["foods"] as? [[String: Any]])
+        XCTAssertEqual(foods.first?["name"] as? String, "Greek yogurt")
+        XCTAssertNil(payloadObj["followUps"])
+        XCTAssertNil(payloadObj["recap"])
+    }
+
+    // MARK: PulseFoodResolver
+
+    private func foodLog(name: String, minutesAgo: Double, now: Date) -> FoodLog {
+        FoodLog(
+            id: UUID(), userId: UUID(), loggedAt: now.addingTimeInterval(-minutesAgo * 60),
+            logDate: now.isoDateString, meal: .snack, foodItemId: UUID(), quantity: 1,
+            caloriesSnapshot: 100, proteinGSnapshot: 20, carbsGSnapshot: 5, fatGSnapshot: 2, fiberGSnapshot: 1,
+            foodItems: .init(name: name, brand: nil, servingDesc: nil)
+        )
+    }
+
+    func testResolveMatchesCaseInsensitivelyAndTrimmed() {
+        let now = Date.now
+        let log = foodLog(name: "Greek Yogurt", minutesAgo: 10, now: now)
+        XCTAssertEqual(PulseFoodResolver.resolve("  greek yogurt  ", in: [log])?.id, log.id)
+    }
+
+    func testResolveReturnsNilWithNoMatch() {
+        let now = Date.now
+        let log = foodLog(name: "Greek Yogurt", minutesAgo: 10, now: now)
+        XCTAssertNil(PulseFoodResolver.resolve("Protein shake", in: [log]))
+    }
+
+    func testResolveReturnsTheMostRecentLogWhenTheNameRepeats() {
+        let now = Date.now
+        let older = foodLog(name: "Greek yogurt", minutesAgo: 120, now: now)
+        let newer = foodLog(name: "Greek yogurt", minutesAgo: 5, now: now)
+        XCTAssertEqual(PulseFoodResolver.resolve("Greek yogurt", in: [older, newer])?.id, newer.id)
+    }
+
+    func testResolveReturnsNilForBlankName() {
+        let now = Date.now
+        let log = foodLog(name: "Greek yogurt", minutesAgo: 5, now: now)
+        XCTAssertNil(PulseFoodResolver.resolve("   ", in: [log]))
+    }
+
+    // MARK: PulseChipSource
+
+    private func message(role: String, followUps: [String]?) -> CoachMessage {
+        CoachMessage(
+            id: UUID(), userId: UUID(), role: role, content: "x", messageType: "chat", createdAt: .now,
+            payload: followUps.map { CoachMessagePayload(foods: nil, followUps: $0, recap: nil) }
+        )
+    }
+
+    func testChipsUsesFollowUpsFromTheNewestAssistantMessage() {
+        let assistant = message(role: "assistant", followUps: ["A", "B"])
+        XCTAssertEqual(PulseChipSource.chips(latestMessage: assistant, fallback: ["Fallback"]), ["A", "B"])
+    }
+
+    func testChipsFallBackWhenTheNewestMessageIsFromTheUser() {
+        let user = message(role: "user", followUps: ["A"])
+        XCTAssertEqual(PulseChipSource.chips(latestMessage: user, fallback: ["Fallback"]), ["Fallback"])
+    }
+
+    func testChipsFallBackWhenFollowUpsAreMissingOrEmpty() {
+        XCTAssertEqual(
+            PulseChipSource.chips(latestMessage: message(role: "assistant", followUps: nil), fallback: ["Fallback"]),
+            ["Fallback"]
+        )
+        XCTAssertEqual(
+            PulseChipSource.chips(latestMessage: message(role: "assistant", followUps: []), fallback: ["Fallback"]),
+            ["Fallback"]
+        )
+    }
+
+    func testChipsFallBackWithNoMessagesYet() {
+        XCTAssertEqual(PulseChipSource.chips(latestMessage: nil, fallback: ["Fallback"]), ["Fallback"])
+    }
+}
+
+// MARK: - What Pulse knows about you (docs/daylight-redesign.md, step 8)
+
+final class PulseProfileTests: XCTestCase {
+    func testQueuedPreferencesMergeWithoutDuplicatesOrLosingAllergies() {
+        let server = PulsePreferences(allergies: ["Peanuts"], allergyNote: "", eatingPatterns: [.halal], loves: ["Eggs"], avoids: [])
+        let queued = PulsePreferences(allergies: ["peanuts", "Shellfish"], allergyNote: "Mild", eatingPatterns: [.dairyFree], loves: [], avoids: ["Olives"])
+        let merged = server.merged(with: queued)
+        XCTAssertEqual(merged.allergies, ["Peanuts", "Shellfish"])
+        XCTAssertEqual(merged.allergyNote, "Mild")
+        XCTAssertEqual(merged.eatingPatterns, [.halal, .dairyFree])
+        XCTAssertEqual(merged.avoids, ["Olives"])
+    }
+
+
+    // MARK: PulsePreferences.normalized
+
+    func testNormalizedTrimsDedupesCaseInsensitivelyAndCapsLovesAndAvoids() {
+        var prefs = PulsePreferences()
+        prefs.loves = Array(repeating: " Yogurt ", count: 5) + (1...35).map { "Food \($0)" }
+        prefs.avoids = ["  Cilantro  ", "cilantro", "CILANTRO"]
+        let normalized = prefs.normalized
+
+        // First spelling wins, case-insensitive duplicates collapse, whitespace is trimmed.
+        XCTAssertEqual(normalized.avoids, ["Cilantro"])
+        XCTAssertEqual(normalized.loves.first, "Yogurt")
+        // 1 unique "Yogurt" + 35 unique "Food N" = 36 candidates, capped at 30.
+        XCTAssertEqual(normalized.loves.count, 30)
+    }
+
+    func testNormalizedCapsAllergiesAtTwentyAndTruncatesLongItemsTo60Characters() {
+        var prefs = PulsePreferences()
+        prefs.allergies = (1...25).map { "Allergen \($0)" }
+        prefs.avoids = [String(repeating: "x", count: 100)]
+        let normalized = prefs.normalized
+
+        XCTAssertEqual(normalized.allergies.count, 20)
+        XCTAssertEqual(normalized.avoids.first?.count, 60)
+    }
+
+    func testNormalizedTruncatesTheAllergyNoteTo300Characters() {
+        var prefs = PulsePreferences()
+        prefs.allergyNote = "  " + String(repeating: "a", count: 400) + "  "
+        XCTAssertEqual(prefs.normalized.allergyNote.count, 300)
+    }
+
+    func testNormalizedDropsBlankItemsAfterTrimming() {
+        var prefs = PulsePreferences()
+        prefs.loves = ["   ", "", "Mango"]
+        XCTAssertEqual(prefs.normalized.loves, ["Mango"])
+    }
+
+    // MARK: PulsePreferences.isEmpty
+
+    func testIsEmptyIsTrueOnlyWithNothingSet() {
+        XCTAssertTrue(PulsePreferences().isEmpty)
+        var prefs = PulsePreferences()
+        prefs.avoids = ["Cilantro"]
+        XCTAssertFalse(prefs.isEmpty)
+    }
+
+    // MARK: AboutYouContext mapping
+
+    func testAboutYouContextMapsEveryFieldAndSortsEatingPatterns() {
+        let prefs = PulsePreferences(
+            allergies: ["Peanuts"],
+            allergyNote: "Carries an EpiPen",
+            eatingPatterns: [.vegan, .dairyFree],
+            loves: ["Greek yogurt"],
+            avoids: ["Cilantro"]
+        )
+        let context = AboutYouContext(prefs)
+
+        XCTAssertEqual(context.allergies, ["Peanuts"])
+        XCTAssertEqual(context.allergyNote, "Carries an EpiPen")
+        XCTAssertEqual(context.eatingPatterns, ["dairy_free", "vegan"], "sorted, so the prompt is stable across runs")
+        XCTAssertEqual(context.loves, ["Greek yogurt"])
+        XCTAssertEqual(context.avoids, ["Cilantro"])
+    }
+
+    // MARK: PulseRememberSuggestion.label
+
+    func testRememberSuggestionLabels() {
+        XCTAssertEqual(PulseRememberSuggestion(kind: .allergy, value: "Peanuts").label, "Allergy: Peanuts")
+        XCTAssertEqual(PulseRememberSuggestion(kind: .avoid, value: "Cilantro").label, "Avoid: Cilantro")
+        XCTAssertEqual(PulseRememberSuggestion(kind: .love, value: "Mango").label, "Loves: Mango")
+    }
+
+    // MARK: CoachMessagePayload.remember — decode/encode
+
+    func testCoachMessagePayloadRoundTripsRememberThroughJSON() throws {
+        let payload = CoachMessagePayload(
+            remember: [.init(kind: .avoid, value: "Cilantro"), .init(kind: .allergy, value: "Peanuts")]
+        )
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(CoachMessagePayload.self, from: data)
+        XCTAssertEqual(decoded, payload)
+    }
+
+    func testCoachMessageDecodesRememberFromAPresentPayload() throws {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "user_id": "\(UUID().uuidString)",
+          "role": "assistant",
+          "content": "Noted.",
+          "message_type": "chat",
+          "created_at": 0,
+          "payload": { "remember": [{"kind": "avoid", "value": "Cilantro"}] }
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let message = try decoder.decode(CoachMessage.self, from: json)
+        XCTAssertEqual(message.payload?.remember, [.init(kind: .avoid, value: "Cilantro")])
+    }
+
+    // A row saved before `remember` existed (or any payload missing the key) must still decode,
+    // with `remember` reading as nil rather than throwing.
+    func testCoachMessageDecodesWithoutRememberKeyAsNil() throws {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "user_id": "\(UUID().uuidString)",
+          "role": "assistant",
+          "content": "Hi",
+          "message_type": "chat",
+          "created_at": 0,
+          "payload": { "followUps": ["Plan tomorrow"] }
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let message = try decoder.decode(CoachMessage.self, from: json)
+        XCTAssertNil(message.payload?.remember)
+    }
+
+    // MARK: CoachViewModel — not re-offering what Pulse already knows
+
+    @MainActor
+    func testRememberCardsExcludesSuggestionsAlreadyInWhatPulseKnows() {
+        let restore = PulseProfileStore.shared.preferences
+        defer { PulseProfileStore.shared.setForPreview(preferences: restore) }
+        PulseProfileStore.shared.setForPreview(preferences: PulsePreferences(avoids: ["Cilantro"]))
+
+        let vm = CoachViewModel()
+        let known = PulseRememberSuggestion(kind: .avoid, value: "cilantro") // case-insensitive match
+        let new = PulseRememberSuggestion(kind: .love, value: "Mango")
+        let message = CoachMessage(
+            id: UUID(), userId: UUID(), role: "assistant", content: "Noted", messageType: "chat",
+            createdAt: .now, payload: CoachMessagePayload(remember: [known, new])
+        )
+
+        XCTAssertEqual(vm.rememberCards(for: message), [new])
+    }
+
+    @MainActor
+    func testDismissedRememberSuggestionStaysHiddenForThatMessage() {
+        let restore = PulseProfileStore.shared.preferences
+        defer { PulseProfileStore.shared.setForPreview(preferences: restore) }
+        PulseProfileStore.shared.setForPreview(preferences: PulsePreferences())
+
+        let vm = CoachViewModel()
+        let suggestion = PulseRememberSuggestion(kind: .avoid, value: "Cilantro")
+        let message = CoachMessage(
+            id: UUID(), userId: UUID(), role: "assistant", content: "Noted", messageType: "chat",
+            createdAt: .now, payload: CoachMessagePayload(remember: [suggestion])
+        )
+
+        XCTAssertEqual(vm.rememberCards(for: message), [suggestion])
+        vm.dismissRememberSuggestion(suggestion, in: message)
+        XCTAssertTrue(vm.rememberCards(for: message).isEmpty)
     }
 }
 
@@ -1134,6 +2471,34 @@ final class HeightConversionTests: XCTestCase {
     }
 }
 
+// MARK: - Weight-change / spoken-unit formatting
+
+final class UnitSystemFormattingTests: XCTestCase {
+    func testFormatWeightChangeSignsAndConvertsForImperial() {
+        // 2.4 kg down ≈ 5.3 lbs down.
+        XCTAssertEqual(UnitSystem.imperial.formatWeightChange(-2.4), "\u{2212}5.3 lbs")
+        // 0.5 kg up ≈ 1.1 lbs up.
+        XCTAssertEqual(UnitSystem.imperial.formatWeightChange(0.5), "+1.1 lbs")
+    }
+
+    func testFormatWeightChangeStaysInKgForMetric() {
+        XCTAssertEqual(UnitSystem.metric.formatWeightChange(-2.4), "\u{2212}2.4 kg")
+        XCTAssertEqual(UnitSystem.metric.formatWeightChange(1.1), "+1.1 kg")
+    }
+
+    func testFormatWeightChangeCallsATinyDeltaStable() {
+        XCTAssertEqual(UnitSystem.metric.formatWeightChange(0.02), "Stable")
+        XCTAssertEqual(UnitSystem.imperial.formatWeightChange(-0.02), "Stable")
+    }
+
+    func testSpokenUnitsSpellOutTheAbbreviation() {
+        XCTAssertEqual(UnitSystem.metric.spokenWeightUnit, "kilograms")
+        XCTAssertEqual(UnitSystem.imperial.spokenWeightUnit, "pounds")
+        XCTAssertEqual(UnitSystem.metric.spokenLengthUnit, "centimeters")
+        XCTAssertEqual(UnitSystem.imperial.spokenLengthUnit, "inches")
+    }
+}
+
 // MARK: - GLP-1 decoding
 
 final class GLP1LogDecodingTests: XCTestCase {
@@ -1281,6 +2646,22 @@ final class DecimalInputTests: XCTestCase {
         XCTAssertEqual(DecimalInput.text(from: 1000, locale: us), "1000")
         XCTAssertEqual(DecimalInput.text(from: 0, locale: us), "", "zero shows the placeholder instead")
         XCTAssertEqual(DecimalInput.value(from: DecimalInput.text(from: 12.5, locale: de), locale: de), 12.5)
+    }
+}
+
+final class WaterUndoTests: XCTestCase {
+    // Undoing a glass larger than what's left (e.g. the goal was edited, or a second
+    // undo races the first) must clamp at zero rather than going negative.
+    func testNeverGoesBelowZero() {
+        XCTAssertEqual(TodayViewModel.waterIntakeAfterUndo(150, removing: 250), 0)
+    }
+
+    func testSubtractsNormally() {
+        XCTAssertEqual(TodayViewModel.waterIntakeAfterUndo(750, removing: 250), 500)
+    }
+
+    func testExactUndoReachesZeroNotNegativeZero() {
+        XCTAssertEqual(TodayViewModel.waterIntakeAfterUndo(250, removing: 250), 0)
     }
 }
 
@@ -1489,6 +2870,89 @@ final class LocalStoreSyncStateTests: XCTestCase {
 
         try LocalStore.shared.pruneDeletedFoodLogs(userId: UUID(), since: "2026-07-01", remoteIds: [])
         XCTAssertNotNil(try row(old), "belongs to a different user")
+    }
+
+    // MARK: Water undo
+
+    private func waterRow(_ id: UUID) throws -> SDWaterLog? {
+        let descriptor = FetchDescriptor<SDWaterLog>(predicate: #Predicate { $0.id == id })
+        return try container.mainContext.fetch(descriptor).first
+    }
+
+    @discardableResult
+    private func insertWater(amountMl: Double = 250) throws -> UUID {
+        let id = UUID()
+        try LocalStore.shared.insertWaterLog(
+            id: id, userId: userId, logDate: "2026-07-07", amountMl: amountMl
+        )
+        return id
+    }
+
+    // Undo must tombstone, not hard-delete (same contract as food/workout deletes), and
+    // the tombstoned row must stop counting toward the day's total immediately.
+    func testUndoTombstonesWaterLogAndExcludesItFromTotal() throws {
+        let id = try insertWater(amountMl: 250)
+        XCTAssertEqual(try LocalStore.shared.fetchWaterTotal(for: dateFor("2026-07-07"), userId: userId), 250)
+
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+
+        XCTAssertNotNil(try waterRow(id), "row was hard-deleted; an in-flight create would be orphaned")
+        XCTAssertEqual(try XCTUnwrap(waterRow(id)).syncState, "pendingDelete")
+        XCTAssertEqual(try LocalStore.shared.fetchWaterTotal(for: dateFor("2026-07-07"), userId: userId), 0)
+    }
+
+    // A create push that lands after Undo must not resurrect the water: markWaterLogSynced
+    // only flips pendingCreate → synced, mirroring markWorkoutLogSynced's guard.
+    func testMarkWaterLogSyncedDoesNotResurrectATombstone() throws {
+        let id = try insertWater()
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+
+        try LocalStore.shared.markWaterLogSynced(id: id)
+
+        XCTAssertEqual(try XCTUnwrap(waterRow(id)).syncState, "pendingDelete")
+    }
+
+    // Completion of the delete push only removes rows still tombstoned — a race where the
+    // row was somehow re-synced first must not hard-delete it out from under that state.
+    func testRemoveWaterLogAfterDeleteOnlyRemovesTombstonedRows() throws {
+        let id = try insertWater()
+        try LocalStore.shared.markWaterLogSynced(id: id)   // not tombstoned yet
+
+        try LocalStore.shared.removeWaterLogAfterDelete(id: id)
+        XCTAssertNotNil(try waterRow(id), "a synced row must not be removed by a delete completion")
+
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+        try LocalStore.shared.removeWaterLogAfterDelete(id: id)
+        XCTAssertNil(try waterRow(id))
+    }
+
+    // A pull that skips existing ids must not resurrect a tombstoned row: the local
+    // pendingDelete row already exists at that id, so upsertWaterLog's exists-check skips it.
+    func testPullSkipsATombstonedWaterLog() throws {
+        let id = try insertWater(amountMl: 250)
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+
+        try LocalStore.shared.upsertWaterLog(
+            id: id, userId: userId, logDate: "2026-07-07", amountMl: 250, loggedAt: .now
+        )
+
+        XCTAssertEqual(try XCTUnwrap(waterRow(id)).syncState, "pendingDelete")
+        XCTAssertEqual(try LocalStore.shared.fetchWaterTotal(for: dateFor("2026-07-07"), userId: userId), 0)
+    }
+
+    // pendingCount feeds the "N changes waiting to sync" badge; a pending water delete
+    // (from Undo) must count just like a pending water create does.
+    func testPendingCountIncludesPendingWaterDeletes() throws {
+        XCTAssertEqual(try LocalStore.shared.pendingCount(), 0)
+
+        let id = try insertWater()
+        XCTAssertEqual(try LocalStore.shared.pendingCount(), 1)
+
+        try LocalStore.shared.markWaterLogSynced(id: id)
+        XCTAssertEqual(try LocalStore.shared.pendingCount(), 0)
+
+        try LocalStore.shared.markWaterLogDeleted(id: id)
+        XCTAssertEqual(try LocalStore.shared.pendingCount(), 1)
     }
 
     // MARK: Workout reconciliation
@@ -1987,6 +3451,12 @@ final class BodyMeasurementTests: XCTestCase {
         XCTAssertEqual(UnitSystem.metric.lengthInput(fromCm: 96.5), 96.5)
     }
 
+    func testFormatLengthUsesTheSelectedUnit() {
+        XCTAssertEqual(UnitSystem.metric.formatLength(96.5), "96.5 cm")
+        // 96.52 cm is 38.0 in.
+        XCTAssertEqual(UnitSystem.imperial.formatLength(96.52), "38.0 in")
+    }
+
     func testUnknownSiteDecodesWithoutCrashing() throws {
         // A future app version may write sites this build doesn't know. The row must
         // decode (site stays a String); only siteType comes back nil.
@@ -2285,6 +3755,21 @@ final class WeeklyRecapTests: XCTestCase {
         XCTAssertEqual(digest.days.count, 7)
         XCTAssertNil(digest.days[5].proteinFloorHit)
         XCTAssertNil(digest.priorWeek)
+    }
+
+    func testDigestWeightChangeFollowsTheUnitSetting() {
+        let interval = WeeklyRecapSchedule.lastWeek(before: date(29), calendar: calendar)
+        let logs = [0, 5].map { offset in
+            WeightLog(id: UUID(), userId: UUID(),
+                      loggedAt: calendar.date(byAdding: .day, value: offset, to: interval.start)!,
+                      weightKg: offset == 0 ? 85 : 84, source: "manual")
+        }
+        func change(_ units: UnitSystem) -> String? {
+            WeeklyRecapDigest.build(interval: interval, summaries: [], movement: [], weightLogs: logs,
+                                    checkIns: [], foodNames: [], proteinGoal: nil, units: units, calendar: calendar).weightChange
+        }
+        XCTAssertEqual(change(.metric), "-1.0 kg across 2 weigh-ins")
+        XCTAssertEqual(change(.imperial), "-2.2 lbs across 2 weigh-ins")
     }
 }
 
@@ -2594,5 +4079,574 @@ final class StrongWeekFeedbackTests: XCTestCase {
         XCTAssertEqual(decoded.outlook, feedback.outlook)
         XCTAssertEqual(decoded.strongWeekId, feedback.strongWeekId)
         XCTAssertEqual(decoded.generatedAt.timeIntervalSince1970, date.timeIntervalSince1970, accuracy: 0.001)
+    }
+}
+
+// MARK: - Daylight Log sheet (docs/daylight-redesign.md)
+
+final class FoodLoggingLogicTests: XCTestCase {
+
+    // MARK: LogTab
+
+    func testLogTabTelemetrySourcesMatchTheirTab() {
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.talk.telemetrySource, .talk)
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.search.telemetrySource, .search)
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.scan.telemetrySource, .scan)
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.favorites.telemetrySource, .favorite)
+    }
+
+    func testLogTabsAreTalkSearchScanFavoritesInOrder() {
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.allCases, [.talk, .search, .scan, .favorites])
+    }
+
+    // MARK: ProteinDensity / FoodSearchMacros (Search's "Protein-dense" filter)
+
+    func testProteinDenseAtOrAboveTenGramsPerHundredCalories() {
+        // Chicken breast-like ratio: 31g protein / 165 kcal ≈ 18.8g/100kcal.
+        XCTAssertTrue(ProteinDensity.isProteinDense(calories: 165, proteinG: 31))
+        // Exactly at the threshold.
+        XCTAssertTrue(ProteinDensity.isProteinDense(calories: 100, proteinG: 10))
+    }
+
+    func testProteinDenseFalseBelowThresholdOrWithNoCalories() {
+        // White rice-like ratio: ~2.7g/100kcal.
+        XCTAssertFalse(ProteinDensity.isProteinDense(calories: 130, proteinG: 2.7))
+        XCTAssertFalse(ProteinDensity.isProteinDense(calories: 0, proteinG: 5))
+    }
+
+    func testFoodSearchMacrosParsesFatSecretStyleDescription() throws {
+        let description = "Per 100g - Calories: 165kcal | Fat: 3.6g | Carbs: 0g | Protein: 31g"
+        let macros = try XCTUnwrap(FoodSearchMacros.parse(description))
+        XCTAssertEqual(macros.calories, 165)
+        XCTAssertEqual(macros.proteinG, 31)
+    }
+
+    func testFoodSearchMacrosReturnsNilWhenFieldsAreMissing() {
+        XCTAssertNil(FoodSearchMacros.parse("A food with no macro summary"))
+    }
+
+    // MARK: ProteinFloorCheck ("This clears your floor")
+
+    func testClearsFloorWhenAddedProteinCrossesTheGoal() {
+        XCTAssertTrue(ProteinFloorCheck.clearsFloor(currentProteinG: 112, addedProteinG: 33, goalG: 140))
+    }
+
+    func testDoesNotClearFloorWhenStillShortOfGoal() {
+        XCTAssertFalse(ProteinFloorCheck.clearsFloor(currentProteinG: 60, addedProteinG: 10, goalG: 140))
+    }
+
+    func testDoesNotClearFloorWhenAlreadyAtOrOverGoal() {
+        // Already there — nothing left to "clear".
+        XCTAssertFalse(ProteinFloorCheck.clearsFloor(currentProteinG: 145, addedProteinG: 10, goalG: 140))
+    }
+
+    func testDoesNotClearFloorWithNoOrZeroGoal() {
+        XCTAssertFalse(ProteinFloorCheck.clearsFloor(currentProteinG: 50, addedProteinG: 100, goalG: nil))
+        XCTAssertFalse(ProteinFloorCheck.clearsFloor(currentProteinG: 50, addedProteinG: 100, goalG: 0))
+    }
+
+    // MARK: RecentFoodsGrouper (Favorites tab's "Recents from the last 72 hours")
+
+    private func foodLog(
+        name: String,
+        hoursAgo: Double,
+        foodItemId: UUID = UUID(),
+        meal: Meal = .snack,
+        quantity: Double = 1,
+        proteinG: Double = 10,
+        now: Date
+    ) -> FoodLog {
+        FoodLog(
+            id: UUID(), userId: UUID(), loggedAt: now.addingTimeInterval(-hoursAgo * 3600),
+            logDate: now.isoDateString, meal: meal, foodItemId: foodItemId, quantity: quantity,
+            caloriesSnapshot: 100, proteinGSnapshot: proteinG, carbsGSnapshot: 5, fatGSnapshot: 2, fiberGSnapshot: 1,
+            foodItems: .init(name: name, brand: nil, servingDesc: nil)
+        )
+    }
+
+    func testRecentLogsExcludesAnythingOlderThanSeventyTwoHours() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let withinWindow = foodLog(name: "Cottage cheese", hoursAgo: 71, now: now)
+        let justOutside = foodLog(name: "Old oatmeal", hoursAgo: 73, now: now)
+        let recent = RecentFoodsGrouper.recentLogs(from: [withinWindow, justOutside], now: now, favoritedFoodItemIds: [])
+        XCTAssertEqual(recent.map(\.displayName), ["Cottage cheese"])
+    }
+
+    func testRecentLogsHidesFavoritedFoods() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let favoritedId = UUID()
+        let favorited = foodLog(name: "Yogurt bowl", hoursAgo: 2, foodItemId: favoritedId, now: now)
+        let notFavorited = foodLog(name: "Turkey chili", hoursAgo: 3, now: now)
+        let recent = RecentFoodsGrouper.recentLogs(from: [favorited, notFavorited], now: now, favoritedFoodItemIds: [favoritedId])
+        XCTAssertEqual(recent.map(\.displayName), ["Turkey chili"])
+    }
+
+    func testRecentLogsAreSortedNewestFirst() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let older = foodLog(name: "Everything bagel", hoursAgo: 20, now: now)
+        let newer = foodLog(name: "Cottage cheese", hoursAgo: 1, now: now)
+        let recent = RecentFoodsGrouper.recentLogs(from: [older, newer], now: now, favoritedFoodItemIds: [])
+        XCTAssertEqual(recent.map(\.displayName), ["Cottage cheese", "Everything bagel"])
+    }
+
+    func testGroupedLabelsTodayYesterdayAndWeekdayInFirstSeenOrder() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        // A Wednesday at noon UTC.
+        let now = calendar.date(from: DateComponents(year: 2024, month: 3, day: 20, hour: 12))!
+
+        let today = foodLog(name: "Cottage cheese", hoursAgo: 2, now: now)
+        let yesterday = foodLog(name: "Turkey chili", hoursAgo: 20, now: now)
+        let monday = foodLog(name: "String cheese", hoursAgo: 50, now: now)
+
+        let sections = RecentFoodsGrouper.grouped([today, yesterday, monday], now: now, calendar: calendar)
+        XCTAssertEqual(sections.map(\.label), ["Today", "Yesterday", "Monday"])
+        XCTAssertEqual(sections.map { $0.logs.map(\.displayName) }, [["Cottage cheese"], ["Turkey chili"], ["String cheese"]])
+    }
+
+    func testGroupedKeepsMultipleLogsUnderTheSameDay() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2024, month: 3, day: 20, hour: 12))!
+        let first = foodLog(name: "Cottage cheese", hoursAgo: 1, now: now)
+        let second = foodLog(name: "Everything bagel", hoursAgo: 3, now: now)
+        let sections = RecentFoodsGrouper.grouped([first, second], now: now, calendar: calendar)
+        XCTAssertEqual(sections.count, 1)
+        XCTAssertEqual(sections[0].logs.count, 2)
+    }
+}
+
+// MARK: - Hold-to-confirm (Daylight Shot day)
+
+// `HoldToConfirmProgress` is the state machine behind `HoldToConfirmButton`'s press-and-hold
+// gesture (NutriPulse/Features/GLP1/HoldToConfirmButton.swift). It's kept free of SwiftUI/UIKit
+// so these three race conditions — the ones that actually matter for a hold gesture — can be
+// checked without driving a real gesture, animation, or timer.
+final class HoldToConfirmProgressTests: XCTestCase {
+
+    func testFreshStateIsNotHoldingOrComplete() {
+        let state = HoldToConfirmProgress()
+        XCTAssertFalse(state.isHolding)
+        XCTAssertFalse(state.isComplete)
+    }
+
+    func testBeginHoldStartsHolding() {
+        var state = HoldToConfirmProgress()
+        XCTAssertTrue(state.beginHold())
+        XCTAssertTrue(state.isHolding)
+        XCTAssertFalse(state.isComplete)
+    }
+
+    // A full hold: begin, then the timer fires once the duration has elapsed.
+    func testCompleteAfterHoldingSucceeds() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        XCTAssertTrue(state.complete())
+        XCTAssertTrue(state.isComplete)
+        XCTAssertFalse(state.isHolding)
+    }
+
+    // Releasing early must cancel — a stale timer scheduled before the release must not still
+    // confirm the dose.
+    func testReleasingEarlyCancelsAndBlocksTheStaleTimer() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        state.cancelHold()
+        XCTAssertFalse(state.isHolding)
+        XCTAssertFalse(state.isComplete)
+        // The DispatchWorkItem scheduled by `beginHold` may still fire after the cancel; `complete`
+        // must be a no-op in that case.
+        XCTAssertFalse(state.complete())
+        XCTAssertFalse(state.isComplete)
+    }
+
+    // A confirmation can only fire once, even if `complete` is somehow called twice.
+    func testCompleteIsNotReentrant() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        XCTAssertTrue(state.complete())
+        XCTAssertFalse(state.complete())
+    }
+
+    // Calling `complete` without ever holding (e.g. a stray timer with no matching press) must
+    // not confirm.
+    func testCompleteWithoutHoldingDoesNothing() {
+        var state = HoldToConfirmProgress()
+        XCTAssertFalse(state.complete())
+        XCTAssertFalse(state.isComplete)
+    }
+
+    // Once complete, a new press must not restart the hold — the caller expects exactly one
+    // confirmation per instance (the view gives `HoldToConfirmButton` a fresh id to try again).
+    func testBeginHoldAfterCompleteIsRejected() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        state.complete()
+        XCTAssertFalse(state.beginHold())
+        XCTAssertFalse(state.isHolding)
+    }
+
+    // `reset` clears both flags so an instance can be reused (mainly for tests).
+    func testResetClearsHoldingAndComplete() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        state.complete()
+        state.reset()
+        XCTAssertFalse(state.isHolding)
+        XCTAssertFalse(state.isComplete)
+        XCTAssertTrue(state.beginHold())
+    }
+
+    // cancelHold after completion must not un-confirm a dose that already logged.
+    func testCancelAfterCompleteIsIgnored() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        state.complete()
+        state.cancelHold()
+        XCTAssertTrue(state.isComplete)
+    }
+}
+
+// MARK: - Analytics questions
+
+final class ProteinSourceAggregatorTests: XCTestCase {
+    private func log(_ name: String, protein: Double, loggedAt: Date = .now) -> FoodLog {
+        FoodLog(
+            id: UUID(), userId: UUID(), loggedAt: loggedAt, logDate: loggedAt.isoDateString,
+            meal: .breakfast, foodItemId: UUID(), quantity: 1,
+            caloriesSnapshot: 200, proteinGSnapshot: protein, carbsGSnapshot: 10, fatGSnapshot: 5, fiberGSnapshot: 1,
+            foodItems: FoodItemSummary(name: name, brand: nil, servingDesc: nil)
+        )
+    }
+
+    func testMergesNamesCaseInsensitivelyAndTrimmed() {
+        let sources = ProteinSourceAggregator.topSources(from: [
+            log("Greek Yogurt", protein: 20),
+            log("greek yogurt", protein: 20),
+            log(" Greek Yogurt ", protein: 20),
+        ])
+        XCTAssertEqual(sources.count, 1)
+        XCTAssertEqual(sources.first?.name, "Greek Yogurt")
+        XCTAssertEqual(sources.first?.gramsProtein, 60)
+        XCTAssertEqual(sources.first?.timesLogged, 3)
+        XCTAssertEqual(sources.first?.share, 1.0)
+    }
+
+    func testShareIsAgainstTheFullRangeTotalNotJustTheTopFive() {
+        let sources = ProteinSourceAggregator.topSources(from: [
+            log("Turkey Chili", protein: 30),
+            log("Turkey Chili", protein: 30),
+            log("Kale", protein: 10),
+        ], limit: 5)
+        XCTAssertEqual(sources.count, 2)
+        XCTAssertEqual(sources[0].name, "Turkey Chili")
+        XCTAssertEqual(sources[0].share, 60.0 / 70.0, accuracy: 0.0001)
+        XCTAssertEqual(sources[1].share, 10.0 / 70.0, accuracy: 0.0001)
+    }
+
+    func testKeepsOnlyTheTopFiveByProtein() {
+        let logs = (1...7).map { log("Food \($0)", protein: Double($0) * 10) }
+        let sources = ProteinSourceAggregator.topSources(from: logs)
+        XCTAssertEqual(sources.count, 5)
+        XCTAssertEqual(sources.first?.name, "Food 7")
+        XCTAssertEqual(sources.last?.name, "Food 3")
+    }
+
+    func testEmptyLogsProduceNoSources() {
+        XCTAssertEqual(ProteinSourceAggregator.topSources(from: []), [])
+        XCTAssertNil(ProteinSourceAggregator.headline(for: []))
+    }
+
+    func testHeadlineNamesTheTopTwoAndTheirCombinedShare() {
+        let sources = ProteinSourceAggregator.topSources(from: [
+            log("Greek Yogurt", protein: 19), log("Greek Yogurt", protein: 19),
+            log("Turkey Chili", protein: 19),
+            log("Kale", protein: 63),
+        ])
+        // Greek Yogurt 38g, Turkey Chili 19g, Kale 63g — total 120g. Top two by protein are
+        // Kale (63g) and Greek Yogurt (38g): 101/120 ≈ 84%.
+        let headline = ProteinSourceAggregator.headline(for: sources)
+        XCTAssertEqual(headline, "Kale and Greek Yogurt gave you 84% of your protein.")
+    }
+
+    func testHeadlineWithOnlyOneSourceNamesJustThatOne() {
+        let sources = ProteinSourceAggregator.topSources(from: [log("Protein Shake", protein: 25)])
+        XCTAssertEqual(ProteinSourceAggregator.headline(for: sources), "Protein Shake gave you 100% of your protein.")
+    }
+}
+
+final class GLP1DoseChangeDetectorTests: XCTestCase {
+    private func log(_ medication: String, _ doseMg: Double, daysAgo: Int) -> GLP1Log {
+        GLP1Log(
+            id: UUID(), userId: UUID(), injectedAt: Date.now.addingTimeInterval(-Double(daysAgo) * 86_400),
+            medication: medication, doseMg: doseMg, site: "Left Abdomen", nextDueAt: nil
+        )
+    }
+
+    func testNoChangeAcrossRepeatedSameDose() {
+        let logs = [log("Zepbound", 5, daysAgo: 21), log("Zepbound", 5, daysAgo: 14), log("Zepbound", 5, daysAgo: 7)]
+        XCTAssertEqual(GLP1DoseChangeDetector.changes(in: logs), [])
+    }
+
+    func testFirstLogOfAMedicationIsAStartNotAChange() {
+        let logs = [log("Zepbound", 5, daysAgo: 7)]
+        XCTAssertEqual(GLP1DoseChangeDetector.changes(in: logs), [])
+    }
+
+    func testDetectsAnIncreaseInDose() {
+        let logs = [log("Zepbound", 2.5, daysAgo: 14), log("Zepbound", 2.5, daysAgo: 7), log("Zepbound", 5, daysAgo: 0)]
+        let changes = GLP1DoseChangeDetector.changes(in: logs)
+        XCTAssertEqual(changes.count, 1)
+        XCTAssertEqual(changes.first?.doseMg, 5)
+        XCTAssertEqual(changes.first?.medication, "Zepbound")
+    }
+
+    func testTracksDosePerMedicationSoSwitchingDrugsIsNotAChange() {
+        // Switching from Ozempic 2.0mg to Zepbound 5.0mg isn't a "dose change" on a shared
+        // scale — they're different molecules — but a later Zepbound increase still is.
+        let logs = [
+            log("Ozempic", 2.0, daysAgo: 21),
+            log("Zepbound", 5.0, daysAgo: 14),
+            log("Zepbound", 7.5, daysAgo: 7),
+        ]
+        let changes = GLP1DoseChangeDetector.changes(in: logs)
+        XCTAssertEqual(changes.count, 1)
+        XCTAssertEqual(changes.first?.doseMg, 7.5)
+    }
+}
+
+final class WeightTrendEngineTests: XCTestCase {
+    private func log(_ weightKg: Double, daysAgo: Int) -> WeightLog {
+        WeightLog(id: UUID(), userId: UUID(), loggedAt: Date.now.addingTimeInterval(-Double(daysAgo) * 86_400), weightKg: weightKg, source: "manual")
+    }
+
+    func testRollingAverageSmoothsATrailingWindow() {
+        XCTAssertEqual(WeightTrendEngine.rollingAverage([100, 140, 120, 160], window: 3), [100, 120, 120, 140])
+        XCTAssertEqual(WeightTrendEngine.rollingAverage([5, 7], window: 1), [5, 7])
+        XCTAssertEqual(WeightTrendEngine.rollingAverage([], window: 3), [])
+    }
+
+    func testSmoothedSeriesSortsByDateAndSmooths() {
+        let logs = [log(82, daysAgo: 0), log(80, daysAgo: 14), log(81, daysAgo: 7)]
+        let series = WeightTrendEngine.smoothedSeries(from: logs, window: 2)
+        XCTAssertEqual(series.map(\.date), logs.sorted { $0.loggedAt < $1.loggedAt }.map(\.loggedAt))
+        XCTAssertEqual(series.map { ($0.value * 100).rounded() / 100 }, [80, 80.5, 81.5])
+    }
+
+    func testTakeawayWithNoWeighInsSaysSo() {
+        XCTAssertEqual(WeightTrendEngine.takeaway(for: [], units: .metric), "No weigh-ins logged in this range yet.")
+    }
+
+    func testTakeawayWithOneWeighInSaysNotEnoughForAChange() {
+        XCTAssertEqual(WeightTrendEngine.takeaway(for: [log(80, daysAgo: 0)], units: .metric),
+                       "Only one weigh-in logged — not enough to show a change.")
+    }
+
+    func testTakeawayBelowMinimumAdmitsItsTooFewToCallATrend() {
+        let logs = [log(82, daysAgo: 14), log(81, daysAgo: 7), log(80, daysAgo: 0)]
+        let takeaway = WeightTrendEngine.takeaway(for: logs, units: .metric)
+        XCTAssertTrue(takeaway.contains("too few weigh-ins to call a trend"), takeaway)
+        XCTAssertTrue(takeaway.contains("down"), takeaway)
+        XCTAssertTrue(takeaway.contains("3 weigh-ins"), takeaway)
+    }
+
+    func testTakeawayAtOrAboveMinimumNeverMentionsTooFew() {
+        let logs = [log(84, daysAgo: 21), log(83, daysAgo: 14), log(81.5, daysAgo: 7), log(80, daysAgo: 0)]
+        let takeaway = WeightTrendEngine.takeaway(for: logs, units: .metric)
+        XCTAssertFalse(takeaway.contains("too few"), takeaway)
+        XCTAssertTrue(takeaway.contains("down"), takeaway)
+        XCTAssertTrue(takeaway.contains("4 weigh-ins"), takeaway)
+    }
+
+    func testTakeawaySaysSteadyRatherThanUpOrDownForATinyChange() {
+        let logs = [log(80.0, daysAgo: 21), log(80.02, daysAgo: 14), log(79.98, daysAgo: 7), log(80.01, daysAgo: 0)]
+        let takeaway = WeightTrendEngine.takeaway(for: logs, units: .metric)
+        XCTAssertTrue(takeaway.contains("held steady"), takeaway)
+    }
+
+    func testTakeawayFormatsInImperialUnitsWhenSelected() {
+        // 5 kg down ≈ 11.0 lbs.
+        let logs = [log(90, daysAgo: 21), log(88, daysAgo: 14), log(86, daysAgo: 7), log(85, daysAgo: 0)]
+        let takeaway = WeightTrendEngine.takeaway(for: logs, units: .imperial)
+        XCTAssertTrue(takeaway.contains("lbs"), takeaway)
+    }
+}
+
+final class ShotDayEatingTakeawayTests: XCTestCase {
+    private func insight(day: Int, protein: Double?, samples: Int) -> CycleDayInsight {
+        CycleDayInsight(
+            cycleDay: day, sampleCount: samples, averageProteinG: protein, averageCalories: nil,
+            averageWaterMl: nil, averageWorkoutMinutes: nil, averageAppetite: nil, averageEnergy: nil,
+            averageNausea: nil, averageWeightKg: nil, nutritionSampleCount: samples, hydrationSampleCount: 0,
+            movementSampleCount: 0, checkInSampleCount: 0, weightSampleCount: 0
+        )
+    }
+
+    func testEmptyInsightsInviteMoreLogging() {
+        XCTAssertEqual(ShotDayEatingTakeaway.build(insights: []), "Log a few days around your shots to see a pattern here.")
+    }
+
+    func testNamesTheStrongestProteinDayAndSampleSize() {
+        let insights = [
+            insight(day: 0, protein: 90, samples: 3),
+            insight(day: 3, protein: 140, samples: 2),
+            insight(day: 6, protein: 100, samples: 4),
+        ]
+        XCTAssertEqual(
+            ShotDayEatingTakeaway.build(insights: insights),
+            "Protein has tended to be highest around day 3 of your dose cycle, from 9 logged days."
+        )
+    }
+
+    func testFallsBackToASampleCountWhenNoProteinDataExists() {
+        let insights = [insight(day: 0, protein: nil, samples: 2)]
+        XCTAssertEqual(ShotDayEatingTakeaway.build(insights: insights), "Based on 2 logged days across your dose cycle.")
+    }
+}
+
+final class NutritionSummaryTakeawayTests: XCTestCase {
+    func testNoLoggedDaysSaysSo() {
+        XCTAssertEqual(
+            NutritionSummaryTakeaway.build(loggedDayCount: 0, avgProtein: 0, goalProtein: 130, avgCalories: 0, goalCalories: 1600),
+            "No days logged in this range yet."
+        )
+    }
+
+    func testWithAGoalReportsPercentOfGoal() {
+        let text = NutritionSummaryTakeaway.build(loggedDayCount: 5, avgProtein: 104, goalProtein: 130, avgCalories: 1500, goalCalories: 1600)
+        XCTAssertTrue(text.contains("80% of your 130g protein goal"), text)
+        XCTAssertTrue(text.contains("1500 of 1600 kcal"), text)
+        XCTAssertTrue(text.contains("5 logged days"), text)
+    }
+
+    func testWithoutAGoalReportsRawAverages() {
+        let text = NutritionSummaryTakeaway.build(loggedDayCount: 1, avgProtein: 90, goalProtein: nil, avgCalories: 1400, goalCalories: nil)
+        XCTAssertTrue(text.contains("90g of protein a day"), text)
+        XCTAssertTrue(text.contains("1400 kcal a day"), text)
+        XCTAssertTrue(text.contains("1 logged day:"), text)
+    }
+}
+
+final class MovementTakeawayTests: XCTestCase {
+    func testNoActiveDaysSaysSo() {
+        XCTAssertEqual(MovementTakeaway.build(activeDayCount: 0, totalDayCount: 7, sessions: 0, avgMinutes: 0), "No movement logged in this range yet.")
+    }
+
+    func testReportsActiveDaysSessionsAndAverage() {
+        let text = MovementTakeaway.build(activeDayCount: 4, totalDayCount: 7, sessions: 5, avgMinutes: 32.6)
+        XCTAssertEqual(text, "You moved on 4 of 7 days — 5 sessions, averaging 33 min on active days.")
+    }
+}
+
+final class BodyFatTrendTakeawayTests: XCTestCase {
+    func testNoReadingsSaysSo() {
+        XCTAssertEqual(BodyFatTrendTakeaway.build(logs: []), "No body fat readings in this range yet.")
+    }
+
+    func testOneReadingIsTooEarlyForATrend() {
+        XCTAssertEqual(BodyFatTrendTakeaway.build(logs: [(date: .now, pct: 24.0)]), "One reading logged — too early to see a trend.")
+    }
+
+    func testReportsTheChangeAcrossReadings() {
+        let logs = [(date: Date.now.addingTimeInterval(-14 * 86_400), pct: 26.0), (date: Date.now, pct: 24.5)]
+        let text = BodyFatTrendTakeaway.build(logs: logs)
+        XCTAssertEqual(text, "Body fat is down 1.5% across 2 readings.")
+    }
+}
+
+final class ExperimentDateRangeTests: XCTestCase {
+    func testLabelsReadAsShortDates() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        XCTAssertFalse(ExperimentDateRange.label(start: "2026-09-23", end: "2026-10-13", calendar: calendar).contains("2026"))
+        XCTAssertTrue(ExperimentDateRange.label(start: "2026-09-23", end: nil, calendar: calendar).hasPrefix("From "))
+        XCTAssertEqual(ExperimentDateRange.label(start: "bad", end: nil, calendar: calendar), "From bad")
+    }
+}
+
+// Today's Body tile read the composition table while the Body page read weight_logs, so a
+// newer weigh-in showed 239.4 on Body and 239.0 on Today. Today now shows the newer one.
+@MainActor
+final class TodayNewerWeightTests: XCTestCase {
+    private let user = UUID()
+
+    private func weighIn(_ kg: Double, _ iso: String) -> WeightLog {
+        let json = #"{"id":"\#(UUID())","user_id":"\#(user)","logged_at":"\#(iso)","weight_kg":\#(kg),"source":"manual"}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try! decoder.decode(WeightLog.self, from: Data(json.utf8))
+    }
+
+    private func saved(_ kg: Double?, _ day: String) -> BodyCompositionLog {
+        BodyCompositionLog(id: UUID(), userId: user, logDate: day, weightKg: kg, bodyFatPct: 23.7,
+                           bmi: nil, leanBodyMassKg: nil, source: "manual", createdAt: .now)
+    }
+
+    func testNewerSourceWins() {
+        XCTAssertEqual(TodayViewModel.newerWeightKg(weighIn: weighIn(108.6, "2026-08-26T14:00:00Z"),
+                                                    saved: saved(108.4, "2026-08-24")), 108.6)
+        XCTAssertEqual(TodayViewModel.newerWeightKg(weighIn: weighIn(108.6, "2026-08-20T14:00:00Z"),
+                                                    saved: saved(108.4, "2026-08-24")), 108.4)
+    }
+
+    func testFallsBackToWhicheverExists() {
+        XCTAssertEqual(TodayViewModel.newerWeightKg(weighIn: nil, saved: saved(108.4, "2026-08-24")), 108.4)
+        XCTAssertEqual(TodayViewModel.newerWeightKg(weighIn: weighIn(108.6, "2026-08-20T14:00:00Z"),
+                                                    saved: saved(nil, "2026-08-28")), 108.6)
+        XCTAssertNil(TodayViewModel.newerWeightKg(weighIn: nil, saved: nil))
+    }
+}
+
+@MainActor
+final class GLP1TrackingStoreTests: XCTestCase {
+    private func freshDefaults() -> UserDefaults {
+        let name = "glp1-tracking-\(UUID())"
+        return UserDefaults(suiteName: name)!
+    }
+
+    private func profile(_ tracking: String?) -> UserProfile {
+        UserProfile(id: UUID(), email: "t@example.com", fullName: nil, dob: nil, sex: nil, heightCm: nil,
+                    activityLevel: nil, weightGoal: nil, dietaryPrefs: nil, createdAt: .now,
+                    glp1Tracking: tracking, glp1TrackingChangedAt: tracking == nil ? nil : .now)
+    }
+
+    func testDefaultsToTracking() {
+        XCTAssertTrue(GLP1TrackingStore(defaults: freshDefaults()).isTracking)
+    }
+
+    func testServerStatusIsAppliedAndCached() {
+        let defaults = freshDefaults()
+        let store = GLP1TrackingStore(defaults: defaults)
+        store.apply(profile: profile("paused"))
+        XCTAssertEqual(store.status, .paused)
+        XCTAssertFalse(store.isTracking)
+        // A new launch reads the cached value before the profile loads.
+        XCTAssertEqual(GLP1TrackingStore(defaults: defaults).status, .paused)
+    }
+
+    func testProfileWithoutTheColumnKeepsTheCachedValue() {
+        let defaults = freshDefaults()
+        let store = GLP1TrackingStore(defaults: defaults)
+        store.apply(profile: profile("stopped"))
+        store.apply(profile: profile(nil))
+        XCTAssertEqual(store.status, .stopped)
+    }
+
+    func testResetOnSignOutReturnsToTracking() {
+        let defaults = freshDefaults()
+        let store = GLP1TrackingStore(defaults: defaults)
+        store.apply(profile: profile("paused"))
+        store.reset()
+        XCTAssertTrue(store.isTracking)
+        XCTAssertTrue(GLP1TrackingStore(defaults: defaults).isTracking)
+    }
+
+    func testProfileDecodesTrackingColumns() throws {
+        let json = #"{"id":"\#(UUID())","email":"a@b.c","created_at":"2026-09-30T12:00:00Z","glp1_tracking":"stopped"}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        XCTAssertEqual(try decoder.decode(UserProfile.self, from: Data(json.utf8)).glp1Tracking, "stopped")
+        let old = #"{"id":"\#(UUID())","email":"a@b.c","created_at":"2026-09-30T12:00:00Z"}"#
+        XCTAssertNil(try decoder.decode(UserProfile.self, from: Data(old.utf8)).glp1Tracking)
     }
 }

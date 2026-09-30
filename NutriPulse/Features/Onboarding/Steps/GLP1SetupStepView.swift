@@ -41,18 +41,21 @@ struct GLP1SetupStepView: View {
     private func choiceButton(_ label: String, isOn: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.primary)
+                .font(Theme.Fonts.body(17, .semibold))
+                .foregroundStyle(isOn ? Theme.Colors.primaryText : Theme.Colors.textPrimary)
                 .frame(maxWidth: .infinity)
+                .frame(minHeight: 44)
                 .padding(.vertical, 17)
-                .background(isOn ? Theme.Colors.primary.opacity(0.12) : Theme.Colors.surfaceInset,
+                .background(isOn ? Theme.Colors.primary.opacity(0.08) : Theme.Colors.surfaceCard,
                             in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(isOn ? Theme.Colors.primary.opacity(0.55) : .clear, lineWidth: 1.5)
+                        .strokeBorder(isOn ? Theme.Colors.primary : Theme.Colors.hairline,
+                                      lineWidth: isOn ? 2 : 1)
                 }
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
     }
 
     private var yesContent: some View {
@@ -80,14 +83,19 @@ struct GLP1SetupStepView: View {
             DatePicker("Last dose", selection: $vm.glp1LastInjected, in: ...Date.now, displayedComponents: .date)
                 .datePickerStyle(.compact)
                 .labelsHidden()
+                .tint(Theme.Colors.primary)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                }
 
             infoNote("When your appetite drops, protein protects your muscle. I'll watch your **protein floor** for you.")
 
             Text("Pulse coaches around your shot — it doesn't advise on dosing and isn't medical advice. Always follow your doctor.")
-                .font(.system(size: 11.5))
+                .font(Theme.Fonts.body(11.5))
                 .foregroundStyle(Theme.Colors.textFaint)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -98,10 +106,7 @@ struct GLP1SetupStepView: View {
     }
 
     private func sectionLabel(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(.system(size: 12, weight: .semibold))
-            .kerning(0.6)
-            .foregroundStyle(Theme.Colors.textFaint)
+        TileEyebrow(text, color: Theme.Colors.textFaint)
     }
 
     private func infoNote(_ text: LocalizedStringKey) -> some View {
@@ -110,7 +115,7 @@ struct GLP1SetupStepView: View {
                 .font(.system(size: 16))
                 .foregroundStyle(Theme.Colors.primary)
             Text(text)
-                .font(.system(size: 13.5))
+                .font(Theme.Fonts.body(13.5))
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
