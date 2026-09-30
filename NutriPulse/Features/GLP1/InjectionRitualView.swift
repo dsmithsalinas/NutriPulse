@@ -1,156 +1,244 @@
 import SwiftUI
 import UIKit
 
-// The weekly injection, made a moment: a living aurora, a press-and-hold orb, an optional dose
-// change (medication-aware ladder), and a warm bloom + confirmation. Logs today's shot and
-// schedules the next reminder. Presented full-screen from the dose-day card on Today.
+// The Daylight "Shot day" screen (docs/daylight-redesign.md): a lime full-screen page with a
+// slowly rotating orbit ring, the dose card, the hold-to-log button, site rotation, and the next
+// shot's schedule. Logs today's shot and schedules the next reminder. Presented full-screen from
+// the dose-day card on Today.
 struct InjectionRitualView: View {
     let latest: GLP1Log?
     var onLogged: (GLP1Log) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var vm = InjectionRitualViewModel()
 
     @State private var updateGoingForward = true
-    @State private var showDoseSheet = false
-    @State private var doseBeforeSheet: Double = 0
+    /// The site the rotation suggested when this screen opened — captured once so the "next"
+    /// badge stays put even if the user taps a different site.
+    @State private var suggestedSite: InjectionSite = .leftAbdomen
 
-    // hold-to-log state
-    @State private var holdProgress: CGFloat = 0
-    @State private var isHolding = false
     @State private var didConfirm = false
-    @State private var bloom = false
-    @State private var breathing = false
-    @State private var confirmWork: DispatchWorkItem?
-
-    private let holdDuration: Double = 1.2
+    @State private var isSaving = false
+    /// Bumped to give `HoldToConfirmButton` a fresh identity (and so a fresh internal state
+    /// machine) after a failed save, so the user can hold again.
+    @State private var holdResetID = UUID()
 
     var body: some View {
         ZStack {
-            AuroraView()
-                .scaleEffect(bloom ? 1.4 : 1)
-                .animation(.easeOut(duration: 0.9), value: bloom)
-
-            RadialGradient(colors: [.clear, .black.opacity(0.5)],
-                           center: .center, startRadius: 130, endRadius: 470)
-                .allowsHitTesting(false)
-
             if didConfirm { confirmation } else { ritualContent }
-
-            VStack {
-                HStack {
-                    Button("Cancel") { dismiss() }
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.75))
-                    Spacer()
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 56)
-            .opacity(didConfirm ? 0 : 1)
         }
-        .ignoresSafeArea()
-        .preferredColorScheme(.dark)
-        .task { vm.load(from: latest) }
-        .onAppear { breathing = true }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            ZStack {
+                Theme.Colors.lime
+                OrbitRing()
+            }
+            .ignoresSafeArea()
+        }
+        .task {
+            vm.load(from: latest)
+            suggestedSite = vm.site
+        }
         .alert("Error", isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) {
             Button("OK") { vm.errorMessage = nil }
         } message: { Text(vm.errorMessage ?? "") }
-        .sheet(isPresented: $showDoseSheet) {
-            doseSheet
-                .presentationDetents([.height(400)])
-                .presentationBackground(Color(hex: 0x16141F))
-        }
     }
 
     // MARK: Ritual content
 
     private var ritualContent: some View {
-        VStack(spacing: 0) {
-            Spacer().frame(height: 78)
-            Text("SHOT DAY")
-                .font(.system(size: 12, weight: .bold)).tracking(3)
-                .foregroundStyle(.white.opacity(0.72))
-            Text("\(vm.medication.rawValue) \u{00B7} \(vm.doseMg.glp1DoseString) mg")
-                .font(.system(size: 29, weight: .bold, design: .rounded))
-                .foregroundStyle(.white).padding(.top, 6)
-            Text("Rotate site \u{2014} suggested \(vm.site.rawValue)")
-                .font(.system(size: 13)).foregroundStyle(.white.opacity(0.72)).padding(.top, 3)
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                header
+                    .popIn(order: 0)
 
-            Button {
-                doseBeforeSheet = vm.doseMg
-                showDoseSheet = true
-            } label: {
-                Label("Change dose", systemImage: "pencil")
-                    .font(.system(size: 12.5, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 13).padding(.vertical, 6)
-                    .background(.white.opacity(0.12), in: Capsule())
-                    .overlay(Capsule().strokeBorder(.white.opacity(0.26)))
-            }
-            .padding(.top, 11)
-
-            Spacer()
-            orb
-            Spacer()
-
-            siteChips.padding(.bottom, 10)
-            Text(isHolding ? "Keep holding\u{2026}" : "Press and hold to log")
-                .font(.system(size: 13)).foregroundStyle(.white.opacity(0.7))
-                .padding(.bottom, 44)
-        }
-        .padding(.horizontal, 24)
-    }
-
-    private var orb: some View {
-        ZStack {
-            Circle().stroke(.white.opacity(0.16), lineWidth: 5)
-            Circle().trim(from: 0, to: holdProgress)
-                .stroke(.white, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            Circle()
-                .fill(RadialGradient(
-                    colors: [Color(hex: 0xCFD0FF), Color(hex: 0x7C7EF7), Color(hex: 0x8B5CF6)],
-                    center: UnitPoint(x: 0.36, y: 0.3), startRadius: 4, endRadius: 90))
-                .frame(width: 150, height: 150)
-                .shadow(color: Color(hex: 0x8B5CF6).opacity(0.55), radius: 42)
-                .scaleEffect(isHolding ? 1.09 : (breathing && !reduceMotion ? 1.045 : 1))
-                .animation(reduceMotion ? nil : .easeInOut(duration: 3.4).repeatForever(autoreverses: true), value: breathing)
-                .animation(.easeOut(duration: 0.2), value: isHolding)
-                .overlay {
-                    Text(isHolding ? "Hold\u{2026}" : "Hold to\nlog dose")
-                        .font(.system(size: 13, weight: .bold))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Shot day")
+                        .font(Theme.Fonts.display(38, .extraBold, relativeTo: .largeTitle))
+                        .foregroundStyle(Theme.Colors.limeInk)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("The shot does its part. Log it when it\u{2019}s done and I\u{2019}ll plan the week around it.")
+                        .font(Theme.Fonts.body(16, .medium))
+                        .foregroundStyle(Theme.Colors.limeLabel)
                 }
+                .popIn(order: 0)
+
+                doseCard
+                    .popIn(order: 1)
+
+                Spacer(minLength: 20)
+                holdButton
+                    .frame(maxWidth: .infinity)
+                Spacer(minLength: 20)
+
+                siteSection
+                    .popIn(order: 2)
+
+                nextShotRow
+                    .popIn(order: 3)
+            }
+            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.top, 12)
+            .padding(.bottom, 32)
+            .frame(minHeight: 640)
         }
-        .frame(width: 210, height: 210)
-        .contentShape(Circle())
-        .gesture(holdGesture)
     }
 
-    private var siteChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(InjectionSite.allCases) { s in
-                    let on = s == vm.site
-                    Button { vm.site = s } label: {
-                        Text(s.rawValue)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white.opacity(on ? 1 : 0.8))
-                            .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(.white.opacity(on ? 0.18 : 0.06), in: Capsule())
-                            .overlay(Capsule().strokeBorder(.white.opacity(on ? 0.5 : 0.2)))
+    private var header: some View {
+        HStack {
+            Text(weekdayChipText)
+                .font(Theme.Fonts.body(13, .bold))
+                .foregroundStyle(Theme.Colors.limeLabel)
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .background(Theme.Colors.limeInk.opacity(0.1), in: Capsule())
+            Spacer()
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Theme.Colors.limeInk)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.Colors.surfaceCard, in: Circle())
+            }
+            .buttonStyle(.pressable)
+            .accessibilityLabel("Close")
+        }
+    }
+
+    private var weekdayChipText: String {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE"
+        return f.string(from: .now)
+    }
+
+    private var holdButton: some View {
+        HoldToConfirmButton(
+            duration: 1.5,
+            label: Text("Hold to\nlog dose"),
+            accessibilityLabel: "Log dose",
+            accessibilityHint: "\(vm.medication.rawValue), \(vm.doseMg.glp1DoseString) milligrams, in \(vm.site.rawValue). Double tap to log immediately.",
+            onConfirm: handleConfirm
+        )
+        .id(holdResetID)
+    }
+
+    // MARK: This dose
+
+    private var doseCard: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("This dose")
+                        .font(Theme.Fonts.body(13, .semibold))
+                        .foregroundStyle(Theme.Colors.limeLine)
+                    Text("\(vm.medication.rawValue) \u{00B7} \(vm.doseMg.glp1DoseString) mg")
+                        .font(Theme.Fonts.number(20, .bold, relativeTo: .title3))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                }
+                Spacer(minLength: 8)
+                doseStepper("minus", enabled: vm.canStepDown, label: "Lower dose") { vm.stepDose(-1) }
+                doseStepper("plus", enabled: vm.canStepUp, label: "Raise dose") { vm.stepDose(1) }
+            }
+
+            HStack {
+                Spacer()
+                Toggle(isOn: $updateGoingForward) {
+                    Text("Set as my regular dose")
+                        .font(Theme.Fonts.body(12, .semibold))
+                        .foregroundStyle(Theme.Colors.limeLine)
+                }
+                .tint(Theme.Colors.limeInk)
+                .fixedSize()
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .accessibilityElement(children: .contain)
+    }
+
+    private func doseStepper(_ icon: String, enabled: Bool, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .frame(width: 44, height: 44)
+                .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.pressable)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
+        .accessibilityLabel(label)
+    }
+
+    // MARK: Site
+
+    private var siteSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TileEyebrow("Site", color: Theme.Colors.limeLabel)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) {
+                ForEach(InjectionSite.allCases) { site in
+                    siteChip(site)
+                }
+            }
+        }
+    }
+
+    private func siteChip(_ site: InjectionSite) -> some View {
+        let selected = site == vm.site
+        let isSuggested = site == suggestedSite
+        return Button {
+            vm.site = site
+            UISelectionFeedbackGenerator().selectionChanged()
+        } label: {
+            Text(isSuggested ? "\(site.rawValue) \u{00B7} next" : site.rawValue)
+                .font(Theme.Fonts.body(14, selected ? .bold : .semibold))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    if selected {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Theme.Colors.limeInk, lineWidth: 2)
                     }
                 }
-            }
-            .padding(.horizontal, 4)
         }
+        .buttonStyle(.pressable)
+        .accessibilityLabel(isSuggested ? "\(site.rawValue), suggested next site" : site.rawValue)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    // MARK: Next shot
+
+    private var nextShotRow: some View {
+        HStack {
+            Text("Next shot")
+                .font(Theme.Fonts.body(14, .semibold))
+                .foregroundStyle(Theme.Colors.limeLabel)
+            Spacer()
+            Text("\(prospectiveNextDueText) \u{00B7} reminder 9:00 AM")
+                .font(Theme.Fonts.body(14, .bold))
+                .foregroundStyle(Theme.Colors.limeInk)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var prospectiveNextDueText: String {
+        let due = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
+        let f = DateFormatter()
+        f.dateFormat = "EEE, MMM d"
+        return f.string(from: due)
     }
 
     // MARK: Confirmation
@@ -159,142 +247,92 @@ struct InjectionRitualView: View {
         VStack(spacing: 0) {
             Spacer()
             ZStack {
-                Circle().fill(.white.opacity(0.16)).frame(width: 92, height: 92)
-                    .overlay(Circle().strokeBorder(.white.opacity(0.4)))
-                Image(systemName: "checkmark").font(.system(size: 40, weight: .bold)).foregroundStyle(.white)
+                Circle().fill(Theme.Colors.limeInk).frame(width: 92, height: 92)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 38, weight: .bold))
+                    .foregroundStyle(Theme.Colors.lime)
             }
-            .shadow(color: .white.opacity(0.35), radius: 40)
+            .shadow(color: Theme.Colors.limeInk.opacity(0.25), radius: 30, y: 12)
             Text("Logged.")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(.white).padding(.top, 22)
-            Text("Next dose \(nextDoseText). You\u{2019}re protecting your progress. \u{1F4AA}")
-                .font(.system(size: 15)).foregroundStyle(.white.opacity(0.85))
-                .multilineTextAlignment(.center).frame(maxWidth: 260).padding(.top, 8)
+                .font(Theme.Fonts.display(30, .extraBold, relativeTo: .title))
+                .foregroundStyle(Theme.Colors.limeInk)
+                .padding(.top, 20)
+            Text("Next dose \(nextDoseText). You\u{2019}re protecting your progress.")
+                .font(Theme.Fonts.body(15, .medium))
+                .foregroundStyle(Theme.Colors.limeLabel)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 260)
+                .padding(.top, 6)
             Text("Reminder set \u{00B7} 7 days")
-                .font(.system(size: 13, weight: .bold)).foregroundStyle(.white.opacity(0.7))
-                .padding(.horizontal, 16).padding(.vertical, 9)
-                .background(.white.opacity(0.12), in: Capsule()).padding(.top, 22)
+                .font(Theme.Fonts.body(13, .bold))
+                .foregroundStyle(Theme.Colors.limeInk)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(.white.opacity(0.6), in: Capsule())
+                .padding(.top, 18)
             Spacer()
             Button("Done") { dismiss() }
-                .font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
-                .frame(maxWidth: .infinity).padding(.vertical, 15)
-                .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 15))
-                .padding(.horizontal, 24).padding(.bottom, 44)
+                .font(Theme.Fonts.body(16, .bold))
+                .foregroundStyle(Theme.Colors.lime)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(Theme.Colors.limeInk, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .padding(.horizontal, Theme.Spacing.page)
+                .padding(.bottom, 24)
         }
         .transition(.opacity)
+        .accessibilityAddTraits(.isHeader)
     }
 
     private var nextDoseText: String {
         let due = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
-        let f = DateFormatter(); f.dateFormat = "EEEE, MMM d"
+        let f = DateFormatter()
+        f.dateFormat = "EEEE, MMM d"
         return f.string(from: due)
     }
 
-    // MARK: Dose sheet
+    // MARK: Save
 
-    private var doseSheet: some View {
-        VStack(spacing: 16) {
-            Capsule().fill(.white.opacity(0.22)).frame(width: 40, height: 5).padding(.top, 10)
-            Text(vm.medication.rawValue == "Saxenda" ? "Today\u{2019}s dose" : "This week\u{2019}s dose")
-                .font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
-            Text("Changed your dose? Set it for this shot.")
-                .font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.58))
-
-            HStack(spacing: 20) {
-                stepper("minus", enabled: vm.canStepDown) { vm.stepDose(-1) }
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(vm.doseMg.glp1DoseString)
-                        .font(.system(size: 42, weight: .bold, design: .rounded)).monospacedDigit()
-                    Text("mg").font(.system(size: 18, weight: .semibold)).foregroundStyle(.white.opacity(0.6))
-                }
-                .frame(minWidth: 120).foregroundStyle(.white)
-                stepper("plus", enabled: vm.canStepUp) { vm.stepDose(1) }
-            }
-            .padding(.top, 4)
-
-            Toggle(isOn: $updateGoingForward) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Make this my dose going forward")
-                        .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                    Text("Updates your profile \u{2014} we\u{2019}ll use it for your next shots too.")
-                        .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.55))
-                }
-            }
-            .tint(Color(hex: 0x8B5CF6))
-            .padding(12)
-            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
-
-            HStack(spacing: 10) {
-                Button("Cancel") { vm.doseMg = doseBeforeSheet; showDoseSheet = false }
-                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white.opacity(0.85))
-                    .padding(.vertical, 15).padding(.horizontal, 22)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 15))
-                Button("Set dose") { showDoseSheet = false }
-                    .font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).padding(.vertical, 15)
-                    .background(LinearGradient(colors: [Color(hex: 0x6366F1), Color(hex: 0x8B5CF6)],
-                                               startPoint: .leading, endPoint: .trailing),
-                                in: RoundedRectangle(cornerRadius: 15))
-            }
-        }
-        .padding(.horizontal, 22).padding(.bottom, 24)
-    }
-
-    private func stepper(_ icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon).font(.system(size: 22, weight: .semibold)).foregroundStyle(.white)
-                .frame(width: 54, height: 54)
-                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.18)))
-        }
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.3)
-    }
-
-    // MARK: Hold gesture
-
-    private var holdGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { _ in
-                guard !isHolding, !didConfirm else { return }
-                beginHold()
-            }
-            .onEnded { _ in endHold() }
-    }
-
-    private func beginHold() {
-        isHolding = true
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        withAnimation(.linear(duration: holdDuration)) { holdProgress = 1 }
-        let work = DispatchWorkItem { confirm() }
-        confirmWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + holdDuration, execute: work)
-    }
-
-    private func endHold() {
-        guard !didConfirm else { return }
-        isHolding = false
-        confirmWork?.cancel(); confirmWork = nil
-        withAnimation(.easeOut(duration: 0.25)) { holdProgress = 0 }
-    }
-
-    private func confirm() {
-        guard !didConfirm else { return }
-        isHolding = false
-        confirmWork = nil
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
-            didConfirm = true
-            bloom = true
-        }
+    private func handleConfirm() {
+        guard !isSaving else { return }
+        isSaving = true
         Task {
             if let saved = await vm.confirm(updateGoingForward: updateGoingForward) {
+                isSaving = false
+                withAnimation(Theme.Motion.pop) { didConfirm = true }
                 onLogged(saved)
-                try? await Task.sleep(for: .seconds(2.8))
+                try? await Task.sleep(for: .seconds(2.2))
                 dismiss()
             } else {
-                withAnimation { didConfirm = false; bloom = false; holdProgress = 0 }
+                isSaving = false
+                // vm.errorMessage drives the alert above; give the hold button a fresh identity
+                // so its internal state machine resets and the user can hold again.
+                holdResetID = UUID()
             }
         }
+    }
+}
+
+/// The mockup's dashed circle slowly rotating behind the whole screen. Static under Reduce
+/// Motion.
+private struct OrbitRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var rotated = false
+
+    var body: some View {
+        Circle()
+            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [10, 8]))
+            .foregroundStyle(Theme.Colors.limeInk.opacity(0.12))
+            .frame(width: 640, height: 640)
+            .rotationEffect(.degrees(rotated ? 360 : 0))
+            .offset(x: -190, y: -160)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.linear(duration: 18).repeatForever(autoreverses: false)) {
+                    rotated = true
+                }
+            }
     }
 }

@@ -1,5 +1,8 @@
 import SwiftUI
 
+// Daylight sheet styling (docs/daylight-redesign.md): SheetHeader, white tiles on the cool
+// neutral ground, lime accents for the save action. Opened from Today's shot-cycle tile; the
+// check-in logic (draft, save, prefill from an existing entry) is unchanged.
 struct ShotCycleCheckInSheet: View {
     let cycleDay: Int
     let existing: ShotCycleCheckIn?
@@ -10,57 +13,38 @@ struct ShotCycleCheckInSheet: View {
     @State private var isSaving = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Day \(cycleDay) check-in")
-                            .font(Theme.Typography.title)
-                        Text("Five quick signals help Footing learn your pattern. This tracks your experience; it doesn't change or recommend your dose.")
-                            .font(.subheadline)
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                SheetHeader(title: "Day \(cycleDay) check-in", onClose: { dismiss() })
 
-                    CheckInScale(label: "Appetite", low: "Low", high: "High", value: $draft.appetite)
-                    CheckInScale(label: "Fullness", low: "Empty", high: "Very full", value: $draft.fullness)
-                    CheckInScale(label: "Nausea", low: "None", high: "Strong", value: $draft.nausea)
-                    CheckInScale(label: "Energy", low: "Low", high: "High", value: $draft.energy)
-                    CheckInScale(label: "Digestion", low: "Unsettled", high: "Comfortable", value: $draft.digestion)
+                Text("Five quick signals help Footing learn your pattern. This tracks your experience; it doesn\u{2019}t change or recommend your dose.")
+                    .font(Theme.Fonts.body(14))
+                    .foregroundStyle(Theme.Colors.textSecondary)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Anything worth remembering?")
-                            .font(.subheadline.weight(.semibold))
-                        TextField("Optional note", text: $draft.note, axis: .vertical)
-                            .lineLimit(2...4)
-                            .padding(12)
-                            .background(Theme.Colors.surfaceInset)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
+                CheckInScale(label: "Appetite", low: "Low", high: "High", value: $draft.appetite)
+                CheckInScale(label: "Fullness", low: "Empty", high: "Very full", value: $draft.fullness)
+                CheckInScale(label: "Nausea", low: "None", high: "Strong", value: $draft.nausea)
+                CheckInScale(label: "Energy", low: "Low", high: "High", value: $draft.energy)
+                CheckInScale(label: "Digestion", low: "Unsettled", high: "Comfortable", value: $draft.digestion)
 
-                    Button {
-                        Task {
-                            isSaving = true
-                            if await onSave(draft) { dismiss() }
-                            isSaving = false
-                        }
-                    } label: {
-                        if isSaving { ProgressView().tint(.white) }
-                        else { Text(existing == nil ? "Save check-in" : "Update check-in") }
-                    }
-                    .buttonStyle(.brandPrimary)
-                    .disabled(isSaving)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Anything worth remembering?")
+                        .font(Theme.Fonts.body(15, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    TextField("Optional note", text: $draft.note, axis: .vertical)
+                        .font(Theme.Fonts.body(15))
+                        .lineLimit(2...4)
+                        .padding(12)
+                        .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .padding(Theme.Spacing.md)
+                .tile()
+
+                saveButton
             }
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .navigationTitle("How are you feeling?")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
+            .padding(Theme.Spacing.page)
+            .padding(.bottom, Theme.Spacing.lg)
         }
+        .background(Theme.Colors.ground.ignoresSafeArea())
         .onAppear {
             guard let existing else { return }
             draft = ShotCycleCheckInDraft(
@@ -73,6 +57,31 @@ struct ShotCycleCheckInSheet: View {
             )
         }
     }
+
+    private var saveButton: some View {
+        Button {
+            Task {
+                isSaving = true
+                if await onSave(draft) { dismiss() }
+                isSaving = false
+            }
+        } label: {
+            Group {
+                if isSaving {
+                    ProgressView().tint(Theme.Colors.limeInk)
+                } else {
+                    Text(existing == nil ? "Save check-in" : "Update check-in")
+                        .font(Theme.Fonts.body(16, .bold))
+                }
+            }
+            .foregroundStyle(Theme.Colors.limeInk)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(Theme.Colors.lime, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
+        }
+        .buttonStyle(.pressable)
+        .disabled(isSaving)
+    }
 }
 
 private struct CheckInScale: View {
@@ -84,26 +93,28 @@ private struct CheckInScale: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
-                Text(label).font(.subheadline.weight(.semibold))
+                Text(label)
+                    .font(Theme.Fonts.body(15, .bold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 Text("\(value) / 5")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.Colors.primary)
+                    .font(Theme.Fonts.body(13, .bold))
+                    .foregroundStyle(Theme.Colors.limeLine)
             }
             Picker(label, selection: $value) {
                 ForEach(1...5, id: \.self) { Text("\($0)").tag($0) }
             }
             .pickerStyle(.segmented)
+            .tint(Theme.Colors.limeInk)
             HStack {
                 Text(low)
                 Spacer()
                 Text(high)
             }
-            .font(.caption2)
+            .font(Theme.Fonts.body(11, .medium))
             .foregroundStyle(Theme.Colors.textFaint)
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 }
 

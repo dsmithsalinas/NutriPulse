@@ -3186,3 +3186,94 @@ final class FoodLoggingLogicTests: XCTestCase {
         XCTAssertEqual(sections[0].logs.count, 2)
     }
 }
+
+// MARK: - Hold-to-confirm (Daylight Shot day)
+
+// `HoldToConfirmProgress` is the state machine behind `HoldToConfirmButton`'s press-and-hold
+// gesture (NutriPulse/Features/GLP1/HoldToConfirmButton.swift). It's kept free of SwiftUI/UIKit
+// so these three race conditions — the ones that actually matter for a hold gesture — can be
+// checked without driving a real gesture, animation, or timer.
+final class HoldToConfirmProgressTests: XCTestCase {
+
+    func testFreshStateIsNotHoldingOrComplete() {
+        let state = HoldToConfirmProgress()
+        XCTAssertFalse(state.isHolding)
+        XCTAssertFalse(state.isComplete)
+    }
+
+    func testBeginHoldStartsHolding() {
+        var state = HoldToConfirmProgress()
+        XCTAssertTrue(state.beginHold())
+        XCTAssertTrue(state.isHolding)
+        XCTAssertFalse(state.isComplete)
+    }
+
+    // A full hold: begin, then the timer fires once the duration has elapsed.
+    func testCompleteAfterHoldingSucceeds() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        XCTAssertTrue(state.complete())
+        XCTAssertTrue(state.isComplete)
+        XCTAssertFalse(state.isHolding)
+    }
+
+    // Releasing early must cancel — a stale timer scheduled before the release must not still
+    // confirm the dose.
+    func testReleasingEarlyCancelsAndBlocksTheStaleTimer() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        state.cancelHold()
+        XCTAssertFalse(state.isHolding)
+        XCTAssertFalse(state.isComplete)
+        // The DispatchWorkItem scheduled by `beginHold` may still fire after the cancel; `complete`
+        // must be a no-op in that case.
+        XCTAssertFalse(state.complete())
+        XCTAssertFalse(state.isComplete)
+    }
+
+    // A confirmation can only fire once, even if `complete` is somehow called twice.
+    func testCompleteIsNotReentrant() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        XCTAssertTrue(state.complete())
+        XCTAssertFalse(state.complete())
+    }
+
+    // Calling `complete` without ever holding (e.g. a stray timer with no matching press) must
+    // not confirm.
+    func testCompleteWithoutHoldingDoesNothing() {
+        var state = HoldToConfirmProgress()
+        XCTAssertFalse(state.complete())
+        XCTAssertFalse(state.isComplete)
+    }
+
+    // Once complete, a new press must not restart the hold — the caller expects exactly one
+    // confirmation per instance (the view gives `HoldToConfirmButton` a fresh id to try again).
+    func testBeginHoldAfterCompleteIsRejected() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        state.complete()
+        XCTAssertFalse(state.beginHold())
+        XCTAssertFalse(state.isHolding)
+    }
+
+    // `reset` clears both flags so an instance can be reused (mainly for tests).
+    func testResetClearsHoldingAndComplete() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        state.complete()
+        state.reset()
+        XCTAssertFalse(state.isHolding)
+        XCTAssertFalse(state.isComplete)
+        XCTAssertTrue(state.beginHold())
+    }
+
+    // cancelHold after completion must not un-confirm a dose that already logged.
+    func testCancelAfterCompleteIsIgnored() {
+        var state = HoldToConfirmProgress()
+        state.beginHold()
+        state.complete()
+        state.cancelHold()
+        XCTAssertTrue(state.isComplete)
+    }
+}
