@@ -34,7 +34,7 @@ struct ProfileView: View {
     // already loaded into `vm`. Never true outside a debug preview.
     private var skipInitialLoad = false
 
-    init(debugFixture: Bool = false) {
+    init(debugFixture: Bool = DebugLaunch.tour) {
         if debugFixture {
             _vm = State(initialValue: Self.fixtureViewModel())
         }
@@ -1063,6 +1063,9 @@ extension ProfileView {
         return ProfileView(debugFixture: true)
             .environment(appState)
     }
+
+    /// The tour's signed-in user (MainTabView puts it on AppState).
+    static var tourProfile: UserProfile { fixtureProfile }
 
     private static let fixtureProfile = UserProfile(
         id: UUID(),

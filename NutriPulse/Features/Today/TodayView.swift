@@ -91,7 +91,8 @@ struct TodayView: View {
                     .padding(.top, Theme.Spacing.sm)
                     .popIn(order: 0)
 
-                    if let status = SyncEngine.shared.statusMessage {
+                    // No account in the tour, so every sync "fails"; that banner is noise there.
+                    if let status = SyncEngine.shared.statusMessage, !DebugLaunch.tour {
                         SyncStatusBanner(status: status) {
                             Task { await SyncEngine.shared.syncNow() }
                         }
@@ -300,7 +301,7 @@ struct TodayView: View {
             }
             .task(id: vm.selectedDate) {
                 #if DEBUG
-                if AppStoreScreenshotMode.active {
+                if AppStoreScreenshotMode.active || DebugLaunch.tour {
                     strongWeek.isLoading = false
                     strongWeek.current = AppStoreScreenshotPreview.week
                     return

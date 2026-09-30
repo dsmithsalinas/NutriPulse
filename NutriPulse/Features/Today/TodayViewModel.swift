@@ -350,6 +350,8 @@ final class TodayViewModel {
     }
 
     func loadData() async {
+        // The tour's Today is a fixture; a reload (sync, returning to the app) would wipe it.
+        if DebugLaunch.tour { return }
         if repeatTargetDate != selectedDate.isoDateString {
             repeatedMeals = []
             repeatTargetDate = selectedDate.isoDateString
@@ -896,7 +898,7 @@ final class TodayViewModel {
     // "Connect Apple Health" button was then permanently a no-op. Asking now belongs to
     // the onboarding step and to an explicit tap; see requestHealthAuthorization().
     func loadHealthData() async {
-        guard !AppStoreScreenshotMode.active else { return }
+        guard !AppStoreScreenshotMode.active, !DebugLaunch.tour else { return }
         let hk = HealthKitManager.shared
         guard hk.isAvailable else { return }
         // Scope upgrade (e.g. v2 added workouts + steps): users who already granted the

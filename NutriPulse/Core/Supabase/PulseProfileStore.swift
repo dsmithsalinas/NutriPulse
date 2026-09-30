@@ -61,7 +61,14 @@ final class PulseProfileStore {
 
     func load() async {
         #if DEBUG
-        if CoachViewModel.isPreview { isLoaded = true; return }
+        if CoachViewModel.isPreview {
+            if DebugLaunch.tour {
+                setForPreview(preferences: .init(allergies: ["Peanuts"], allergyNote: "", eatingPatterns: [.pescatarian],
+                                                 loves: ["Greek yogurt"], avoids: []))
+            }
+            isLoaded = true
+            return
+        }
         #endif
         do {
             apply(try await repo.fetch())

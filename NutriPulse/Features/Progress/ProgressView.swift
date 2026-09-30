@@ -275,7 +275,7 @@ struct ProgressDashboardView: View {
 
     private func loadPreviousPeriod() async {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--progress-preview") {
+        if DebugLaunch.has("--progress-preview") {
             loadPreviewPreviousPeriod()
             return
         }
@@ -313,7 +313,7 @@ struct ProgressDashboardView: View {
 
     private func loadExperimentCount() async {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--progress-preview") {
+        if DebugLaunch.has("--progress-preview") {
             experimentCount = 1
             return
         }

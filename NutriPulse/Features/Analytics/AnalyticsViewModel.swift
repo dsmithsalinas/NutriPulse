@@ -109,7 +109,7 @@ final class AnalyticsViewModel {
         let loadID = UUID()
         activeLoadID = loadID
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--progress-preview") {
+        if DebugLaunch.has("--progress-preview") {
             loadProgressPreview()
             return
         }

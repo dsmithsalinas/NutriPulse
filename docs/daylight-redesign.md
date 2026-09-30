@@ -68,7 +68,7 @@ Each step is its own branch, stacked in order; each was built, tested and checke
 | Today and Log sheet | `daylight/today-log` | Tile grid with liquid protein fill, water picker with Undo (synced tombstones), movement sheet; Log sheet with Talk / Search / Scan / Favorites and the header meal everywhere |
 | Remaining screens | `daylight/screens` | Progress (floor-days hero, trend vs the previous period, stat tiles), Goals (hero goal, experiment tile), Shot day (hold to log, with an immediate VoiceOver path), Profile (targets hero, grouped setting tiles) |
 
-Debug launch flags for checking screens without an account: `--pulse-preview`, `--water-preview`, `--log-preview`, `--shot-preview`, `--profile-preview`, `--store-today`, `--store-food`, `--progress-preview`, `--goals-preview`.
+Debug launch flags for checking screens without an account (`--tour` turns on all of them, with the tab bar, to click through the whole app): `--pulse-preview`, `--water-preview`, `--log-preview`, `--shot-preview`, `--profile-preview`, `--store-today`, `--store-food`, `--progress-preview`, `--goals-preview`.
 
 ### Known gaps
 

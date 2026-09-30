@@ -171,6 +171,7 @@ struct RootView: View {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--progress-preview")
             || ProcessInfo.processInfo.arguments.contains("--pulse-preview")
+            || DebugLaunch.tour
         #else
         false
         #endif

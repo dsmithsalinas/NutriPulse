@@ -17,7 +17,7 @@ final class ProgressSummaryViewModel {
     func load() async {
         guard !isLoading else { return }
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--progress-preview") {
+        if DebugLaunch.has("--progress-preview") {
             loadPreview()
             return
         }

@@ -5,13 +5,20 @@ struct MainTabView: View {
     @State private var selectedTab: MainTab = ProcessInfo.processInfo.arguments.contains("--progress-preview")
         ? .progress : ProcessInfo.processInfo.arguments.contains("--pulse-preview") ? .pulse : .today
     // Owned here so the tab bar's Log action can log to the exact day Today is showing.
-    @State private var todayVM = TodayViewModel()
+    @State private var todayVM = Self.makeTodayViewModel()
     @State private var showLogger = false
     @State private var loggerInitialTab: FoodLoggingViewModel.LogTab = .talk
     @State private var tabBarHeight: CGFloat = 0
     // Read directly rather than through @Environment: it's a device-cached singleton (like
     // SyncEngine), not something a preview or test needs to substitute per-view.
     private var pulseStore: PulseProfileStore { PulseProfileStore.shared }
+
+    private static func makeTodayViewModel() -> TodayViewModel {
+        #if DEBUG
+        if DebugLaunch.tour { return AppStoreScreenshotPreview.todayModel() }
+        #endif
+        return TodayViewModel()
+    }
 
     // Log to the day being viewed on Today; anywhere else, log to today.
     private var logDate: Date {
@@ -105,6 +112,9 @@ struct MainTabView: View {
             handleSmartNotificationRoute()
             handleWeeklyReminderRoute()
             await NotificationManager.shared.reconcileWeeklyReminder()
+            #if DEBUG
+            if DebugLaunch.tour { appState.profile = ProfileView.tourProfile }
+            #endif
             await pulseStore.load()
         }
         .onReceive(NotificationCenter.default.publisher(for: .strongWeekReminderOpened)) { _ in

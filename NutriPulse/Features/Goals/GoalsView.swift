@@ -302,8 +302,8 @@ struct GoalsView: View {
 
     private func loadExperiments() async {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--goals-preview")
-            || ProcessInfo.processInfo.arguments.contains("--progress-preview") {
+        if DebugLaunch.has("--goals-preview")
+            || DebugLaunch.has("--progress-preview") {
             experiments = []
             return
         }

@@ -577,7 +577,7 @@ extension CoachViewModel {
     // `--pulse-preview`: the start screen and a short conversation from fixtures, with no
     // account or network, so the redesign can be checked in the simulator.
     static var isPreview: Bool {
-        ProcessInfo.processInfo.arguments.contains("--pulse-preview")
+        DebugLaunch.has("--pulse-preview")
     }
 
     fileprivate func loadPreview() {
