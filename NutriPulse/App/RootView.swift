@@ -15,6 +15,8 @@ struct RootView: View {
                 strongWeekPreview
             } else if isWaterPickerPreview {
                 waterPickerPreview
+            } else if isLogSheetPreview {
+                logSheetPreview
             } else if isGoalBuilderPreview {
                 CreateGoalView(
                     vm: GoalsViewModel(),
@@ -85,6 +87,23 @@ struct RootView: View {
     @ViewBuilder private var waterPickerPreview: some View {
         #if DEBUG
         WaterPickerPreview()
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--log-preview`: the Log sheet, interactive, with no account (lists show empty states).
+    private var isLogSheetPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--log-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var logSheetPreview: some View {
+        #if DEBUG
+        FoodLoggingView(selectedDate: .now)
         #else
         EmptyView()
         #endif

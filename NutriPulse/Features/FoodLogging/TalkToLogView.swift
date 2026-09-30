@@ -22,6 +22,13 @@ struct TalkToLogView: View {
     ]
 
     var body: some View {
+        content
+            // Keep Talk's meal in step with the sheet header, so anything Talk shows or logs
+            // uses the meal the user picked there.
+            .onChange(of: headerMeal, initial: true) { _, meal in vm.selectedMeal = meal }
+    }
+
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
                 if vm.hasParsed {
@@ -134,6 +141,9 @@ struct TalkToLogView: View {
             TextField("2 eggs, toast with butter, black coffee", text: $vm.inputText, axis: .vertical)
                 .font(Theme.Fonts.body(16))
                 .lineLimit(1...4)
+                // As tall as the send button, so one line sits centred beside it; longer
+                // entries still grow upward from the bottom-aligned row.
+                .frame(minHeight: 44)
                 .focused($isTyping)
                 .accessibilityLabel("Describe what you ate")
             Button {
@@ -297,6 +307,8 @@ struct TalkToLogView: View {
                 Button {
                     Task {
                         do {
+                            // The sheet header owns the meal; Talk logs wherever it says.
+                            vm.selectedMeal = headerMeal
                             try await vm.logAll(on: date)
                             onLogged(.talk)
                         } catch {
@@ -434,25 +446,18 @@ private struct ConfirmRowView: View {
             .accessibilityLabel(row.isIncluded ? "Included — tap to remove \(row.name)" : "Excluded — tap to include \(row.name)")
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: Theme.Spacing.xs) {
-                    Text(row.name)
-                        .font(Theme.Fonts.body(15, .bold))
-                        .lineLimit(1)
-                    if row.source == "estimated" {
-                        Text("estimated")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Theme.NutrientColor.fat.opacity(0.15))
-                            .foregroundStyle(Theme.NutrientColor.fat)
-                            .clipShape(Capsule())
-                    }
-                }
-                Text(row.isSaved
-                     ? "Logged · \(Int(row.totalCalories.rounded())) cal"
-                     : "\(row.servingDesc) · \(Int(row.totalCalories.rounded())) cal")
-                    .font(Theme.Fonts.body(13))
+                Text(row.name)
+                    .font(Theme.Fonts.body(15, .bold))
+                    .lineLimit(2)
+                // "estimated" rides on the detail line: as a badge beside the name it wrapped
+                // ("estimat-ed") and squeezed the food name down to a few letters.
+                (Text(row.isSaved
+                      ? "Logged · \(Int(row.totalCalories.rounded())) cal"
+                      : "\(row.servingDesc) · \(Int(row.totalCalories.rounded())) cal")
                     .foregroundStyle(Theme.Colors.textSecondary)
+                 + Text(row.source == "estimated" ? " · estimated" : "")
+                    .foregroundStyle(Color(hex: 0xB45309)))   // amber 700: a caveat, AA on white
+                    .font(Theme.Fonts.body(13))
             }
 
             Spacer(minLength: 0)
