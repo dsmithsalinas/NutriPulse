@@ -34,6 +34,9 @@ struct CoachContextBundle: Encodable {
         let sex: String?
         let activityLevel: String?
         let weightGoal: String?   // "lose" | "maintain" | "gain" — nil until chosen post-onboarding
+        /// "metric" | "imperial" — the Profile unit setting, so Pulse answers in the units the
+        /// app shows (lbs and inches for imperial), never a mix.
+        let units: String
     }
 
     struct GoalContext: Encodable {
@@ -386,8 +389,14 @@ struct CoachContextBuilder {
             weightLogs: (try? await weightTask) ?? [],
             checkIns: (try? await checkInTask) ?? [],
             foodNames: (try? await foodNamesTask) ?? [],
-            proteinGoal: goal?.proteinG
+            proteinGoal: goal?.proteinG,
+            units: units
         )
+    }
+
+    /// The Profile unit setting (`@AppStorage("unitSystem")`); metric when unset.
+    private var units: UnitSystem {
+        UnitSystem(rawValue: UserDefaults.standard.string(forKey: "unitSystem") ?? "metric") ?? .metric
     }
 
     // MARK: - Private assembly
@@ -419,7 +428,8 @@ struct CoachContextBuilder {
             name: profile?.fullName?.components(separatedBy: " ").first ?? "there",
             sex: profile?.sex,
             activityLevel: profile?.activityLevel,
-            weightGoal: profile?.weightGoal
+            weightGoal: profile?.weightGoal,
+            units: units.rawValue
         )
 
         // Goals
@@ -565,13 +575,14 @@ struct CoachContextBuilder {
         if let latest = weightLogs.last {
             let df = DateFormatter()
             df.dateFormat = "MMMM d"
-            let latestStr = "\(String(format: "%.1f", latest.weightKg)) kg (\(df.string(from: latest.loggedAt)))"
+            // In the user's units, so Pulse quotes the same numbers the app shows.
+            let latestStr = "\(units.formatWeight(latest.weightKg)) (\(df.string(from: latest.loggedAt)))"
             if weightLogs.count > 1, let first = weightLogs.first {
                 let delta = latest.weightKg - first.weightKg
                 let dir = delta < -0.05 ? "down" : delta > 0.05 ? "up" : "stable"
                 weightTrend = .init(
                     mostRecent: latestStr,
-                    sevenDayChange: "\(delta >= 0 ? "+" : "")\(String(format: "%.1f", delta)) kg",
+                    sevenDayChange: "\(delta >= 0 ? "+" : "")\(String(format: "%.1f", units.weightInput(from: delta))) \(units.weightUnit)",
                     trend: dir
                 )
             } else {

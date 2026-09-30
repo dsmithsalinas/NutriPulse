@@ -183,3 +183,12 @@ test('Pulse off refuses before any model call; on, unset, or unreadable settings
     assert.equal(on.result.status, 200);
   }
 });
+
+test('the unit setting reaches Pulse, with a rule to answer in it', async () => {
+  const { modelRequest } = await send({ message: 'How is my weight?', messageType: 'chat', context: { user: { name: 'Sam', units: 'imperial' }, weightTrend: { mostRecent: '185.2 lbs (September 28)', sevenDayChange: '-2.4 lbs', trend: 'down' } } }, reply('Down 2.4 lbs.'));
+  assert.ok(modelRequest.system[1].text.includes('"units": "imperial"') || modelRequest.system[1].text.includes('"units":"imperial"'));
+  assert.ok(modelRequest.system[1].text.includes('185.2 lbs'));
+  assert.ok(modelRequest.system[0].text.includes('UNITS'));
+  const bogus = await send({ message: 'Hi', messageType: 'chat', context: { user: { name: 'Sam', units: 'stones' } } }, reply('Hi.'));
+  assert.ok(!bogus.modelRequest.system[1].text.includes('stones'));
+});

@@ -3617,6 +3617,21 @@ final class WeeklyRecapTests: XCTestCase {
         XCTAssertNil(digest.days[5].proteinFloorHit)
         XCTAssertNil(digest.priorWeek)
     }
+
+    func testDigestWeightChangeFollowsTheUnitSetting() {
+        let interval = WeeklyRecapSchedule.lastWeek(before: date(29), calendar: calendar)
+        let logs = [0, 5].map { offset in
+            WeightLog(id: UUID(), userId: UUID(),
+                      loggedAt: calendar.date(byAdding: .day, value: offset, to: interval.start)!,
+                      weightKg: offset == 0 ? 85 : 84, source: "manual")
+        }
+        func change(_ units: UnitSystem) -> String? {
+            WeeklyRecapDigest.build(interval: interval, summaries: [], movement: [], weightLogs: logs,
+                                    checkIns: [], foodNames: [], proteinGoal: nil, units: units, calendar: calendar).weightChange
+        }
+        XCTAssertEqual(change(.metric), "-1.0 kg across 2 weigh-ins")
+        XCTAssertEqual(change(.imperial), "-2.2 lbs across 2 weigh-ins")
+    }
 }
 
 final class GLP1SkippedDoseTests: XCTestCase {
