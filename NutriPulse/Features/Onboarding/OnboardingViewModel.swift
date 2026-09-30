@@ -291,7 +291,9 @@ final class OnboardingViewModel {
         //     is not worth stranding the user in a retry loop over, so failures are swallowed
         //     rather than thrown. The user can always fill this in later from AboutYouView.
         if !pulseAboutYou.isEmpty {
-            try? await PulseProfileStore.shared.savePreferences(pulseAboutYou)
+            // Never blocks onboarding, but never drops allergies either: a failed save waits on
+            // the device and is merged in on the next successful load.
+            await PulseProfileStore.shared.savePreferencesOrQueue(pulseAboutYou)
         }
 
         // 3.5 Record the chosen direction. Separate from the UpdateProfile commit below

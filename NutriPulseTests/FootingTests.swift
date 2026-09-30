@@ -1378,6 +1378,16 @@ final class PulseStructuredReplyTests: XCTestCase {
 // MARK: - What Pulse knows about you (docs/daylight-redesign.md, step 8)
 
 final class PulseProfileTests: XCTestCase {
+    func testQueuedPreferencesMergeWithoutDuplicatesOrLosingAllergies() {
+        let server = PulsePreferences(allergies: ["Peanuts"], allergyNote: "", eatingPatterns: [.halal], loves: ["Eggs"], avoids: [])
+        let queued = PulsePreferences(allergies: ["peanuts", "Shellfish"], allergyNote: "Mild", eatingPatterns: [.dairyFree], loves: [], avoids: ["Olives"])
+        let merged = server.merged(with: queued)
+        XCTAssertEqual(merged.allergies, ["Peanuts", "Shellfish"])
+        XCTAssertEqual(merged.allergyNote, "Mild")
+        XCTAssertEqual(merged.eatingPatterns, [.halal, .dairyFree])
+        XCTAssertEqual(merged.avoids, ["Olives"])
+    }
+
 
     // MARK: PulsePreferences.normalized
 

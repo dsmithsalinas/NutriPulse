@@ -49,6 +49,7 @@ final class PulseProfileStore {
 
     private enum Key {
         static let enabled = "pulse.enabled", onToday = "pulse.onToday", consent = "pulse.aiConsentAt"
+        static let pending = "pulse.pendingPreferences"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -65,10 +66,37 @@ final class PulseProfileStore {
         do {
             apply(try await repo.fetch())
             loadFailed = false
+            await flushPendingPreferences()
         } catch {
             loadFailed = true
         }
         isLoaded = true
+    }
+
+    /// For saves the user shouldn't have to redo (onboarding): if the save fails, the preferences
+    /// wait on the device and are merged into what the server holds on the next successful load.
+    /// Allergies in particular must never silently disappear.
+    func savePreferencesOrQueue(_ new: PulsePreferences) async {
+        do {
+            try await savePreferences(new)
+        } catch {
+            let queued = pendingPreferences.map { $0.merged(with: new) } ?? new.normalized
+            if let data = try? JSONEncoder().encode(queued) { defaults.set(data, forKey: Key.pending) }
+        }
+    }
+
+    private var pendingPreferences: PulsePreferences? {
+        defaults.data(forKey: Key.pending).flatMap { try? JSONDecoder().decode(PulsePreferences.self, from: $0) }
+    }
+
+    private func flushPendingPreferences() async {
+        guard let pending = pendingPreferences else { return }
+        do {
+            try await savePreferences(preferences.merged(with: pending))
+            defaults.removeObject(forKey: Key.pending)
+        } catch {
+            // Still offline or failing: keep it for the next load.
+        }
     }
 
     func savePreferences(_ new: PulsePreferences) async throws {

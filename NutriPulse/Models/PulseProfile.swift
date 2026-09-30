@@ -27,12 +27,23 @@ enum CommonAllergen {
 }
 
 /// The editable part: what the user has told Pulse.
-struct PulsePreferences: Equatable {
+struct PulsePreferences: Equatable, Codable {
     var allergies: [String] = []
     var allergyNote: String = ""
     var eatingPatterns: Set<EatingPattern> = []
     var loves: [String] = []
     var avoids: [String] = []
+
+    /// Everything in either, for merging a queued save into what the server holds.
+    func merged(with other: PulsePreferences) -> PulsePreferences {
+        PulsePreferences(
+            allergies: allergies + other.allergies,
+            allergyNote: allergyNote.isEmpty ? other.allergyNote : allergyNote,
+            eatingPatterns: eatingPatterns.union(other.eatingPatterns),
+            loves: loves + other.loves,
+            avoids: avoids + other.avoids
+        ).normalized
+    }
 
     var isEmpty: Bool {
         allergies.isEmpty && allergyNote.isEmpty && eatingPatterns.isEmpty && loves.isEmpty && avoids.isEmpty
