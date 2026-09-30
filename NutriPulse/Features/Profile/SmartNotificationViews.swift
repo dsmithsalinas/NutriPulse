@@ -85,11 +85,7 @@ struct SmartNotificationHistoryView: View {
                     DaylightPageTitle("Pulse history")
                         .padding(.horizontal, Theme.Spacing.page)
                         .padding(.top, Theme.Spacing.sm)
-                    ContentUnavailableView(
-                        "No Pulse notifications yet",
-                        systemImage: "bell.slash",
-                        description: Text("When Pulse finds and schedules a useful opportunity, its reasoning will appear here.")
-                    )
+                    BrandedEmptyState(icon: "bell.slash", title: "No Pulse notifications yet", message: "When Pulse finds and schedules a useful opportunity, its reasoning will appear here.")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {

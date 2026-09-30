@@ -978,11 +978,7 @@ private struct GoalDetailContainer: View {
                 onAskPulse: { onAskPulse(state.bundle.version.title) }
             )
         } else {
-            ContentUnavailableView(
-                "Goal unavailable",
-                systemImage: "target",
-                description: Text("This goal could not be refreshed.")
-            )
+            BrandedEmptyState(icon: "target", title: "Goal unavailable", message: "This goal could not be refreshed.")
         }
     }
 }

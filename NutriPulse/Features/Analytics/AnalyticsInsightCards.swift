@@ -173,11 +173,7 @@ struct CycleAwareAnalyticsCard: View {
             }
 
             if points.isEmpty {
-                ContentUnavailableView(
-                    "No \(selectedMetric.rawValue.lowercased()) data yet",
-                    systemImage: "chart.xyaxis.line",
-                    description: Text("This view fills in as you log across dose cycles.")
-                )
+                BrandedEmptyState(icon: "chart.xyaxis.line", title: "No \(selectedMetric.rawValue.lowercased()) data yet", message: "This view fills in as you log across dose cycles.")
                 .frame(height: 210)
             } else {
                 Chart {

@@ -86,11 +86,7 @@ struct GLP1HistoryView: View {
             if isLoading {
                 ProgressView()
             } else if logs.isEmpty && skips.isEmpty {
-                ContentUnavailableView(
-                    "No Doses Logged",
-                    systemImage: "syringe",
-                    description: Text("Your dose history will appear here.")
-                )
+                BrandedEmptyState(icon: "syringe", title: "No Doses Logged", message: "Your dose history will appear here.")
             }
         }
         .alert("Couldn't update dose history", isPresented: Binding(
