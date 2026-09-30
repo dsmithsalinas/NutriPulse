@@ -1158,10 +1158,14 @@ private struct EditProfileSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Account") {
+                Section {
                     TextField("Full name", text: $name)
+                } header: {
+                    DaylightSectionHeader("Account")
                 }
-                Section("Body") {
+                .daylightSection()
+
+                Section {
                     // `...Date.now` let a user set their DOB to today — "Age: 0 years" in Body
                     // Stats, and a nonsense BMR. Onboarding enforces 13–120; match it.
                     DatePicker("Date of birth", selection: $dob,
@@ -1180,13 +1184,13 @@ private struct EditProfileSheet: View {
                                 .keyboardType(.numberPad)
                                 .focused($fieldFocused)
                                 .frame(width: 36)
-                            Text("ft").foregroundStyle(.secondary)
+                            Text("ft").foregroundStyle(Theme.Colors.textSecondary)
                             TextField("in", text: $heightInchesText)
                                 .multilineTextAlignment(.trailing)
                                 .keyboardType(.numberPad)
                                 .focused($fieldFocused)
                                 .frame(width: 36)
-                            Text("in").foregroundStyle(.secondary)
+                            Text("in").foregroundStyle(Theme.Colors.textSecondary)
                         }
                     } else {
                         HStack {
@@ -1197,11 +1201,15 @@ private struct EditProfileSheet: View {
                                 .keyboardType(.decimalPad)
                                 .focused($fieldFocused)
                                 .frame(width: 60)
-                            Text("cm").foregroundStyle(.secondary)
+                            Text("cm").foregroundStyle(Theme.Colors.textSecondary)
                         }
                     }
+                } header: {
+                    DaylightSectionHeader("Body")
                 }
-                Section("Activity Level") {
+                .daylightSection()
+
+                Section {
                     Picker("Activity", selection: $activity) {
                         ForEach(ActivityLevel.allCases) { level in
                             Text(level.displayName).tag(level)
@@ -1209,24 +1217,29 @@ private struct EditProfileSheet: View {
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
+                } header: {
+                    DaylightSectionHeader("Activity Level")
                 }
-                Section("Weight") {
+                .daylightSection()
+
+                Section {
                     Toggle("Log today's weight", isOn: $logWeight)
                     if logWeight {
                         HStack {
                             TextField(units.weightUnit, text: $weightText)
                                 .keyboardType(.decimalPad)
                                 .focused($fieldFocused)
-                            Text(units.weightUnit).foregroundStyle(.secondary)
+                            Text(units.weightUnit).foregroundStyle(Theme.Colors.textSecondary)
                         }
                     }
+                } header: {
+                    DaylightSectionHeader("Weight")
                 }
+                .daylightSection()
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Colors.ground.ignoresSafeArea())
+            .daylightForm()
             .navigationTitle("Edit Stats")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -1411,11 +1424,15 @@ private struct EditGoalsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Calorie Target") {
+                Section {
                     goalRow(label: "Calories", value: $calories, unit: "kcal",
                             range: 1000...5000, step: 50)
+                } header: {
+                    DaylightSectionHeader("Calorie Target")
                 }
-                Section("Macros") {
+                .daylightSection()
+
+                Section {
                     goalRow(label: "Protein", value: $proteinG, unit: "g",
                             range: 20...400, step: 5)
                     goalRow(label: "Carbs",   value: $carbsG,   unit: "g",
@@ -1424,13 +1441,14 @@ private struct EditGoalsSheet: View {
                             range: 10...300, step: 5)
                     goalRow(label: "Fiber",   value: $fiberG,   unit: "g",
                             range: 5...100,  step: 1)
+                } header: {
+                    DaylightSectionHeader("Macros")
                 }
+                .daylightSection()
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Colors.ground.ignoresSafeArea())
+            .daylightForm()
             .navigationTitle("Edit Goals")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -1474,7 +1492,7 @@ private struct EditGoalsSheet: View {
             Text(label)
             Spacer()
             Text("\(Int(value.wrappedValue)) \(unit)")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textSecondary)
                 .monospacedDigit()
             Stepper("", value: value, in: range, step: step)
                 .labelsHidden()
@@ -1497,14 +1515,14 @@ private struct LogInjectionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Medication") {
+                Section {
                     Picker("Medication", selection: $medication) {
                         ForEach(GLP1Medication.allCases) { med in
                             VStack(alignment: .leading) {
                                 Text(med.rawValue)
                                 Text(med.activeIngredient)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(Theme.Fonts.body(12))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
                             }
                             .tag(med)
                         }
@@ -1514,29 +1532,34 @@ private struct LogInjectionSheet: View {
                             Text("\(dose.glp1DoseString) mg").tag(dose)
                         }
                     }
+                } header: {
+                    DaylightSectionHeader("Medication")
                 }
+                .daylightSection()
 
-                Section("Dose") {
+                Section {
                     DatePicker("Date & Time", selection: $injectionDate, in: ...Date.now)
                     Picker("Site", selection: $site) {
                         ForEach(InjectionSite.allCases) { s in
                             Text(s.rawValue).tag(s)
                         }
                     }
+                } header: {
+                    DaylightSectionHeader("Dose")
                 }
+                .daylightSection()
 
                 Section {
                     Label("Suggested next: \(vm.suggestedNextSite.rawValue)",
                           systemImage: "arrow.triangle.2.circlepath")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
+                .daylightSection()
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Colors.ground.ignoresSafeArea())
+            .daylightForm()
             .navigationTitle("Log Dose")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -1590,8 +1613,10 @@ private struct SmartNotificationExplainerSheet: View {
     @State private var isEnabling = false
 
     var body: some View {
-        NavigationStack {
+        ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                SheetHeader(title: "Notifications", onClose: { if !isEnabling { dismiss() } })
+
                 ZStack {
                     Circle()
                         .fill(Theme.Colors.primary.opacity(0.12))
@@ -1600,6 +1625,7 @@ private struct SmartNotificationExplainerSheet: View {
                         .font(.system(size: 30, weight: .semibold))
                         .foregroundStyle(Theme.Colors.primary)
                 }
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Useful timing, fewer interruptions")
@@ -1620,8 +1646,6 @@ private struct SmartNotificationExplainerSheet: View {
                     .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textFaint)
 
-                Spacer()
-
                 Button {
                     isEnabling = true
                     Task {
@@ -1632,26 +1656,19 @@ private struct SmartNotificationExplainerSheet: View {
                     HStack {
                         if isEnabling { ProgressView().tint(.white) }
                         Text("Allow useful notifications")
-                            .fontWeight(.semibold)
                     }
                     .frame(maxWidth: .infinity, minHeight: 50)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.Colors.primary)
+                .buttonStyle(.brandPrimary)
                 .disabled(isEnabling)
             }
-            .padding(Theme.Spacing.lg)
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Not now") { dismiss() }
-                        .disabled(isEnabling)
-                }
-            }
+            .padding(Theme.Spacing.page)
+            .padding(.bottom, Theme.Spacing.lg)
         }
-        .tint(Theme.Colors.primary)
-        .presentationDetents([.large])
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .interactiveDismissDisabled(isEnabling)
         .presentationDragIndicator(.visible)
+        .tint(Theme.Colors.primary)
     }
 
     private func explainerRow(_ icon: String, _ title: String, _ detail: String) -> some View {
@@ -1661,10 +1678,12 @@ private struct SmartNotificationExplainerSheet: View {
                 .foregroundStyle(Theme.Colors.primary)
                 .frame(width: 28, height: 28)
                 .background(Theme.Colors.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(Theme.Fonts.body(15, .semibold)).foregroundStyle(Theme.Colors.textPrimary)
                 Text(detail).font(Theme.Fonts.body(12)).foregroundStyle(Theme.Colors.textSecondary)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 }

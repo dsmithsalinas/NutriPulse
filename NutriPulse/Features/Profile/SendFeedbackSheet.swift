@@ -11,7 +11,7 @@ struct SendFeedbackSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Type") {
+                Section {
                     Picker("Category", selection: $category) {
                         ForEach(FeedbackCategory.allCases) { c in
                             Text(c.displayName).tag(c)
@@ -19,22 +19,30 @@ struct SendFeedbackSheet: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                } header: {
+                    DaylightSectionHeader("Type")
                 }
-                Section("What's on your mind?") {
+                .daylightSection()
+
+                Section {
                     TextEditor(text: $message)
                         .frame(minHeight: 140)
+                        .scrollContentBackground(.hidden)
+                } header: {
+                    DaylightSectionHeader("What's on your mind?")
                 }
+                .daylightSection()
+
                 Section {
                     Text("Your app version is included automatically to help us track down issues.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
+                .daylightSection()
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.Colors.ground.ignoresSafeArea())
+            .daylightForm()
             .navigationTitle("Send Feedback")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
