@@ -80,8 +80,11 @@ struct FoodAccessPreferencesView: View {
                 if let error = vm.error { Text(error).foregroundStyle(.red).font(.footnote) }
             }
             .disabled(vm.isSaving)
+            .scrollContentBackground(.hidden)
+            .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationTitle("Food preferences")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(vm.isSaving) }
                 ToolbarItem(placement: .confirmationAction) {

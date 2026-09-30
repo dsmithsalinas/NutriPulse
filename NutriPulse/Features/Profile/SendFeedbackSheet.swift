@@ -30,8 +30,11 @@ struct SendFeedbackSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationTitle("Send Feedback")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -42,6 +45,7 @@ struct SendFeedbackSheet: View {
                 }
             }
         }
+        .tint(Theme.Colors.primary)
     }
 
     private func send() async {

@@ -60,8 +60,12 @@ struct GLP1HistoryView: View {
         }
         .disabled(isSaving)
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .tint(Theme.Colors.primary)
         .navigationTitle("Dose History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
         .overlay {
             if isLoading {
                 ProgressView()

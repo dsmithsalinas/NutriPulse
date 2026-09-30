@@ -37,8 +37,12 @@ struct SmartNotificationSettingsView: View {
                      : "Pulse will not schedule coaching between \(hourLabel(quietStart)) and \(hourLabel(quietEnd)). Shot-day reminders are separate.")
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .tint(Theme.Colors.primary)
         .navigationTitle("Notification preferences")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
         .disabled(!masterEnabled)
         .onChange(of: workoutEnabled) { _, _ in settingsChanged() }
         .onChange(of: proteinEnabled) { _, _ in settingsChanged() }
@@ -129,10 +133,14 @@ struct SmartNotificationHistoryView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .tint(Theme.Colors.primary)
         .navigationTitle("Pulse history")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
         .toolbar {
             if !entries.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
