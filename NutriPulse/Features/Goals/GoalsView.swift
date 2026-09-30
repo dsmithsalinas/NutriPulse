@@ -82,7 +82,7 @@ struct GoalsView: View {
             if !isPresented { Task { await loadExperiments() } }
         }
         .sheet(isPresented: $showExperiments) {
-            ExperimentsView(activeGoals: vm.active)
+            ExperimentsView(activeGoals: vm.active, previewExperiments: vm.previewExperiments)
         }
         .onChange(of: showExperiments) { _, isPresented in
             if !isPresented { Task { await loadExperiments() } }

@@ -179,6 +179,31 @@ final class CoachViewModel {
     /// Rebuilds the start screen's tiles. Called on every visit to the tab and on returning to
     /// the foreground, since the protein gap and shot day move through the day. Cheap: local
     /// cache plus two small lookups, no model call.
+    /// The running personal experiment, when there is one, so the start screen's
+    /// "Experiment · day X of Y" tile can open it for today's check-in.
+    private(set) var runningExperiment: PersonalExperiment?
+
+    /// Today's experiment check-in tile, if an experiment is running and today isn't logged yet.
+    /// Any lookup failure means no tile: a missing nudge is better than a wrong one.
+    private func experimentCheckInPrompt() async -> ExperimentCheckInPrompt? {
+        guard let experiments = try? await ExperimentRepository().fetchAll(),
+              let running = experiments.first(where: { $0.status == .running }),
+              let timeline = ExperimentTimelineCalculator.timeline(
+                  interventionStart: running.interventionStart, endDate: running.endDate),
+              !timeline.hasElapsed,
+              let goals = try? await PersonalGoalRepository().fetchActiveGoals()
+        else {
+            runningExperiment = nil
+            return nil
+        }
+        runningExperiment = running
+        let today = Date.now.isoDateString
+        let checkedIn = goals.first { $0.goal.id == running.interventionGoalId }?
+            .checkins.contains { $0.localDate == today } ?? false
+        return ExperimentCheckInPrompt(dayIndex: timeline.dayIndex, totalDays: timeline.totalDays,
+                                       hasCheckedInToday: checkedIn)
+    }
+
     func refreshStartSuggestions() async {
         await refreshRecentFoodLogs()
         #if DEBUG
@@ -198,6 +223,7 @@ final class CoachViewModel {
         async let latestDose = glp1Repo.fetchRecentLogs(limit: 1)
         async let skips = glp1Repo.fetchSkippedDoses()
         async let lastRecap = repo.lastWeeklySummaryDate()
+        async let experimentCheckIn = experimentCheckInPrompt()
 
         var cycleDay: Int?
         if let log = (try? await latestDose)?.first, let skips = try? await skips {
@@ -226,7 +252,8 @@ final class CoachViewModel {
             proteinGoalG: goal?.proteinG,
             cycleDay: cycleDay,
             recapDue: recapDue,
-            now: .now
+            now: .now,
+            experimentCheckIn: await experimentCheckIn
         )
     }
 

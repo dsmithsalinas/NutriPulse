@@ -58,12 +58,17 @@ struct ExperimentDetailView: View {
             Text(experiment.question)
                 .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
                 .foregroundStyle(Theme.Colors.textPrimary)
+            // Rows only for what's known: "Unavailable" read like an error, not a missing detail.
+            if let changing = goalBundle?.version.title {
+                Divider().overlay(Theme.Colors.hairline)
+                detailRow("Changing", value: changing)
+            }
+            if let measuring = outcomeMetric?.name {
+                Divider().overlay(Theme.Colors.hairline)
+                detailRow("Measuring", value: measuring)
+            }
             Divider().overlay(Theme.Colors.hairline)
-            detailRow("Changing", value: goalBundle?.version.title ?? "Unavailable")
-            Divider().overlay(Theme.Colors.hairline)
-            detailRow("Measuring", value: outcomeMetric?.name ?? "Unavailable")
-            Divider().overlay(Theme.Colors.hairline)
-            detailRow("Window", value: "\(experiment.interventionStart) through \(experiment.endDate ?? "ongoing")")
+            detailRow("Window", value: ExperimentDateRange.label(start: experiment.interventionStart, end: experiment.endDate))
         }
         .tile()
     }
@@ -184,12 +189,19 @@ struct ExperimentDetailView: View {
         let name = (outcomeMetric?.name ?? "your outcome").lowercased()
         let with = String(format: "%.1f", comparison.interventionMean)
         let without = String(format: "%.1f", comparison.nonInterventionMean)
-        return "On days you did this, your \(name) averaged \(with)\(unit) (n=\(comparison.interventionCount)) vs \(without)\(unit) on days you didn't (n=\(comparison.nonInterventionCount))."
+        return "On days you did this, your \(name) averaged \(with)\(unit) across \(comparison.interventionCount) days, vs \(without)\(unit) across \(comparison.nonInterventionCount) days you didn't."
     }
 
     // MARK: - Data
 
     private func load() async {
+        #if DEBUG
+        if DebugLaunch.has("--goals-preview") || DebugLaunch.has("--progress-preview") {
+            comparisonDays = Self.previewDays(for: experiment)
+            isLoading = false
+            return
+        }
+        #endif
         isLoading = true
         defer { isLoading = false }
 
@@ -264,4 +276,28 @@ private struct DetailCheckInButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
+
 }
+
+#if DEBUG
+extension ExperimentDetailView {
+
+    /// Sample days for the preview: alternating intervention days, the outcome a little higher
+    /// on them for the finished experiment (a readable result) and flat for the running one.
+    fileprivate static func previewDays(for experiment: PersonalExperiment) -> [ExperimentDayObservation] {
+        let calendar = Calendar.current
+        let finished = experiment.status == .completed
+        let count = finished ? 21 : 6
+        let end = finished ? (calendar.date(byAdding: .day, value: -14, to: .now) ?? .now) : .now
+        return (0..<count).map { offset in
+            let date = calendar.date(byAdding: .day, value: -offset, to: end) ?? end
+            let didIntervene = offset % 3 != 0
+            let base = finished ? 3.0 : 7.1
+            let lift = finished && didIntervene ? 0.9 : 0
+            let wobble = Double((offset * 7) % 5) * 0.1 - 0.2
+            return ExperimentDayObservation(localDate: date.isoDateString, didIntervene: didIntervene,
+                                            outcomeValue: base + lift + wobble)
+        }
+    }
+}
+#endif

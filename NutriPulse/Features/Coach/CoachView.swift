@@ -16,6 +16,7 @@ struct CoachView: View {
     @FocusState private var isInputFocused: Bool
     @State private var keyboardVisible = false
     @State private var inConversation = false
+    @State private var showExperiment: PersonalExperiment?
     @State private var showAboutYou = false
 
     // The Daylight tab bar floats over content, and SwiftUI doesn't inset this pinned composer
@@ -99,6 +100,11 @@ struct CoachView: View {
                 vm.error = "Turn on microphone and speech recognition for Footing in Settings to talk to Pulse."
             }
         }
+        .sheet(item: $showExperiment) { experiment in
+            ExperimentDetailView(experiment: experiment) {
+                await vm.refreshStartSuggestions()
+            }
+        }
         .alert("Error", isPresented: Binding(
             get: { vm.error != nil },
             set: { if !$0 { vm.error = nil } }
@@ -151,6 +157,12 @@ struct CoachView: View {
     }
 
     private func start(_ suggestion: PulseStartSuggestion) {
+        // The experiment tile opens the experiment itself for today's check-in. It sends
+        // nothing to the AI, so it isn't gated on Pulse consent.
+        if suggestion.kind == .experimentCheckIn {
+            showExperiment = vm.runningExperiment
+            return
+        }
         guard pulseMaySend() else { return }
         dictation.stop()
         inConversation = true
@@ -349,7 +361,9 @@ struct CoachView: View {
             .shadow(color: colors.shadow ? Color(hex: 0x0F172A, opacity: 0.06) : .clear, radius: 1, y: 1)
         }
         .buttonStyle(PressableStyle(scale: 0.96))
-        .accessibilityHint(suggestion.kind == .mondayRecap ? "Pulse writes your recap of last week" : "Sends this to Pulse")
+        .accessibilityHint(suggestion.kind == .mondayRecap ? "Pulse writes your recap of last week"
+                           : suggestion.kind == .experimentCheckIn ? "Opens your experiment to log today"
+                           : "Sends this to Pulse")
     }
 
     private struct TileColors {

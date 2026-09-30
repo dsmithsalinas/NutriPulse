@@ -6,6 +6,8 @@ import SwiftUI
 struct ExperimentsView: View {
     @Environment(\.dismiss) private var dismiss
     let activeGoals: [GoalCardState]
+    /// DEBUG preview only (`--goals-preview`/`--tour`): experiments to show instead of fetching.
+    var previewExperiments: [PersonalExperiment] = []
     @State private var experiments: [PersonalExperiment] = []
     @State private var suggestions: [ExperimentSuggestion] = []
     @State private var showCreate = false
@@ -28,7 +30,7 @@ struct ExperimentsView: View {
                     Text("Test a question, not a diagnosis")
                         .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("An experiment connects one intervention goal to outcomes such as sleep duration or morning energy. Pulse can compare what happened while keeping missing data and possible confounders visible.")
+                    Text("An experiment connects one intervention goal to outcomes such as sleep duration or morning energy. Footing compares what happened on days you did it with days you didn't, and keeps missing data and possible confounders visible.")
                         .font(Theme.Fonts.body(14))
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
@@ -140,7 +142,7 @@ struct ExperimentsView: View {
                         .font(Theme.Fonts.body(12, .semibold))
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
-                Text("\(experiment.interventionStart) through \(experiment.endDate ?? "ongoing")")
+                Text(ExperimentDateRange.label(start: experiment.interventionStart, end: experiment.endDate))
                     .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -181,7 +183,13 @@ struct ExperimentsView: View {
     private func loadSuggestions() async {
         #if DEBUG
         if DebugLaunch.has("--goals-preview") || DebugLaunch.has("--progress-preview") {
-            suggestions = []
+            suggestions = [ExperimentSuggestion(
+                id: "preview-protein-dip",
+                why: "Your protein dips on shot days 2–3, averaging 98g vs 134g the rest of the cycle.",
+                suggestedQuestion: "Does a pre-staged protein snack on shot days 2–3 lift my protein?",
+                outcome: .protein,
+                suggestedDurationDays: 21
+            )]
             return
         }
         #endif
@@ -229,6 +237,14 @@ struct ExperimentsView: View {
     }
 
     private func load() async {
+        #if DEBUG
+        if DebugLaunch.has("--goals-preview") || DebugLaunch.has("--progress-preview") {
+            experiments = previewExperiments
+            errorMessage = nil
+            isLoading = false
+            return
+        }
+        #endif
         isLoading = true
         defer { isLoading = false }
         do {

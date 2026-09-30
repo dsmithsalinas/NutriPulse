@@ -77,11 +77,17 @@ Debug launch flags for checking screens without an account (`--tour` turns on al
 - **Recents show "N servings", not "½ cup".** Local food logs don't store a serving description.
 - **"My foods" in Search means favorites.** FatSecret results carry no ownership flag.
 - **No Edit on the Favorites grid** yet.
-- **Goals: a weekly goal's card can read "100% measured" over an all-dashed week.** Pre-existing logic (`weeklyTimelineDays` vs coverage), seen with preview data; check with real data.
-- **Goals: the experiment tile has no outcome label** ("Sleep"); `ExperimentRepository` doesn't fetch experiment metrics yet.
 - **Shot day has no titration week** ("week 6"); nothing records it.
 - The mockups are light-only; dark-mode colors are our own picks in the same slate family.
 - Everything that needs a signed-in account (real search, favorites, water sync, recap) still needs a pass on a device before TestFlight.
+
+## Analytics, experiments and Goals (Sep 29)
+
+- **Analytics is questions**, one scrolling row of chips: shot days (first when there's GLP-1 history), where protein comes from (top 5 foods), whether the weight trend is real (smoothed trend, shot days and dose changes marked, "too few weigh-ins" under 4), protein and calories, movement, body composition. Each answers with one takeaway computed from data and an "Ask Pulse about this". Logic in `Core/Coaching/AnalyticsQuestions.swift`.
+- **Experiments** show what they measure, run Setup → Running (day X of Y, today's check-in) → Result. The result compares the outcome on days you did it vs days you didn't, and says "Not enough data to tell yet" under 5 days a side or when the gap is under half the pooled SD. Never causal. Starters come only from real patterns in your data. A running experiment adds an "Experiment · day X of Y" tile to the Pulse start screen that opens it. Logic in `Core/Coaching/ExperimentInsights.swift`.
+- **Goals**: a built-in protein-floor goal (never empty), a gentle note past 3 active goals, one-time lime wins for completion and the highest 7/14/30-day streak reached, and a trophy shelf with non-shaming wording.
+- **Honesty rule**: text worked out by fixed rules on the device is never labelled as Pulse.
+- Known: a streak milestone that was celebrated once won't celebrate again in a later streak; the floor card's "Change your floor in Profile" is text, not a link.
 
 ## Process rule
 

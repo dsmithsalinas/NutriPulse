@@ -280,3 +280,20 @@ enum ExperimentSuggestionEngine {
 private extension ClosedRange where Bound == Int {
     var isSingle: Bool { lowerBound == upperBound }
 }
+
+/// "Sep 23 – Oct 13" (or "From Sep 23" when open-ended) from the stored ISO dates.
+enum ExperimentDateRange {
+    static func label(start: String, end: String?, calendar: Calendar = .current) -> String {
+        let parse = DateFormatter()
+        parse.calendar = calendar
+        parse.locale = Locale(identifier: "en_US_POSIX")
+        parse.timeZone = calendar.timeZone
+        parse.dateFormat = "yyyy-MM-dd"
+        func show(_ iso: String) -> String {
+            guard let date = parse.date(from: iso) else { return iso }
+            return date.formatted(.dateTime.month(.abbreviated).day())
+        }
+        guard let end else { return "From \(show(start))" }
+        return "\(show(start)) – \(show(end))"
+    }
+}

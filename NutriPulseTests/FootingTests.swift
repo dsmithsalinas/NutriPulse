@@ -4399,3 +4399,13 @@ final class BodyFatTrendTakeawayTests: XCTestCase {
         XCTAssertEqual(text, "Body fat is down 1.5% across 2 readings.")
     }
 }
+
+final class ExperimentDateRangeTests: XCTestCase {
+    func testLabelsReadAsShortDates() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        XCTAssertFalse(ExperimentDateRange.label(start: "2026-09-23", end: "2026-10-13", calendar: calendar).contains("2026"))
+        XCTAssertTrue(ExperimentDateRange.label(start: "2026-09-23", end: nil, calendar: calendar).hasPrefix("From "))
+        XCTAssertEqual(ExperimentDateRange.label(start: "bad", end: nil, calendar: calendar), "From bad")
+    }
+}
