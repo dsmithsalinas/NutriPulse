@@ -132,28 +132,40 @@ struct AnalyticsView: View {
 
     // MARK: - Chips
 
+    // One scrolling row, not a wrapped stack: six full questions wrapped to six lines and
+    // pushed the answer below the fold. The row runs edge to edge so the next question peeks
+    // in from the right, which says "scroll me".
     private var questionChips: some View {
-        FlowLayout(spacing: 8, lineSpacing: 8) {
-            ForEach(visibleQuestions) { question in
-                let isSelected = question == currentQuestion
-                Button {
-                    selectedQuestion = question
-                } label: {
-                    Text(question.rawValue)
-                        .font(Theme.Fonts.body(14, .semibold))
-                        .foregroundStyle(isSelected ? .white : Theme.Colors.textPrimary)
-                        .multilineTextAlignment(.leading)
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 44)
-                        .background(
-                            isSelected ? Theme.Colors.primary : Theme.Colors.surfaceCard,
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        )
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(visibleQuestions) { question in
+                        let isSelected = question == currentQuestion
+                        Button {
+                            selectedQuestion = question
+                            withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(question, anchor: .center) }
+                        } label: {
+                            Text(question.rawValue)
+                                .font(Theme.Fonts.body(14, .semibold))
+                                .foregroundStyle(isSelected ? .white : Theme.Colors.textPrimary)
+                                .lineLimit(1)
+                                .fixedSize()
+                                .padding(.horizontal, 14)
+                                .frame(minHeight: 44)
+                                .background(
+                                    isSelected ? Theme.Colors.primary : Theme.Colors.surfaceCard,
+                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                )
+                        }
+                        .buttonStyle(PressableStyle(scale: 0.97))
+                        .id(question)
+                        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                        .accessibilityHint("Shows \(question.rawValue)")
+                    }
                 }
-                .buttonStyle(PressableStyle(scale: 0.97))
-                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-                .accessibilityHint("Shows \(question.rawValue)")
+                .padding(.horizontal, Theme.Spacing.page)
             }
+            .padding(.horizontal, -Theme.Spacing.page)
         }
     }
 
@@ -702,6 +714,7 @@ private struct WeightTrendChart: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
         Chart {
             ForEach(rawPoints, id: \.date) { point in
                 PointMark(
@@ -733,23 +746,39 @@ private struct WeightTrendChart: View {
                 RuleMark(x: .value("Date", change.date, unit: .day))
                     .foregroundStyle(Theme.Colors.textFaint.opacity(0.7))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .annotation(
-                        position: .top,
-                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
-                    ) {
-                        Text("\(change.doseMg.glp1DoseString) mg")
-                            .font(Theme.Fonts.body(10, .semibold))
-                            .foregroundStyle(Theme.Colors.textSecondary)
-                    }
+                // The dose label rides an invisible point at the top of the plot, so it stays
+                // inside the chart. Above it, the draw-in mask cut it off.
+                PointMark(
+                    x: .value("Date", change.date, unit: .day),
+                    y: .value(unit, yDomain.upperBound)
+                )
+                .opacity(0)
+                .annotation(position: .trailing, alignment: .topLeading, spacing: 3) {
+                    Text("\(change.doseMg.glp1DoseString) mg")
+                        .font(Theme.Fonts.body(10, .bold, relativeTo: nil))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Theme.Colors.surfaceInset, in: Capsule())
+                }
             }
         }
         .chartYScale(domain: yDomain)
         .chartYAxis {
-            AxisMarks { value in
+            AxisMarks(values: .automatic(desiredCount: 4)) { value in
                 AxisValueLabel {
-                    if let v = value.as(Double.self) { Text("\(Int(v.rounded())) \(unit)") }
+                    // Whole numbers when the range is wide; one decimal when it's narrow, where
+                    // rounding labelled two gridlines "84 kg".
+                    if let v = value.as(Double.self) { Text("\(yLabel(v)) \(unit)") }
                 }
                 .foregroundStyle(Theme.Colors.textFaint)
+                AxisGridLine().foregroundStyle(Theme.Colors.hairline)
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                AxisValueLabel(format: .dateTime.month(.abbreviated).day(), collisionResolution: .greedy)
+                    .foregroundStyle(Theme.Colors.textFaint)
                 AxisGridLine().foregroundStyle(Theme.Colors.hairline)
             }
         }
@@ -758,5 +787,37 @@ private struct WeightTrendChart: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Weight trend chart")
         .accessibilityValue(accessibilitySummary)
+
+        if !shotDays.isEmpty || !doseChanges.isEmpty {
+            HStack(spacing: 14) {
+                if !shotDays.isEmpty {
+                    HStack(spacing: 5) {
+                        Circle().fill(Theme.Colors.textFaint).frame(width: 6, height: 6)
+                        Text("Shot day")
+                    }
+                }
+                if !doseChanges.isEmpty {
+                    HStack(spacing: 5) {
+                        Rectangle()
+                            .stroke(Theme.Colors.textFaint, style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            .frame(width: 1, height: 12)
+                        Text("Dose change")
+                    }
+                }
+                HStack(spacing: 5) {
+                    Capsule().fill(Theme.NutrientColor.protein).frame(width: 14, height: 3)
+                    Text("Trend")
+                }
+            }
+            .font(Theme.Fonts.body(12, .medium))
+            .foregroundStyle(Theme.Colors.textSecondary)
+            .accessibilityHidden(true)
+        }
+        }
+    }
+
+    private func yLabel(_ value: Double) -> String {
+        let span = yDomain.upperBound - yDomain.lowerBound
+        return span < 6 ? String(format: "%.1f", value) : "\(Int(value.rounded()))"
     }
 }
