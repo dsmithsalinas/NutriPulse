@@ -15,14 +15,15 @@ struct NameStepView: View {
             onAdvance: advance
         ) {
             TextField("Your name", text: $vm.fullName)
-                .font(.title3)
+                .font(Theme.Fonts.body(18, .semibold))
                 .padding(.horizontal, 18)
                 .frame(height: 56)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(focused ? Theme.Colors.primary.opacity(0.55) : .clear, lineWidth: 1.5)
+                        .strokeBorder(focused ? Theme.Colors.primary : Theme.Colors.hairline,
+                                      lineWidth: focused ? 2 : 1)
                 }
                 .autocorrectionDisabled()
                 .textContentType(.givenName)

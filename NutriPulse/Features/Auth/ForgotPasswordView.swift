@@ -1,73 +1,81 @@
 import SwiftUI
 
+// A Daylight sheet like PulseConsentSheet/AboutYouView: SheetHeader, white tiles on the cool
+// neutral ground, one indigo primary action.
 struct ForgotPasswordView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var vm = PasswordRecoveryViewModel()
     let initialEmail: String
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: Theme.Spacing.lg) {
-                Image(systemName: vm.emailSent ? "envelope.badge.fill" : "key.fill")
-                    .font(.system(size: 38))
-                    .foregroundStyle(Theme.Colors.primary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+                SheetHeader(title: "Password help", onClose: { dismiss() })
 
-                Text(vm.emailSent ? "Check your email" : "Reset your password")
-                    .font(.title2.bold())
+                VStack(spacing: Theme.Spacing.md) {
+                    Image(systemName: vm.emailSent ? "envelope.badge.fill" : "key.fill")
+                        .font(.system(size: 38))
+                        .foregroundStyle(Theme.Colors.primary)
 
-                Text(vm.emailSent
-                    ? "If an account exists for that address, we've sent a password-reset link."
-                    : "Enter the email address you use for Footing.")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
+                    Text(vm.emailSent ? "Check your email" : "Reset your password")
+                        .font(Theme.Fonts.display(22, .bold, relativeTo: .title2))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
 
-                if !vm.emailSent {
-                    TextField("Email", text: $vm.email)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .textContentType(.emailAddress)
-                        .padding()
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    Text(vm.emailSent
+                        ? "If an account exists for that address, we've sent a password-reset link."
+                        : "Enter the email address you use for Footing.")
+                        .font(Theme.Fonts.body(14))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
 
-                    if let error = vm.errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                    }
+                    if !vm.emailSent {
+                        TextField("Email", text: $vm.email)
+                            .font(Theme.Fonts.body(16))
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .textContentType(.emailAddress)
+                            .padding(.horizontal, 16)
+                            .frame(height: 52)
+                            .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                            }
 
-                    Button {
-                        Task { await vm.requestReset() }
-                    } label: {
-                        if vm.isLoading {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("Send reset link")
+                        if let error = vm.errorMessage {
+                            Text(error)
+                                .font(Theme.Fonts.body(13))
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
                         }
-                    }
-                    .buttonStyle(.brandPrimary)
-                    .disabled(vm.isLoading || vm.email.isEmpty)
-                } else {
-                    Button("Done") { dismiss() }
-                        .buttonStyle(.brandPrimary)
-                }
 
-                Spacer()
-            }
-            .padding(Theme.Spacing.lg)
-            .navigationTitle("Password help")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                        Button {
+                            Task { await vm.requestReset() }
+                        } label: {
+                            if vm.isLoading {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text("Send reset link")
+                            }
+                        }
+                        .buttonStyle(.daylightPrimary)
+                        .disabled(vm.isLoading || vm.email.isEmpty)
+                    } else {
+                        Button("Done") { dismiss() }
+                            .buttonStyle(.daylightPrimary)
+                    }
                 }
+                .frame(maxWidth: .infinity)
             }
-            .onAppear {
-                if vm.email.isEmpty {
-                    vm.email = initialEmail
-                }
+            .padding(Theme.Spacing.page)
+            .padding(.bottom, Theme.Spacing.lg)
+        }
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .onAppear {
+            if vm.email.isEmpty {
+                vm.email = initialEmail
             }
         }
     }

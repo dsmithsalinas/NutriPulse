@@ -15,6 +15,9 @@ struct OnboardingView: View {
     @State private var path: [OnboardingRoute] = []
     @Environment(AppState.self) private var appState
 
+    /// DEBUG-only: renders the flow standalone with no account and never saves — see `preview()`.
+    var debugFixture = false
+
     var body: some View {
         NavigationStack(path: $path) {
             // Root = the splash where Pulse introduces itself, then push into the questions.
@@ -55,6 +58,12 @@ struct OnboardingView: View {
     }
 
     private func handleSave() {
+        // The debug fixture never has a real session to save against — loop back to the top
+        // so the lead can click through the flow again instead of hitting `sessionExpired`.
+        if debugFixture {
+            path.removeAll()
+            return
+        }
         Task {
             guard let userId = appState.session?.user.id else {
                 vm.errorMessage = "Session expired. Please sign in again."
@@ -74,3 +83,17 @@ struct OnboardingView: View {
         }
     }
 }
+
+// MARK: - Debug preview entry point
+
+#if DEBUG
+extension OnboardingView {
+    /// The whole onboarding flow, standalone: no account needed, nothing is ever written to the
+    /// network. Wire a launch flag to this in RootView (not touched here — see the Daylight
+    /// restyle report) to click through it without signing in.
+    static func preview() -> some View {
+        OnboardingView(debugFixture: true)
+            .environment(AppState())
+    }
+}
+#endif

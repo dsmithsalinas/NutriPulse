@@ -54,7 +54,7 @@ struct PulseAboutYouStepView: View {
     private var skipButton: some View {
         Button(action: skip) {
             Text("Skip for now")
-                .font(.system(size: 14, weight: .semibold))
+                .font(Theme.Fonts.body(14, .semibold))
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .frame(minHeight: 44, alignment: .leading)
         }
@@ -74,10 +74,15 @@ struct PulseAboutYouStepView: View {
     private var addAllergyField: some View {
         HStack(spacing: 8) {
             TextField("Add another", text: $newAllergyText)
+                .font(Theme.Fonts.body(14))
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 12)
                 .frame(minHeight: 44)
-                .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                }
                 .onSubmit(addAllergy)
                 .accessibilityLabel("Add another allergy or intolerance")
             Button(action: addAllergy) {
@@ -129,24 +134,22 @@ struct PulseAboutYouStepView: View {
     private func removableChip(_ title: String, onRemove: @escaping () -> Void) -> some View {
         HStack(spacing: 6) {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.primary)
+                .font(Theme.Fonts.body(14, .semibold))
+                .foregroundStyle(Theme.Colors.textPrimary)
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.Colors.textFaint)
             }
+            .frame(minWidth: 44, minHeight: 44)
             .accessibilityLabel("Remove \(title)")
         }
-        .padding(.horizontal, 12)
+        .padding(.leading, 12)
         .frame(minHeight: 44)
         .background(Theme.Colors.surfaceInset, in: Capsule())
     }
 
     private func sectionLabel(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(.system(size: 12, weight: .semibold))
-            .kerning(0.6)
-            .foregroundStyle(Theme.Colors.textFaint)
+        TileEyebrow(text, color: Theme.Colors.textFaint)
     }
 }

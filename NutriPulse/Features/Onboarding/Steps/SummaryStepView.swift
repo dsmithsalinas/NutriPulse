@@ -17,48 +17,62 @@ struct SummaryStepView: View {
                 VStack(spacing: 0) {
                     OnboardingPulseAvatar(size: 96)
                         .padding(.top, 24)
+                        .popIn(order: 0)
 
                     Text("So great to meet you, \(firstName).")
-                        .font(.system(size: 27, weight: .semibold, design: .rounded))
+                        .font(Theme.Fonts.display(27, .extraBold, relativeTo: .title))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 18)
+                        .accessibilityAddTraits(.isHeader)
+                        .popIn(order: 1)
 
                     Text("Here's where we're starting. I'm ready when you are — anytime you need me, just say the word.")
-                        .font(.system(size: 15))
+                        .font(Theme.Fonts.body(15))
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 9)
                         .padding(.horizontal, 8)
+                        .popIn(order: 2)
 
                     targetsCard(goals)
                         .padding(.top, 22)
+                        .popIn(order: 3)
 
                     Text("You can fine-tune these anytime in Settings.")
-                        .font(.system(size: 12.5))
+                        .font(Theme.Fonts.body(12.5))
                         .foregroundStyle(Theme.Colors.textFaint)
                         .padding(.top, 12)
 
                     Text("Footing is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing here is medical advice — always talk to your doctor about medication and health decisions.")
-                        .font(.system(size: 11.5))
+                        .font(Theme.Fonts.body(11.5))
                         .foregroundStyle(Theme.Colors.textFaint)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 14)
                 }
-                .padding(.horizontal, 26)
+                .padding(.horizontal, Theme.Spacing.page)
                 .padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
         }
         .safeAreaInset(edge: .bottom) {
-            Button(vm.isLoading ? "Saving…" : "Start tracking", action: onComplete)
-                .buttonStyle(.brandPrimary)
-                .disabled(vm.isLoading)
-                .padding(.horizontal, 26)
-                .padding(.vertical, 12)
-                .background(.bar)
+            Button {
+                onComplete()
+            } label: {
+                if vm.isLoading {
+                    ProgressView().tint(.white)
+                } else {
+                    Text("Start tracking")
+                }
+            }
+            .buttonStyle(.daylightPrimary)
+            .disabled(vm.isLoading)
+            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.vertical, 12)
+            .background(Theme.Colors.ground)
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
@@ -68,10 +82,10 @@ struct SummaryStepView: View {
         VStack(spacing: 0) {
             VStack(spacing: 4) {
                 Text("\(Int(goals.calories))")
-                    .font(.system(size: 56, weight: .bold, design: .rounded))
+                    .font(Theme.Fonts.number(56, .extraBold, relativeTo: .largeTitle))
                     .foregroundStyle(Theme.NutrientColor.calories)
                 Text("calories / day")
-                    .font(.system(size: 14))
+                    .font(Theme.Fonts.body(14))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
             .padding(.vertical, 22)
@@ -88,11 +102,12 @@ struct SummaryStepView: View {
 
             HStack(spacing: 12) {
                 Image(systemName: "drop.fill").foregroundStyle(Theme.NutrientColor.water)
-                Text("Water").font(.system(size: 15))
+                Text("Water").font(Theme.Fonts.body(15))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 Text(String(format: "%.1f L / day", goals.waterMlTarget / 1000))
-                    .font(.system(size: 15, weight: .semibold))
-                    .monospacedDigit()
+                    .font(Theme.Fonts.number(15, .bold, relativeTo: .body))
+                    .foregroundStyle(Theme.Colors.textPrimary)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
@@ -102,16 +117,18 @@ struct SummaryStepView: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
         }
+        .shadow(color: Color(hex: 0x0F172A, opacity: 0.06), radius: 1, y: 1)
     }
 
     private func macroRow(color: Color, label: String, grams: Double) -> some View {
         HStack(spacing: 12) {
             Circle().fill(color).frame(width: 10, height: 10)
-            Text(label).font(.system(size: 15))
+            Text(label).font(Theme.Fonts.body(15))
+                .foregroundStyle(Theme.Colors.textPrimary)
             Spacer()
             Text("\(Int(grams)) g")
-                .font(.system(size: 15, weight: .semibold))
-                .monospacedDigit()
+                .font(Theme.Fonts.number(15, .bold, relativeTo: .body))
+                .foregroundStyle(Theme.Colors.textPrimary)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 13)
