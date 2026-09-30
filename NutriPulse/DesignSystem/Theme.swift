@@ -41,6 +41,17 @@ enum Theme {
         static let textFaint    = Color(light: 0x64748B, dark: 0x7C8AA0)
         /// Grams and other small indigo figures on white tiles (passes AA where `primary` is tight).
         static let primaryText  = Color(light: 0x4338CA, dark: 0xA5B4FC)
+        /// A light indigo fill for secondary "+"/quick-action buttons on white rows (Log sheet
+        /// Search and Favorites) — one step down from `primary`, for an action that's already
+        /// available elsewhere (a food you've searched before, a "log again") rather than a
+        /// primary call to action. Added for the Log sheet rebuild; genuinely missing before.
+        static let primarySoft   = Color(light: 0xE0E7FF, dark: 0x2A2F5C)
+
+        /// The Talk tab's live-listening accent (the recording dot, the stop control) — a warm
+        /// rose distinct from system red. Fixed like the tile colors below. Added for the Log
+        /// sheet rebuild; genuinely missing before.
+        static let listening       = Color(hex: 0xFB7185)
+        static let listeningAction = Color(hex: 0xE11D48)
 
         // MARK: Daylight feature tiles
         // Fixed (non-adaptive): these tiles are saturated fills that read the same on either ground.

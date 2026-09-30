@@ -3052,3 +3052,137 @@ final class StrongWeekFeedbackTests: XCTestCase {
         XCTAssertEqual(decoded.generatedAt.timeIntervalSince1970, date.timeIntervalSince1970, accuracy: 0.001)
     }
 }
+
+// MARK: - Daylight Log sheet (docs/daylight-redesign.md)
+
+final class FoodLoggingLogicTests: XCTestCase {
+
+    // MARK: LogTab
+
+    func testLogTabTelemetrySourcesMatchTheirTab() {
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.talk.telemetrySource, .talk)
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.search.telemetrySource, .search)
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.scan.telemetrySource, .scan)
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.favorites.telemetrySource, .favorite)
+    }
+
+    func testLogTabsAreTalkSearchScanFavoritesInOrder() {
+        XCTAssertEqual(FoodLoggingViewModel.LogTab.allCases, [.talk, .search, .scan, .favorites])
+    }
+
+    // MARK: ProteinDensity / FoodSearchMacros (Search's "Protein-dense" filter)
+
+    func testProteinDenseAtOrAboveTenGramsPerHundredCalories() {
+        // Chicken breast-like ratio: 31g protein / 165 kcal ≈ 18.8g/100kcal.
+        XCTAssertTrue(ProteinDensity.isProteinDense(calories: 165, proteinG: 31))
+        // Exactly at the threshold.
+        XCTAssertTrue(ProteinDensity.isProteinDense(calories: 100, proteinG: 10))
+    }
+
+    func testProteinDenseFalseBelowThresholdOrWithNoCalories() {
+        // White rice-like ratio: ~2.7g/100kcal.
+        XCTAssertFalse(ProteinDensity.isProteinDense(calories: 130, proteinG: 2.7))
+        XCTAssertFalse(ProteinDensity.isProteinDense(calories: 0, proteinG: 5))
+    }
+
+    func testFoodSearchMacrosParsesFatSecretStyleDescription() throws {
+        let description = "Per 100g - Calories: 165kcal | Fat: 3.6g | Carbs: 0g | Protein: 31g"
+        let macros = try XCTUnwrap(FoodSearchMacros.parse(description))
+        XCTAssertEqual(macros.calories, 165)
+        XCTAssertEqual(macros.proteinG, 31)
+    }
+
+    func testFoodSearchMacrosReturnsNilWhenFieldsAreMissing() {
+        XCTAssertNil(FoodSearchMacros.parse("A food with no macro summary"))
+    }
+
+    // MARK: ProteinFloorCheck ("This clears your floor")
+
+    func testClearsFloorWhenAddedProteinCrossesTheGoal() {
+        XCTAssertTrue(ProteinFloorCheck.clearsFloor(currentProteinG: 112, addedProteinG: 33, goalG: 140))
+    }
+
+    func testDoesNotClearFloorWhenStillShortOfGoal() {
+        XCTAssertFalse(ProteinFloorCheck.clearsFloor(currentProteinG: 60, addedProteinG: 10, goalG: 140))
+    }
+
+    func testDoesNotClearFloorWhenAlreadyAtOrOverGoal() {
+        // Already there — nothing left to "clear".
+        XCTAssertFalse(ProteinFloorCheck.clearsFloor(currentProteinG: 145, addedProteinG: 10, goalG: 140))
+    }
+
+    func testDoesNotClearFloorWithNoOrZeroGoal() {
+        XCTAssertFalse(ProteinFloorCheck.clearsFloor(currentProteinG: 50, addedProteinG: 100, goalG: nil))
+        XCTAssertFalse(ProteinFloorCheck.clearsFloor(currentProteinG: 50, addedProteinG: 100, goalG: 0))
+    }
+
+    // MARK: RecentFoodsGrouper (Favorites tab's "Recents from the last 72 hours")
+
+    private func foodLog(
+        name: String,
+        hoursAgo: Double,
+        foodItemId: UUID = UUID(),
+        meal: Meal = .snack,
+        quantity: Double = 1,
+        proteinG: Double = 10,
+        now: Date
+    ) -> FoodLog {
+        FoodLog(
+            id: UUID(), userId: UUID(), loggedAt: now.addingTimeInterval(-hoursAgo * 3600),
+            logDate: now.isoDateString, meal: meal, foodItemId: foodItemId, quantity: quantity,
+            caloriesSnapshot: 100, proteinGSnapshot: proteinG, carbsGSnapshot: 5, fatGSnapshot: 2, fiberGSnapshot: 1,
+            foodItems: .init(name: name, brand: nil, servingDesc: nil)
+        )
+    }
+
+    func testRecentLogsExcludesAnythingOlderThanSeventyTwoHours() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let withinWindow = foodLog(name: "Cottage cheese", hoursAgo: 71, now: now)
+        let justOutside = foodLog(name: "Old oatmeal", hoursAgo: 73, now: now)
+        let recent = RecentFoodsGrouper.recentLogs(from: [withinWindow, justOutside], now: now, favoritedFoodItemIds: [])
+        XCTAssertEqual(recent.map(\.displayName), ["Cottage cheese"])
+    }
+
+    func testRecentLogsHidesFavoritedFoods() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let favoritedId = UUID()
+        let favorited = foodLog(name: "Yogurt bowl", hoursAgo: 2, foodItemId: favoritedId, now: now)
+        let notFavorited = foodLog(name: "Turkey chili", hoursAgo: 3, now: now)
+        let recent = RecentFoodsGrouper.recentLogs(from: [favorited, notFavorited], now: now, favoritedFoodItemIds: [favoritedId])
+        XCTAssertEqual(recent.map(\.displayName), ["Turkey chili"])
+    }
+
+    func testRecentLogsAreSortedNewestFirst() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let older = foodLog(name: "Everything bagel", hoursAgo: 20, now: now)
+        let newer = foodLog(name: "Cottage cheese", hoursAgo: 1, now: now)
+        let recent = RecentFoodsGrouper.recentLogs(from: [older, newer], now: now, favoritedFoodItemIds: [])
+        XCTAssertEqual(recent.map(\.displayName), ["Cottage cheese", "Everything bagel"])
+    }
+
+    func testGroupedLabelsTodayYesterdayAndWeekdayInFirstSeenOrder() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        // A Wednesday at noon UTC.
+        let now = calendar.date(from: DateComponents(year: 2024, month: 3, day: 20, hour: 12))!
+
+        let today = foodLog(name: "Cottage cheese", hoursAgo: 2, now: now)
+        let yesterday = foodLog(name: "Turkey chili", hoursAgo: 20, now: now)
+        let monday = foodLog(name: "String cheese", hoursAgo: 50, now: now)
+
+        let sections = RecentFoodsGrouper.grouped([today, yesterday, monday], now: now, calendar: calendar)
+        XCTAssertEqual(sections.map(\.label), ["Today", "Yesterday", "Monday"])
+        XCTAssertEqual(sections.map { $0.logs.map(\.displayName) }, [["Cottage cheese"], ["Turkey chili"], ["String cheese"]])
+    }
+
+    func testGroupedKeepsMultipleLogsUnderTheSameDay() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2024, month: 3, day: 20, hour: 12))!
+        let first = foodLog(name: "Cottage cheese", hoursAgo: 1, now: now)
+        let second = foodLog(name: "Everything bagel", hoursAgo: 3, now: now)
+        let sections = RecentFoodsGrouper.grouped([first, second], now: now, calendar: calendar)
+        XCTAssertEqual(sections.count, 1)
+        XCTAssertEqual(sections[0].logs.count, 2)
+    }
+}

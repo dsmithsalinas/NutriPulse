@@ -4,6 +4,7 @@ import AVFoundation
 struct BarcodeScanView: View {
     @Bindable var vm: FoodSearchViewModel
     let date: Date
+    let headerMeal: Meal
     let onLogged: (LogSource) -> Void
 
     @State private var isScanning = true
@@ -20,8 +21,10 @@ struct BarcodeScanView: View {
                 permissionDeniedView
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
         .onAppear {
             vm.resetScanState()
+            vm.selectedMeal = headerMeal
             if cameraPermission == .notDetermined {
                 AVCaptureDevice.requestAccess(for: .video) { granted in
                     // requestAccess calls back on an arbitrary queue. Assigning @State from
@@ -59,6 +62,7 @@ struct BarcodeScanView: View {
                 // FatSecret wants a GTIN-13. Passing a compressed UPC-E code straight through
                 // meant every small-package product came back "Barcode Not Found".
                 let barcode = BarcodeNormalizer.gtin13(value: rawValue, symbology: symbology) ?? rawValue
+                vm.selectedMeal = headerMeal
                 Task { await vm.lookupBarcode(barcode) }
             }
             .ignoresSafeArea()
@@ -85,12 +89,13 @@ struct BarcodeScanView: View {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "camera.slash")
                 .font(.system(size: 44))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Colors.textFaint)
             Text("Camera Access Required")
-                .font(.headline)
+                .font(Theme.Fonts.display(20, .bold, relativeTo: .headline))
+                .foregroundStyle(Theme.Colors.textPrimary)
             Text("Allow camera access in Settings to scan barcodes.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(15))
+                .foregroundStyle(Theme.Colors.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, Theme.Spacing.xl)
             Button("Open Settings") {
@@ -98,7 +103,8 @@ struct BarcodeScanView: View {
                     UIApplication.shared.open(url)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.brandPrimary)
+            .padding(.horizontal, Theme.Spacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.ground)

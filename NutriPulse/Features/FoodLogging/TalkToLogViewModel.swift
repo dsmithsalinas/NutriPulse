@@ -47,6 +47,12 @@ final class TalkToLogViewModel {
     var isLogging = false
     var errorMessage: String? = nil
 
+    // Today's protein so far and the daily goal — loaded from the same local-first source
+    // Today/ProteinFloor uses (LocalStore.fetchFoodLogs/fetchGoal), never estimated. Drives the
+    // Daylight "This clears your floor" tile: see ProteinFloorCheck + `pendingProteinG`.
+    private(set) var todayProteinG: Double = 0
+    private(set) var proteinGoalG: Double? = nil
+
     private let client = TalkToLogClient()
 
     var hasParsed: Bool { !rows.isEmpty }
@@ -56,18 +62,37 @@ final class TalkToLogViewModel {
     // previous, partially-failed attempt.
     var pendingRows: [ConfirmRow] { rows.filter { $0.isIncluded && !$0.isSaved } }
     var pendingCount: Int { pendingRows.count }
+    var pendingProteinG: Double { pendingRows.reduce(0) { $0 + $1.totalProteinG } }
+
+    /// Whether logging the currently-pending rows would clear today's protein floor —
+    /// only true when today isn't already there. See ProteinFloorCheck.
+    var wouldClearProteinFloor: Bool {
+        ProteinFloorCheck.clearsFloor(currentProteinG: todayProteinG, addedProteinG: pendingProteinG, goalG: proteinGoalG)
+    }
+
+    func loadProteinContext(for date: Date) async {
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+        let logs = (try? LocalStore.shared.fetchFoodLogs(for: date, userId: userId)) ?? []
+        todayProteinG = logs.reduce(0) { $0 + $1.totalProteinG }
+        proteinGoalG = (try? LocalStore.shared.fetchGoal(for: date, userId: userId))?.proteinG
+    }
 
     // Called from a "Parse" button — one Edge Function call runs Claude's full
     // decompose → search → resolve loop server-side and returns the finished rows.
-    func parse() async {
+    // `date` is the day being logged to (usually today, but Today can log to a past day) —
+    // the protein context for "This clears your floor" is fetched for that same day.
+    func parse(for date: Date) async {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         isParsing = true
         errorMessage = nil
         defer { isParsing = false }
 
+        async let context: Void = loadProteinContext(for: date)
+
         do {
             let items = try await client.parse(text: text)
+            _ = await context
             rows = items.map {
                 ConfirmRow(
                     name: $0.name, brand: $0.brand, servingDesc: $0.servingDesc,

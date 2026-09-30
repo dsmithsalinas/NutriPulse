@@ -29,6 +29,21 @@ final class LocalStore {
             .map(\.asFoodLog)
     }
 
+    // Daylight Favorites tab (docs/daylight-redesign.md): "Recents from the last 72 hours",
+    // grouped by day. `fetchFoodLogs(for:userId:)` above only matches a single calendar day, so
+    // this is the smallest addition that can span a rolling window — filtering and day-grouping
+    // stays in RecentFoodsGrouper, a pure function covered in FootingTests.swift.
+    func fetchFoodLogs(since: Date, userId: UUID) throws -> [FoodLog] {
+        guard let context else { return [] }
+        let descriptor = FetchDescriptor<SDFoodLog>(
+            predicate: #Predicate { $0.loggedAt >= since },
+            sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor)
+            .filter { $0.userId == userId && $0.syncState != "pendingDelete" }
+            .map(\.asFoodLog)
+    }
+
     func insertFoodLog(
         id: UUID,
         userId: UUID,

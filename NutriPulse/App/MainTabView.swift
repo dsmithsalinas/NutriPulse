@@ -103,7 +103,7 @@ struct MainTabView: View {
             loggerInitialTab = .talk
             showLogger = true
         case .logFavorite:
-            loggerInitialTab = .search
+            loggerInitialTab = .favorites
             showLogger = true
         case .logDose:
             appState.pendingQuickAction = .logDose
