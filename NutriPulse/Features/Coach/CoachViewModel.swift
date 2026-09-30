@@ -555,7 +555,7 @@ extension CoachViewModel {
                 messageType: "weekly_summary", createdAt: yesterday.addingTimeInterval(3620),
                 payload: CoachMessagePayload(
                     foods: nil,
-                    followUps: ["Plan Saturday", "Low-appetite ideas", "Why the weekend?"],
+                    followUps: ["Plan Saturday", "Low-appetite ideas", "Explain the weekend dip"],
                     recap: .init(
                         story: "Steady all week, until the weekend took the protein.",
                         wentWell: "Three floor days mid-week, mostly thanks to yogurt breakfasts.",
