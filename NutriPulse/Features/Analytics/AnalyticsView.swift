@@ -29,20 +29,23 @@ struct AnalyticsView: View {
             // it — so every tap on a range flashed the whole screen, picker included, to a
             // bare ProgressView. Keep the content mounted and overlay the spinner instead.
             ScrollView {
-                VStack(spacing: Theme.Spacing.md) {
+                VStack(spacing: Theme.Spacing.tileGap) {
                     DaylightPageTitle("Analytics")
+                        .popIn(order: 0)
                     Picker("Range", selection: $vm.selectedRange) {
                         ForEach(AnalyticsViewModel.TimeRange.allCases) { range in
                             Text(range.label).tag(range)
                         }
                     }
                     .pickerStyle(.segmented)
+                    .popIn(order: 1)
 
                     if vm.cycleInsights.count >= 2 {
                         CycleAwareAnalyticsCard(
                             insights: vm.cycleInsights,
                             proteinGoal: vm.goalProteinG
                         )
+                        .popIn(order: 2)
                     }
 
                     if !vm.loggedDays.isEmpty {
@@ -52,6 +55,7 @@ struct AnalyticsView: View {
                             avgCalories:  vm.averageCalories,
                             goalCalories: vm.goalCalories
                         )
+                        .popIn(order: 3)
                     }
 
                     CaloriesChartCard(
@@ -59,8 +63,10 @@ struct AnalyticsView: View {
                         goalCalories: vm.goalCalories,
                         average:      vm.averageCalories
                     )
+                    .popIn(order: 4)
 
                     MacrosChartCard(summaries: vm.summaries)
+                        .popIn(order: 5)
 
                     if !vm.activeDays.isEmpty {
                         MovementChartCard(
@@ -68,6 +74,7 @@ struct AnalyticsView: View {
                             sessions: vm.totalWorkoutSessions,
                             avgMinutes: vm.avgMinutesPerActiveDay
                         )
+                        .popIn(order: 6)
                     }
 
                     if !vm.weightLogs.isEmpty {
@@ -76,21 +83,24 @@ struct AnalyticsView: View {
                             change: vm.weightChange,
                             units:  units
                         )
+                        .popIn(order: 7)
                     }
 
                     if !vm.bodyFatLogs.isEmpty {
                         BodyFatChartCard(logs: vm.bodyFatLogs)
+                            .popIn(order: 8)
                     }
 
                     if !vm.glp1History.isEmpty {
                         GLP1DoseChartCard(logs: vm.glp1History)
+                            .popIn(order: 9)
                     }
 
                     if vm.loggedDays.isEmpty && !vm.isLoading {
                         emptyState
                     }
                 }
-                .padding(Theme.Spacing.md)
+                .padding(Theme.Spacing.page)
                 .padding(.bottom, Theme.Spacing.xl)
                 .opacity(vm.isLoading ? 0.35 : 1)
             }
@@ -131,59 +141,71 @@ private struct AnalyticsSummaryCard: View {
     }
 
     var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
+        HStack(spacing: Theme.Spacing.tileGap) {
             tile(
-                title: "AVG PROTEIN",
-                value: "\(Int(avgProtein.rounded()))g",
-                sub: proteinPct.map { "\($0)% of goal" } ?? "set a goal",
-                accent: Theme.Colors.primary,
-                hero: true
+                title: "Avg protein",
+                value: Int(avgProtein.rounded()),
+                unit: "g",
+                sub: proteinPct.map { "\($0)% of goal" } ?? "Set a goal",
+                valueColor: Theme.Colors.primaryText
             )
             tile(
-                title: "AVG CALORIES",
-                value: "\(Int(avgCalories.rounded()))",
-                sub: goalCalories.map { "goal \(Int($0))" } ?? "—",
-                accent: Theme.NutrientColor.calories,
-                hero: false
+                title: "Avg calories",
+                value: Int(avgCalories.rounded()),
+                unit: nil,
+                sub: goalCalories.map { "Goal \(Int($0))" } ?? "No goal set",
+                valueColor: Theme.Colors.textPrimary
             )
         }
-        // Roll the averages when the range changes (7 → 14 → 30 days).
-        .animation(.snappy, value: avgProtein)
-        .animation(.snappy, value: avgCalories)
     }
 
-    private func tile(title: String, value: String, sub: String, accent: Color, hero: Bool) -> some View {
+    private func tile(title: String, value: Int, unit: String?, sub: String, valueColor: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(Theme.Colors.textFaint)
-            Text(value)
-                .font(.system(size: 30, weight: .heavy, design: .rounded))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .foregroundStyle(hero ? AnyShapeStyle(Theme.Colors.primaryGradient) : AnyShapeStyle(Color.primary))
-            Text(sub)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Theme.Spacing.md)
-        .background {
-            ZStack {
-                Theme.Colors.surfaceCard
-                if hero {
-                    RadialGradient(colors: [accent.opacity(0.16), .clear],
-                                   center: .topLeading, startRadius: 4, endRadius: 170)
+            TileEyebrow(title)
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                // CountingNumber owns the roll animation when the range changes (7 → 14 → 30
+                // days), so the tile doesn't need its own `.animation`.
+                CountingNumber(value: value, font: Theme.Fonts.number(30, .bold, relativeTo: .title))
+                    .foregroundStyle(valueColor)
+                if let unit {
+                    Text(unit)
+                        .font(Theme.Fonts.display(18, relativeTo: .title3))
+                        .foregroundStyle(valueColor)
                 }
             }
+            Text(sub)
+                .font(Theme.Fonts.body(12, .medium))
+                .foregroundStyle(Theme.Colors.textSecondary)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tile()
     }
+}
+
+// MARK: - Chart draw-in
+
+/// Reveals a Swift Charts plot left-to-right on first appear, like a curtain retracting — the
+/// Daylight draw-in for bars and lines. Honors Reduce Motion (shown immediately, no animation).
+private struct ChartDrawIn: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var revealed = false
+
+    func body(content: Content) -> some View {
+        content
+            .mask(alignment: .leading) {
+                GeometryReader { geo in
+                    Rectangle().frame(width: geo.size.width * (revealed || reduceMotion ? 1 : 0))
+                }
+            }
+            .onAppear {
+                guard !revealed, !reduceMotion else { revealed = true; return }
+                withAnimation(Theme.Motion.draw.delay(0.1)) { revealed = true }
+            }
+    }
+}
+
+private extension View {
+    func chartDrawIn() -> some View { modifier(ChartDrawIn()) }
 }
 
 // MARK: - Calories chart
@@ -205,12 +227,13 @@ private struct CaloriesChartCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
                 Text("Calories")
-                    .font(.headline)
+                    .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 if average > 0 {
                     Text("Avg \(Int(average)) kcal / day")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(13))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
             }
 
@@ -225,7 +248,7 @@ private struct CaloriesChartCard: View {
                 }
                 if let goal = goalCalories {
                     RuleMark(y: .value("Goal", goal))
-                        .foregroundStyle(.secondary.opacity(0.6))
+                        .foregroundStyle(Theme.Colors.textFaint.opacity(0.6))
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
                         // overflowResolution keeps the label inside the plot area — at
                         // .topLeading it used to spill past the left edge and render clipped
@@ -236,20 +259,22 @@ private struct CaloriesChartCard: View {
                             overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                         ) {
                             Text("Goal")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.Fonts.body(11))
+                                .foregroundStyle(Theme.Colors.textSecondary)
                         }
                 }
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day, count: xAxisStride)) {
                     AxisValueLabel(format: .dateTime.month(.twoDigits).day(.twoDigits))
+                        .foregroundStyle(Theme.Colors.textFaint)
+                    AxisGridLine().foregroundStyle(Theme.Colors.hairline)
                 }
             }
             .frame(height: 160)
+            .chartDrawIn()
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 }
 
@@ -277,12 +302,13 @@ private struct MacrosChartCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Macros")
-                .font(.headline)
+                .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
+                .foregroundStyle(Theme.Colors.textPrimary)
 
             if chartData.isEmpty {
                 Text("No data")
-                    .font(.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .font(Theme.Fonts.body(15))
+                    .foregroundStyle(Theme.Colors.textFaint)
                     .frame(height: 160)
                     .frame(maxWidth: .infinity)
             } else {
@@ -304,14 +330,15 @@ private struct MacrosChartCard: View {
                 .chartYAxis {
                     AxisMarks { value in
                         AxisValueLabel("\(value.as(Double.self).map { Int($0) } ?? 0)g")
-                        AxisGridLine()
+                            .foregroundStyle(Theme.Colors.textFaint)
+                        AxisGridLine().foregroundStyle(Theme.Colors.hairline)
                     }
                 }
                 .frame(height: 160)
+                .chartDrawIn()
             }
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 }
 
@@ -336,11 +363,12 @@ private struct MovementChartCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
                 Text("Movement")
-                    .font(.headline)
+                    .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 Text("\(sessions) session\(sessions == 1 ? "" : "s") · avg \(Int(avgMinutes.rounded())) min")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(13))
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
 
             Chart(movement) { day in
@@ -354,18 +382,20 @@ private struct MovementChartCard: View {
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day, count: xAxisStride)) {
                     AxisValueLabel(format: .dateTime.month(.twoDigits).day(.twoDigits))
+                        .foregroundStyle(Theme.Colors.textFaint)
                 }
             }
             .chartYAxis {
                 AxisMarks { value in
                     AxisValueLabel("\(value.as(Double.self).map { Int($0) } ?? 0)m")
-                    AxisGridLine()
+                        .foregroundStyle(Theme.Colors.textFaint)
+                    AxisGridLine().foregroundStyle(Theme.Colors.hairline)
                 }
             }
             .frame(height: 140)
+            .chartDrawIn()
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 }
 
@@ -379,7 +409,8 @@ private struct BodyFatChartCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Body Fat %")
-                .font(.headline)
+                .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
+                .foregroundStyle(Theme.Colors.textPrimary)
 
             Chart(logs, id: \.date) { entry in
                 LineMark(
@@ -399,14 +430,15 @@ private struct BodyFatChartCard: View {
             .chartYAxis {
                 AxisMarks { value in
                     AxisValueLabel("\(value.as(Double.self).map { String(format: "%.0f", $0) } ?? "")%")
-                    AxisGridLine()
+                        .foregroundStyle(Theme.Colors.textFaint)
+                    AxisGridLine().foregroundStyle(Theme.Colors.hairline)
                 }
             }
             .chartYScale(domain: .automatic(includesZero: false))
             .frame(height: 140)
+            .chartDrawIn()
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 }
 
@@ -415,7 +447,10 @@ private struct BodyFatChartCard: View {
 private struct GLP1DoseChartCard: View {
     let logs: [GLP1Log]
 
-    private static let palette: [Color] = [.purple, .indigo, .teal, .mint]
+    // Up to four medications get their own line; the Daylight family, not raw system hues.
+    private static let palette: [Color] = [
+        Theme.Colors.primary, Theme.Colors.accent, Theme.NutrientColor.fiber, Theme.NutrientColor.water,
+    ]
 
     private var sortedMedications: [String] {
         Array(Set(logs.map(\.medication))).sorted()
@@ -445,7 +480,8 @@ private struct GLP1DoseChartCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(hasTrend ? "GLP-1 Dose Titration" : "GLP-1 Dose")
-                .font(.headline)
+                .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
+                .foregroundStyle(Theme.Colors.textPrimary)
 
             if hasTrend {
                 chart
@@ -461,15 +497,14 @@ private struct GLP1DoseChartCard: View {
                                 .fill(color(for: med))
                                 .frame(width: 8, height: 8)
                             Text(med)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .font(Theme.Fonts.body(11))
+                                .foregroundStyle(Theme.Colors.textSecondary)
                         }
                     }
                 }
             }
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     private var chart: some View {
@@ -497,11 +532,13 @@ private struct GLP1DoseChartCard: View {
         .chartYAxis {
             AxisMarks { value in
                 AxisValueLabel("\(value.as(Double.self)?.glp1DoseString ?? "")mg")
-                AxisGridLine()
+                    .foregroundStyle(Theme.Colors.textFaint)
+                AxisGridLine().foregroundStyle(Theme.Colors.hairline)
             }
         }
         .chartYScale(domain: doseDomain)
         .frame(height: 160)
+        .chartDrawIn()
     }
 
     // Shown until a second dose exists. Leads with the current dose and frames the empty
@@ -515,16 +552,16 @@ private struct GLP1DoseChartCard: View {
                         .font(Theme.Typography.title)
                         .foregroundStyle(color(for: latest.medication))
                     Text(latest.medication)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.Fonts.body(15))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
                 Text("Current dose · started \(latest.injectedAt.formatted(.dateTime.month().day()))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.Fonts.body(13))
+                    .foregroundStyle(Theme.Colors.textSecondary)
             }
             Text("Your titration curve builds here as you log each dose.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(Theme.Fonts.body(13))
+                .foregroundStyle(Theme.Colors.textFaint)
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -547,12 +584,12 @@ private struct WeightChartCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack {
                 Text("Weight")
-                    .font(.headline)
+                    .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Spacer()
                 if let change {
                     Text(String(format: "%+.1f \(unit)", units.weightInput(from: change)))
-                        .font(.caption)
-                        .fontWeight(.medium)
+                        .font(Theme.Fonts.body(13, .semibold))
                         .foregroundStyle(change <= 0 ? .green : .orange)
                 }
             }
@@ -574,8 +611,8 @@ private struct WeightChartCard: View {
             }
             .chartYScale(domain: .automatic(includesZero: false))
             .frame(height: 140)
+            .chartDrawIn()
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 }

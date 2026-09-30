@@ -60,6 +60,13 @@ struct ProgressDashboardView: View {
                 .padding(.bottom, Theme.Spacing.xl)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
+            // No navigation bar, so cover the status bar or scrolled tiles slide under the clock
+            // (same as Profile and Pulse). A ShapeStyle background extends into the safe area.
+            .overlay(alignment: .top) {
+                Color.clear
+                    .frame(height: 0)
+                    .background(Theme.Colors.ground)
+            }
             .toolbar(.hidden, for: .navigationBar)
             .refreshable {
                 async let analyticsLoad: Void = loadAnalytics()
@@ -736,7 +743,8 @@ private struct ProgressSummariesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                DaylightPageTitle("Progress summaries")
                 periodPicker
 
                 if viewModel.isLoading {
@@ -761,12 +769,11 @@ private struct ProgressSummariesView: View {
                     previousSummaries
                 }
             }
-            .padding(Theme.Spacing.md)
+            .padding(Theme.Spacing.page)
             .padding(.bottom, Theme.Spacing.xl)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
-        .navigationTitle("Progress summaries")
-        .navigationBarTitleDisplayMode(.inline)
+        .daylightSubpage("Progress summaries")
         .task { await viewModel.load() }
     }
 
@@ -782,10 +789,7 @@ private struct ProgressSummariesView: View {
 
     private var currentSummary: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(selectedPeriod.fullLabel.uppercased())
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.7)
-                .foregroundStyle(Theme.Colors.textFaint)
+            TileEyebrow(selectedPeriod.fullLabel)
 
             if let currentWindow {
                 Text(periodContext(window: currentWindow))
@@ -815,9 +819,8 @@ private struct ProgressSummariesView: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
         }
-        .padding(Theme.Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .card()
+        .tile()
     }
 
     private var summaryHeadline: String {
@@ -840,7 +843,7 @@ private struct ProgressSummariesView: View {
             title: "Log a shot to unlock this summary",
             message: "After your next logged dose, Footing can summarize protein and logging across the current shot cycle."
         )
-        .card()
+        .tile()
     }
 
     private func summaryErrorState(_ error: String) -> some View {
@@ -853,7 +856,7 @@ private struct ProgressSummariesView: View {
             Button("Try again") { Task { await viewModel.load() } }
                 .buttonStyle(.borderedProminent)
         }
-        .card()
+        .tile()
     }
 
     @ViewBuilder
@@ -866,11 +869,11 @@ private struct ProgressSummariesView: View {
                     .padding(.vertical, 12)
 
                 ForEach(Array(history.enumerated()), id: \.element.id) { index, item in
-                    if index > 0 { Divider().padding(.leading, Theme.Spacing.md) }
+                    if index > 0 { Divider().padding(.leading, Theme.Spacing.md).overlay(Theme.Colors.hairline) }
                     ProgressHistoryRow(item: item)
                 }
             }
-            .card()
+            .tile(padding: 0)
         }
     }
 }
@@ -887,10 +890,7 @@ private struct SummaryTimelineGraphic: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(period == .quarter ? "13 WEEKLY INTERVALS" : "DAILY INTERVALS")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(Theme.Colors.textFaint)
+            TileEyebrow(period == .quarter ? "13 weekly intervals" : "Daily intervals")
 
             if period == .quarter {
                 HStack(alignment: .bottom, spacing: 5) {
@@ -963,7 +963,7 @@ private struct ProgressLegend: View {
                 .overlay { if outlined { Circle().stroke(Theme.Colors.primary.opacity(0.4)) } }
                 .frame(width: 8, height: 8)
             Text(title)
-                .font(.system(size: 11))
+                .font(Theme.Fonts.body(11))
                 .foregroundStyle(Theme.Colors.textSecondary)
         }
     }
@@ -980,26 +980,24 @@ private struct SummaryReviewCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Label("\(title), from Pulse", systemImage: "sparkles")
-                .font(.headline)
+                .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
                 .foregroundStyle(Theme.Colors.primary)
             row("What went well", wentWell, "checkmark.circle.fill", .green)
             row("Where it got difficult", gotDifficult, "arrow.down.right.circle.fill", .orange)
             row("Pattern noticed", pattern, "waveform.path.ecg", Theme.Colors.primary)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("ONE THING TO TRY")
-                    .font(.system(size: 10, weight: .bold)).tracking(0.7)
-                    .foregroundStyle(Theme.Colors.textFaint)
+                TileEyebrow("One thing to try")
                 Text(experiment)
-                    .font(.subheadline.weight(.semibold))
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
             }
             .padding(Theme.Spacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.Colors.primary.opacity(0.09))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile()
     }
 
     private var wentWell: String {
@@ -1029,8 +1027,8 @@ private struct SummaryReviewCard: View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: icon).foregroundStyle(color).frame(width: 18).padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text(detail).font(.subheadline)
+                Text(title).font(Theme.Fonts.body(12, .semibold)).foregroundStyle(Theme.Colors.textSecondary)
+                Text(detail).font(Theme.Fonts.body(15)).foregroundStyle(Theme.Colors.textPrimary)
             }
         }
     }
