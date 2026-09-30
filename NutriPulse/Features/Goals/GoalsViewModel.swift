@@ -17,6 +17,9 @@ final class GoalsViewModel {
     private(set) var completed: [GoalCardState] = []
     private(set) var isLoading = false
     var error: String?
+    /// DEBUG-only: experiments for `--goals-preview`/`--tour`, since those launches never hit
+    /// Supabase. Empty outside DEBUG or when Goals' own preview flags aren't set.
+    private(set) var previewExperiments: [PersonalExperiment] = []
 
     private let repository = PersonalGoalRepository()
     private let metrics = GoalMetricService()
@@ -27,10 +30,10 @@ final class GoalsViewModel {
         if DebugLaunch.has("--goals-preview")
             || DebugLaunch.has("--progress-preview") {
             let previews = Self.previewStates()
-            active = DebugLaunch.has("--progress-preview")
-                ? Array(previews.prefix(1))
-                : previews
+            let isProgressPreview = DebugLaunch.has("--progress-preview")
+            active = isProgressPreview ? Array(previews.prefix(1)) : previews
             completed = []
+            previewExperiments = isProgressPreview ? [] : Self.previewExperimentFixtures(for: previews)
             error = nil
             return
         }
@@ -156,6 +159,49 @@ final class GoalsViewModel {
                 measurement: sleep, values: sleepValues
             ),
         ]
+    }
+
+    /// One running experiment (against the protein goal above) and one finished experiment
+    /// with a result (against the sleep goal), so the Goals tile and Personal experiments have
+    /// something real to show under `--goals-preview`/`--tour`. Dates are relative to the
+    /// actual current time rather than the fixed August 2026 used above, so "day X of Y" stays
+    /// sensible however long after this was written the preview is run.
+    private static func previewExperimentFixtures(for states: [GoalCardState]) -> [PersonalExperiment] {
+        guard let runningGoal = states.first(where: { $0.bundle.version.title.contains("protein") }),
+              let finishedGoal = states.first(where: { $0.bundle.version.title.contains("sleep") })
+        else { return [] }
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        func offset(_ days: Int) -> Date { calendar.date(byAdding: .day, value: days, to: today)! }
+
+        let running = PersonalExperiment(
+            id: UUID(), userId: runningGoal.bundle.goal.userId,
+            interventionGoalId: runningGoal.id,
+            question: "Does hitting my protein target improve my sleep?",
+            status: .running, baselineStart: nil,
+            interventionStart: offset(-6).isoDateString, endDate: offset(14).isoDateString,
+            createdAt: offset(-6), completedAt: nil,
+            outcomeMeasurements: [ExperimentOutcomeMeasurement(
+                measurementId: UUID(), role: "primary_outcome",
+                metric: ExperimentMetricSummary(name: "Sleep duration", unit: "hours")
+            )]
+        )
+
+        let finished = PersonalExperiment(
+            id: UUID(), userId: finishedGoal.bundle.goal.userId,
+            interventionGoalId: finishedGoal.id,
+            question: "Does an earlier bedtime raise my morning energy?",
+            status: .completed, baselineStart: nil,
+            interventionStart: offset(-35).isoDateString, endDate: offset(-14).isoDateString,
+            createdAt: offset(-35), completedAt: offset(-14),
+            outcomeMeasurements: [ExperimentOutcomeMeasurement(
+                measurementId: UUID(), role: "primary_outcome",
+                metric: ExperimentMetricSummary(name: "Morning energy", unit: "out of 5")
+            )]
+        )
+
+        return [running, finished]
     }
     #endif
 

@@ -587,6 +587,195 @@ final class InsightEngineTests: XCTestCase {
     }
 }
 
+final class ExperimentComparisonEngineTests: XCTestCase {
+    func testDaysJoinsOutcomeAndInterventionByDate() {
+        let days = ExperimentComparisonEngine.days(
+            outcomeByDate: ["2026-09-01": 7.0, "2026-09-02": 6.0, "2026-09-04": 5.5],
+            interventionByDate: ["2026-09-01": true, "2026-09-03": false]
+        )
+        XCTAssertEqual(days.map(\.localDate), ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"])
+        XCTAssertEqual(days[0].didIntervene, true)
+        XCTAssertEqual(days[0].outcomeValue, 7.0)
+        XCTAssertNil(days[1].didIntervene)
+        XCTAssertEqual(days[2].didIntervene, false)
+        XCTAssertNil(days[2].outcomeValue)
+    }
+
+    func testCompareReturnsNilWithoutDataOnBothSides() {
+        let onlyIntervention = (0..<6).map {
+            ExperimentDayObservation(localDate: "day\($0)", didIntervene: true, outcomeValue: 7)
+        }
+        XCTAssertNil(ExperimentComparisonEngine.compare(onlyIntervention))
+    }
+
+    func testCompareIsUnreadableBelowFiveMeasuredDaysPerSide() {
+        // 4 intervention days, 4 non-intervention days — under the floor on both sides.
+        var days: [ExperimentDayObservation] = []
+        for i in 0..<4 {
+            days.append(.init(localDate: "with\(i)", didIntervene: true, outcomeValue: 8.0))
+            days.append(.init(localDate: "without\(i)", didIntervene: false, outcomeValue: 6.0))
+        }
+        let result = try! XCTUnwrap(ExperimentComparisonEngine.compare(days))
+        XCTAssertFalse(result.isReadable)
+        XCTAssertEqual(result.interventionCount, 4)
+        XCTAssertEqual(result.nonInterventionCount, 4)
+    }
+
+    func testCompareIsUnreadableWhenDifferenceIsWithinNormalVariation() {
+        // Five measured days each side, but the values are noisy enough that a ~0.2 gap is not
+        // distinguishable from ordinary day-to-day variation.
+        let interventionValues: [Double] = [6.0, 7.5, 6.5, 7.2, 6.3]
+        let nonInterventionValues: [Double] = [6.1, 7.3, 6.4, 7.0, 6.2]
+        var days: [ExperimentDayObservation] = []
+        for (i, v) in interventionValues.enumerated() {
+            days.append(.init(localDate: "with\(i)", didIntervene: true, outcomeValue: v))
+        }
+        for (i, v) in nonInterventionValues.enumerated() {
+            days.append(.init(localDate: "without\(i)", didIntervene: false, outcomeValue: v))
+        }
+        let result = try! XCTUnwrap(ExperimentComparisonEngine.compare(days))
+        XCTAssertFalse(result.isReadable)
+    }
+
+    func testCompareIsReadableWithEnoughDaysAndAClearDifference() {
+        let interventionValues: [Double] = [7.8, 8.0, 7.9, 8.1, 7.7, 8.0]
+        let nonInterventionValues: [Double] = [6.2, 6.0, 6.3, 6.1, 6.4, 6.0]
+        var days: [ExperimentDayObservation] = []
+        for (i, v) in interventionValues.enumerated() {
+            days.append(.init(localDate: "with\(i)", didIntervene: true, outcomeValue: v))
+        }
+        for (i, v) in nonInterventionValues.enumerated() {
+            days.append(.init(localDate: "without\(i)", didIntervene: false, outcomeValue: v))
+        }
+        let result = try! XCTUnwrap(ExperimentComparisonEngine.compare(days))
+        XCTAssertTrue(result.isReadable)
+        XCTAssertEqual(result.interventionCount, 6)
+        XCTAssertEqual(result.nonInterventionCount, 6)
+        XCTAssertEqual(result.interventionMean, 7.9166, accuracy: 0.01)
+        XCTAssertEqual(result.nonInterventionMean, 6.1666, accuracy: 0.01)
+        XCTAssertEqual(result.difference, result.interventionMean - result.nonInterventionMean, accuracy: 0.0001)
+    }
+}
+
+final class ExperimentInterventionDaysTests: XCTestCase {
+    func testBuildReadsBooleanObservationsByLocalDate() {
+        let measurementId = UUID()
+        let otherMeasurementId = UUID()
+        let checkinA = UUID(); let checkinB = UUID(); let checkinC = UUID()
+        let userId = UUID()
+        let checkins = [
+            GoalCheckin(id: checkinA, goalId: UUID(), userId: userId, observedAt: .now, localDate: "2026-09-01", note: nil, createdAt: .now),
+            GoalCheckin(id: checkinB, goalId: UUID(), userId: userId, observedAt: .now, localDate: "2026-09-02", note: nil, createdAt: .now),
+            GoalCheckin(id: checkinC, goalId: UUID(), userId: userId, observedAt: .now, localDate: "2026-09-03", note: nil, createdAt: .now),
+        ]
+        let observations = [
+            GoalObservation(id: UUID(), checkinId: checkinA, measurementId: measurementId, userId: userId, valueBoolean: true, valueNumber: nil, valueText: nil, createdAt: .now),
+            GoalObservation(id: UUID(), checkinId: checkinB, measurementId: measurementId, userId: userId, valueBoolean: false, valueNumber: nil, valueText: nil, createdAt: .now),
+            // Different measurement — must be ignored.
+            GoalObservation(id: UUID(), checkinId: checkinC, measurementId: otherMeasurementId, userId: userId, valueBoolean: true, valueNumber: nil, valueText: nil, createdAt: .now),
+        ]
+        let result = ExperimentInterventionDays.build(checkins: checkins, observations: observations, measurementId: measurementId)
+        XCTAssertEqual(result, ["2026-09-01": true, "2026-09-02": false])
+    }
+}
+
+final class ExperimentTimelineCalculatorTests: XCTestCase {
+    private func date(_ y: Int, _ m: Int, _ d: Int) -> Date {
+        Calendar.current.date(from: DateComponents(year: y, month: m, day: d))!
+    }
+
+    func testTimelineComputesDayIndexAndTotalDays() {
+        let timeline = try! XCTUnwrap(ExperimentTimelineCalculator.timeline(
+            interventionStart: "2026-09-01", endDate: "2026-09-21", today: date(2026, 9, 8)
+        ))
+        XCTAssertEqual(timeline.dayIndex, 8)
+        XCTAssertEqual(timeline.totalDays, 21)
+        XCTAssertEqual(timeline.progress, 8.0 / 21.0, accuracy: 0.0001)
+        XCTAssertFalse(timeline.hasElapsed)
+    }
+
+    func testTimelineHasElapsedOncePastTheWindow() {
+        let timeline = try! XCTUnwrap(ExperimentTimelineCalculator.timeline(
+            interventionStart: "2026-09-01", endDate: "2026-09-07", today: date(2026, 9, 30)
+        ))
+        XCTAssertTrue(timeline.hasElapsed)
+        XCTAssertEqual(timeline.progress, 1.0, accuracy: 0.0001)
+    }
+
+    func testTimelineWithoutEndDateHasNoTotalAndNeverElapses() {
+        let timeline = try! XCTUnwrap(ExperimentTimelineCalculator.timeline(
+            interventionStart: "2026-09-01", endDate: nil, today: date(2026, 10, 1)
+        ))
+        XCTAssertNil(timeline.totalDays)
+        XCTAssertFalse(timeline.hasElapsed)
+    }
+}
+
+final class ExperimentSuggestionEngineTests: XCTestCase {
+    private func insight(
+        day: Int, protein: Double?, energy: Double? = nil,
+        nutritionSamples: Int = 3, checkInSamples: Int = 3
+    ) -> CycleDayInsight {
+        CycleDayInsight(
+            cycleDay: day, sampleCount: max(nutritionSamples, checkInSamples),
+            averageProteinG: protein, averageCalories: nil, averageWaterMl: nil,
+            averageWorkoutMinutes: nil, averageAppetite: nil, averageEnergy: energy,
+            averageNausea: nil, averageWeightKg: nil,
+            nutritionSampleCount: nutritionSamples, hydrationSampleCount: 0,
+            movementSampleCount: 0, checkInSampleCount: checkInSamples, weightSampleCount: 0
+        )
+    }
+
+    func testNoSuggestionsWithoutAClearDip() {
+        let flat = (0...6).map { insight(day: $0, protein: 130, energy: 4) }
+        XCTAssertTrue(ExperimentSuggestionEngine.suggestions(from: flat).isEmpty)
+    }
+
+    func testNoSuggestionWhenDippingDayIsUnderSampled() {
+        var insights = (0...6).map { insight(day: $0, protein: 130) }
+        // Day 2 dips hard, but only appears once — not enough to call it a pattern.
+        insights[2] = insight(day: 2, protein: 60, nutritionSamples: 1)
+        XCTAssertTrue(ExperimentSuggestionEngine.suggestions(from: insights).isEmpty)
+    }
+
+    func testProteinDipSuggestionNamesTheRangeAndNumbers() {
+        var insights = (0...6).map { insight(day: $0, protein: 140) }
+        insights[2] = insight(day: 2, protein: 90)
+        insights[3] = insight(day: 3, protein: 95)
+        let suggestions = ExperimentSuggestionEngine.suggestions(from: insights)
+        let protein = try! XCTUnwrap(suggestions.first { $0.outcome == .protein })
+        XCTAssertTrue(protein.why.contains("2–3"), protein.why)
+        XCTAssertTrue(protein.why.contains("shot day"), protein.why)
+        XCTAssertEqual(protein.suggestedDurationDays, ExperimentSuggestionEngine.defaultDurationDays)
+    }
+
+    func testSingleDayDipUsesSingularPhrasingNotARange() {
+        var insights = (0...6).map { insight(day: $0, protein: 140) }
+        insights[5] = insight(day: 5, protein: 80)
+        let suggestions = ExperimentSuggestionEngine.suggestions(from: insights)
+        let protein = try! XCTUnwrap(suggestions.first { $0.outcome == .protein })
+        XCTAssertTrue(protein.why.contains("shot day 5"), protein.why)
+        XCTAssertFalse(protein.why.contains("–"))
+    }
+
+    func testEnergyDipSuggestionIsIndependentOfProtein() {
+        var insights = (0...6).map { insight(day: $0, protein: 130, energy: 4.0) }
+        insights[1] = insight(day: 1, protein: 130, energy: 2.0)
+        let suggestions = ExperimentSuggestionEngine.suggestions(from: insights)
+        let energy = try! XCTUnwrap(suggestions.first { $0.outcome == .energy })
+        XCTAssertTrue(energy.why.contains("energy"), energy.why)
+        XCTAssertFalse(suggestions.contains { $0.outcome == .protein })
+    }
+
+    func testSuggestionsCapAtThree() {
+        var insights = (0...6).map { insight(day: $0, protein: 140, energy: 4.0) }
+        insights[2] = insight(day: 2, protein: 90, energy: 4.0)
+        insights[5] = insight(day: 5, protein: 140, energy: 2.0)
+        let suggestions = ExperimentSuggestionEngine.suggestions(from: insights)
+        XCTAssertLessThanOrEqual(suggestions.count, 3)
+    }
+}
+
 final class PulseGateTests: XCTestCase {
     func testHandoffBlockedWhenPulseIsOff() {
         XCTAssertEqual(PulseGate.handoff(pulseEnabled: false, aiConsentAt: nil), .blocked)
@@ -1248,6 +1437,88 @@ final class CoachSuggestionTests: XCTestCase {
             "How I'm trending",
             "Eating out",
             "Workouts & recovery",
+        ])
+    }
+
+    // MARK: - Experiment check-in tile
+
+    func testExperimentCheckInTileLeadsWhenDueToday() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 9, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar,
+            experimentCheckIn: ExperimentCheckInPrompt(dayIndex: 4, totalDays: 14, hasCheckedInToday: false)
+        )
+
+        XCTAssertEqual(suggestions.first, PulseStartSuggestion(
+            kind: .experimentCheckIn,
+            eyebrow: "Experiment · day 4 of 14",
+            prompt: "Log today's check-in"
+        ))
+    }
+
+    func testExperimentCheckInTileHidesOnceLoggedToday() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 9, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar,
+            experimentCheckIn: ExperimentCheckInPrompt(dayIndex: 4, totalDays: 14, hasCheckedInToday: true)
+        )
+
+        XCTAssertFalse(suggestions.contains { $0.kind == .experimentCheckIn })
+    }
+
+    func testExperimentCheckInWithoutATotalStillShowsADay() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 9, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 0,
+            proteinGoalG: nil,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar,
+            experimentCheckIn: ExperimentCheckInPrompt(dayIndex: 2, totalDays: nil, hasCheckedInToday: false)
+        )
+
+        XCTAssertEqual(suggestions.first?.eyebrow, "Experiment · day 2")
+    }
+
+    // Every existing call site omits `experimentCheckIn`; the new parameter must default away
+    // to nothing so those calls and their expected results are unaffected.
+    func testOmittingExperimentCheckInLeavesExistingBehaviorUnchanged() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 18, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 50,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "70g to go",
+                prompt: "Give me an easy dinner to close my protein"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Dinner", prompt: "Give me a dinner idea"),
         ])
     }
 }
