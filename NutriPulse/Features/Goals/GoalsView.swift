@@ -56,6 +56,13 @@ struct GoalsView: View {
             .padding(.bottom, Theme.Spacing.xl)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
+        // No navigation bar, so cover the status bar or scrolled tiles slide under the clock
+        // (same as Profile/Pulse). A ShapeStyle background extends into the safe area.
+        .overlay(alignment: .top) {
+            Color.clear
+                .frame(height: 0)
+                .background(Theme.Colors.ground)
+        }
         // Always hidden: the custom header above supplies its own back button when pushed.
         .toolbar(.hidden, for: .navigationBar)
         .refreshable {
@@ -806,8 +813,10 @@ private struct GoalDayDetailView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                SheetHeader(title: "Daily detail", onClose: { dismiss() })
+
                 HStack(spacing: 14) {
                     Image(systemName: statusSymbol)
                         .font(.system(size: 22, weight: .bold))
@@ -839,8 +848,6 @@ private struct GoalDayDetailView: View {
                         .foregroundStyle(Theme.Colors.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .tile()
 
                 if selection.dayState == .missing {
@@ -849,24 +856,15 @@ private struct GoalDayDetailView: View {
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
 
-                Spacer()
-
                 Button("Ask Pulse about this day") {
                     dismiss()
                     onAskPulse()
                 }
                 .buttonStyle(.brandPrimary)
             }
-            .padding(20)
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .navigationTitle("Daily detail")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
+            .padding(Theme.Spacing.page)
         }
+        .background(Theme.Colors.ground.ignoresSafeArea())
     }
 
     private var statusTitle: String {
@@ -997,45 +995,37 @@ private struct GoalDetailView: View {
     let onAskPulse: () -> Void
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    GoalHeroCard(
-                        state: state,
-                        onBooleanCheckin: onBooleanCheckin,
-                        onRatingCheckin: onRatingCheckin,
-                        onAskPulse: onAskPulse
-                    )
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                SheetHeader(title: "Goal details", onClose: { dismiss() })
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Goal setup")
-                            .font(Theme.Fonts.body(16, .bold))
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                        detailRow("Target", value: targetDescription)
+                GoalHeroCard(
+                    state: state,
+                    onBooleanCheckin: onBooleanCheckin,
+                    onRatingCheckin: onRatingCheckin,
+                    onAskPulse: onAskPulse
+                )
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Goal setup")
+                        .font(Theme.Fonts.body(16, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    detailRow("Target", value: targetDescription)
+                    Divider().overlay(Theme.Colors.hairline)
+                    detailRow("Measured with", value: state.measurement?.sourceDisplayName ?? "Connected data")
+                    if let quality = state.quality {
                         Divider().overlay(Theme.Colors.hairline)
-                        detailRow("Measured with", value: state.measurement?.sourceDisplayName ?? "Connected data")
-                        if let quality = state.quality {
-                            Divider().overlay(Theme.Colors.hairline)
-                            detailRow("Data quality", value: qualityDescription(quality))
-                        }
-                        Divider().overlay(Theme.Colors.hairline)
-                        detailRow("Timeframe", value: timeframeDescription)
+                        detailRow("Data quality", value: qualityDescription(quality))
                     }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .tile()
+                    Divider().overlay(Theme.Colors.hairline)
+                    detailRow("Timeframe", value: timeframeDescription)
                 }
-                .padding(16)
+                .tile()
             }
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            .navigationTitle("Goal details")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
+            .padding(Theme.Spacing.page)
         }
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .presentationDragIndicator(.visible)
     }
 
     private func detailRow(_ label: String, value: String) -> some View {
