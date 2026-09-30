@@ -782,6 +782,363 @@ final class CoachSuggestionTests: XCTestCase {
 
         XCTAssertTrue(suggestions.allSatisfy { !$0.hasSuffix("?") })
     }
+
+    // MARK: - Pulse start screen tiles
+
+    private func pacificCalendar() -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        return calendar
+    }
+
+    private func pacificDate(year: Int, month: Int, day: Int, hour: Int, minute: Int = 0, calendar: Calendar) -> Date {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        return calendar.date(from: components)!
+    }
+
+    func testProteinGapOver15gShowsEveningDinnerPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 18, calendar: calendar) // Tuesday evening
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 50,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "70g to go",
+                prompt: "Give me an easy dinner to close my protein"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Dinner", prompt: "Give me a dinner idea"),
+        ])
+    }
+
+    func testProteinGapOver15gShowsMorningBreakfastPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 10, day: 1, hour: 9, calendar: calendar) // Thursday morning
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 20,
+            proteinGoalG: 100,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "80g to go",
+                prompt: "Give me an easy breakfast to close my protein"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Breakfast", prompt: "Give me an easy protein breakfast"),
+        ])
+    }
+
+    func testProteinGapAtOrUnder15gShowsNoProteinTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        // 10g gap: comfortably under the threshold.
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+
+        // 15g gap exactly: the threshold is exclusive, so this still shows no protein tile.
+        let atThreshold = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 105,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+        XCTAssertFalse(atThreshold.contains { $0.kind == .proteinGap })
+    }
+
+    func testNilProteinGoalShowsNoProteinTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 10,
+            proteinGoalG: nil,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    func testShotDayZeroEyebrowAndPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: 0,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .shotCycle, eyebrow: "Shot day", prompt: "Help me plan around today's shot"),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    func testShotCycleDayTwoEyebrowAndNotHungryPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: 2,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .shotCycle,
+                eyebrow: "Shot day 2",
+                prompt: "Help me get protein in when I'm not hungry"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    func testShotCycleLaterWeekEyebrowAndPrompt() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: 5,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .shotCycle,
+                eyebrow: "Shot day 5",
+                prompt: "Make the most of my appetite this week"
+            ),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    func testNilCycleDayShowsNoShotTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar) // Tuesday, midday
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 30,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: true,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "90g to go",
+                prompt: "Give me an easy lunch to close my protein"
+            ),
+            PulseStartSuggestion(kind: .mondayRecap, eyebrow: "It's Tuesday", prompt: "Monday Recap"),
+        ])
+        XCTAssertFalse(suggestions.contains { $0.kind == .shotCycle })
+    }
+
+    func testRecapDueShowsMondayRecapTileWithWeekdayEyebrow() {
+        let calendar = pacificCalendar()
+        // Midday so the weekday the recap eyebrow reads (in the device's time zone) matches
+        // this Pacific-built date regardless of which US time zone the test runs in.
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: true,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .mondayRecap, eyebrow: "It's Tuesday", prompt: "Monday Recap"),
+            PulseStartSuggestion(kind: .meal, eyebrow: "Lunch", prompt: "Give me a protein-forward lunch"),
+        ])
+    }
+
+    func testRecapNotDueShowsNoRecapTile() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 18, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 50,
+            proteinGoalG: 120,
+            cycleDay: 2,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "70g to go",
+                prompt: "Give me an easy dinner to close my protein"
+            ),
+            PulseStartSuggestion(
+                kind: .shotCycle,
+                eyebrow: "Shot day 2",
+                prompt: "Help me get protein in when I'm not hungry"
+            ),
+        ])
+        XCTAssertFalse(suggestions.contains { $0.kind == .mondayRecap })
+    }
+
+    func testFewerThanTwoTilesArePaddedWithMealFallback() {
+        let calendar = pacificCalendar()
+        // No protein gap, no shot cycle, no recap: nothing but the meal fallback.
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 20, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: false,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(kind: .meal, eyebrow: "Dinner", prompt: "Give me a dinner idea"),
+        ])
+        XCTAssertFalse(suggestions.isEmpty)
+        XCTAssertLessThanOrEqual(suggestions.count, 3)
+    }
+
+    func testAllThreeSignalsProduceOrderedGridCappedAtThree() {
+        let calendar = pacificCalendar()
+        let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+
+        let suggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 30,
+            proteinGoalG: 120,
+            cycleDay: 2,
+            recapDue: true,
+            now: now,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(suggestions, [
+            PulseStartSuggestion(
+                kind: .proteinGap,
+                eyebrow: "90g to go",
+                prompt: "Give me an easy lunch to close my protein"
+            ),
+            PulseStartSuggestion(
+                kind: .shotCycle,
+                eyebrow: "Shot day 2",
+                prompt: "Help me get protein in when I'm not hungry"
+            ),
+            PulseStartSuggestion(kind: .mondayRecap, eyebrow: "It's Tuesday", prompt: "Monday Recap"),
+        ])
+        XCTAssertEqual(suggestions.count, 3)
+    }
+
+    func testStartSuggestionsAreCommandsNotEngagementQuestions() {
+        let calendar = pacificCalendar()
+        var allPrompts: [String] = []
+
+        // Every meal bucket, for both the protein-gap prompt and the meal-fallback prompt.
+        for hour in [9, 12, 16, 20] {
+            let now = pacificDate(year: 2026, month: 9, day: 29, hour: hour, calendar: calendar)
+            let suggestions = CoachSuggestionBuilder.startSuggestions(
+                totalProteinG: 10,
+                proteinGoalG: 120,
+                cycleDay: nil,
+                recapDue: false,
+                now: now,
+                calendar: calendar
+            )
+            allPrompts.append(contentsOf: suggestions.map(\.prompt))
+        }
+
+        // Every shot-cycle prompt branch.
+        for cycleDay in [0, 2, 5] {
+            let now = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+            let suggestions = CoachSuggestionBuilder.startSuggestions(
+                totalProteinG: 110,
+                proteinGoalG: 120,
+                cycleDay: cycleDay,
+                recapDue: false,
+                now: now,
+                calendar: calendar
+            )
+            allPrompts.append(contentsOf: suggestions.map(\.prompt))
+        }
+
+        // The Monday Recap prompt.
+        let recapNow = pacificDate(year: 2026, month: 9, day: 29, hour: 12, calendar: calendar)
+        let recapSuggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 110,
+            proteinGoalG: 120,
+            cycleDay: nil,
+            recapDue: true,
+            now: recapNow,
+            calendar: calendar
+        )
+        allPrompts.append(contentsOf: recapSuggestions.map(\.prompt))
+
+        XCTAssertFalse(allPrompts.isEmpty)
+        XCTAssertTrue(allPrompts.allSatisfy { !$0.hasSuffix("?") })
+    }
+
+    func testTopicsExposeTheFourFixedChipsInOrder() {
+        XCTAssertEqual(CoachSuggestionBuilder.topics.map(\.label), [
+            "Meal ideas",
+            "How I'm trending",
+            "Eating out",
+            "Workouts & recovery",
+        ])
+    }
 }
 
 // MARK: - GLP-1 dose formatting

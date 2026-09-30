@@ -91,6 +91,7 @@ struct RootView: View {
     private var isProgressPreview: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--progress-preview")
+            || ProcessInfo.processInfo.arguments.contains("--pulse-preview")
         #else
         false
         #endif

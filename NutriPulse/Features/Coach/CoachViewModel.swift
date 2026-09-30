@@ -17,74 +17,92 @@ final class CoachViewModel {
     // Profile fetch failed, so the coach is answering without the user's goals/GLP-1 context.
     private(set) var profileLoadFailed = false
 
+    // MARK: Start screen
+    // Pulse opens here and never messages first (docs/daylight-redesign.md). Everything on it
+    // is built on the device; the first model call is whatever the user sends.
+    private(set) var startSuggestions: [PulseStartSuggestion] = []
+    /// Whether Pulse can see a current shot cycle, for the start screen's "what I can see" line.
+    private(set) var hasShotCycle = false
+    /// Where the current topic begins. Starting something from the start screen begins a fresh
+    /// topic, so the conversation — on screen and in the history sent to Pulse — starts there.
+    /// Marked by the last message before it rather than a timestamp: saved messages carry the
+    /// server's clock, which can trail the device's and would hide the user's first message.
+    private enum TopicStart {
+        case wholeHistory           // "Pick up where you left off"
+        case after(UUID?)           // nil: the topic started with no history at all
+    }
+    private var topicStart: TopicStart = .wholeHistory
+
     private(set) var profile: UserProfile?
     private var hasInitialized = false
-    // Whether `messages` reflects a successful history fetch. Auto-messages gate on the
-    // newest message, so they must never run against a failed (empty) load.
-    private var historyIsCurrent = false
-    private var isGeneratingAutoMessages = false
 
     private let repo = CoachRepository()
     private let contextBuilder = CoachContextBuilder()
+    private let glp1Repo = GLP1Repository()
+
+    /// The conversation as shown: the current topic, or all history when picking up.
+    var visibleMessages: [CoachMessage] {
+        switch topicStart {
+        case .wholeHistory, .after(nil):
+            return messages
+        case .after(let boundary?):
+            guard let index = messages.firstIndex(where: { $0.id == boundary }) else { return messages }
+            return Array(messages[(index + 1)...])
+        }
+    }
+
+    private func beginTopic() {
+        topicStart = .after(messages.last?.id)
+    }
+
+    /// The newest thing the user said, for "Pick up where you left off".
+    var lastUserMessage: CoachMessage? {
+        messages.last { $0.isUser }
+    }
+
+    var firstName: String? {
+        profile?.fullName?
+            .split(separator: " ")
+            .first
+            .map(String.init)
+    }
 
     // MARK: - Initialization
 
     // Only runs once — safe to call on every tab selection; no-ops after first run.
-    func loadIfNeeded() async {
-        guard !hasInitialized else { return }
+    /// Returns whether this call did the load (and so already built the start screen).
+    @discardableResult
+    func loadIfNeeded() async -> Bool {
+        guard !hasInitialized else { return false }
         hasInitialized = true
         await loadAndInitialize()
+        return true
     }
 
-    // Called after clearing history so the tab reloads fresh.
-    //
-    // The flag must be restored. Leaving it false meant the next tap on the Pulse tab ran
-    // loadAndInitialize a second time — and worse, if the user switched to Pulse while this
-    // reload was still in flight, loadIfNeeded's guard passed (flag still false) and a
-    // concurrent init started. Both saw `messages` empty, both cleared maybeGenerateCheckin's
-    // 8-hour cutoff before either appended, and two check-ins were generated, two Claude
-    // calls billed, both persisted.
+    // Called after clearing history so the tab reloads fresh. The flag stays set so a tab
+    // switch while this is in flight can't start a second, concurrent load.
     func reload() async {
         hasInitialized = true
-        historyIsCurrent = false
         messages = []
+        topicStart = .wholeHistory
         await loadAndInitialize()
     }
 
+    // Pulse no longer generates a check-in or weekly summary when the tab opens. Those were
+    // the only model calls made without the user asking; proactive coaching now lives in
+    // notifications (smart coaching, Your Strong Week), and the recap waits for a tap.
     private func loadAndInitialize() async {
+        #if DEBUG
+        if Self.isPreview {
+            loadPreview()
+            await refreshStartSuggestions()
+            return
+        }
+        #endif
         await loadProfile()
         await refreshSuggestedPrompts()
-        let historyLoaded = await loadHistory()
-        // Same double-billing the reload() comment above describes, reached through a failed
-        // fetch instead of a race: maybeGenerateCheckin's 8-hour cutoff reads `messages.last`,
-        // so an empty history clears it and bills a duplicate Claude call for a check-in that
-        // may already exist. Without a known-good history we can't tell, so don't guess.
-        guard historyLoaded else { return }
-        await generateDueAutoMessages()
-    }
-
-    // Called every time the Pulse tab is shown and whenever Footing returns to the foreground
-    // with Pulse on screen. Check-ins and the Monday recap used to be evaluated only inside
-    // loadIfNeeded — once per process. iOS keeps Footing alive in memory for days, so a user
-    // who last cold-launched on Friday opened Pulse on Monday and got neither: that is why
-    // the Monday recap "never came". Both generators are self-gated, so calling this often
-    // costs nothing when nothing is due.
-    func refreshAutoMessages() async {
-        guard hasInitialized, historyIsCurrent else { return }
-        await generateDueAutoMessages()
-    }
-
-    // The recap goes first and stands in for that visit's check-in: once it's saved it is the
-    // newest message, so the check-in's 8-hour cutoff skips. Two automatic messages back to
-    // back read like a notification feed, not a coach.
-    private func generateDueAutoMessages() async {
-        // Not while a user message is in flight: generateAutoMessage owns `isLoading` too and
-        // would clear it underneath sendMessage.
-        guard !isGeneratingAutoMessages, !isLoading else { return }
-        isGeneratingAutoMessages = true
-        defer { isGeneratingAutoMessages = false }
-        await maybeGenerateWeeklySummary()
-        await maybeGenerateCheckin()
+        await loadHistory()
+        await refreshStartSuggestions()
     }
 
     // Retry entry point for the offline/error state.
@@ -142,6 +160,93 @@ final class CoachViewModel {
         )
     }
 
+    /// Rebuilds the start screen's tiles. Called on every visit to the tab and on returning to
+    /// the foreground, since the protein gap and shot day move through the day. Cheap: local
+    /// cache plus two small lookups, no model call.
+    func refreshStartSuggestions() async {
+        #if DEBUG
+        if Self.isPreview {
+            hasShotCycle = true
+            startSuggestions = CoachSuggestionBuilder.startSuggestions(
+                totalProteinG: 112, proteinGoalG: 140, cycleDay: 3, recapDue: true, now: .now
+            )
+            return
+        }
+        #endif
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+
+        let logs = (try? LocalStore.shared.fetchFoodLogs(for: .now, userId: userId)) ?? []
+        let goal = try? LocalStore.shared.fetchGoal(for: .now, userId: userId)
+
+        async let latestDose = glp1Repo.fetchRecentLogs(limit: 1)
+        async let skips = glp1Repo.fetchSkippedDoses()
+        async let lastRecap = repo.lastWeeklySummaryDate()
+
+        var cycleDay: Int?
+        if let log = (try? await latestDose)?.first, let skips = try? await skips {
+            let schedule = GLP1DoseSchedule(latest: log, skips: skips)
+            if !schedule.cycleInterrupted {
+                cycleDay = Calendar.current.dateComponents(
+                    [.day],
+                    from: Calendar.current.startOfDay(for: log.injectedAt),
+                    to: Calendar.current.startOfDay(for: .now)
+                ).day.flatMap { $0 >= 0 ? $0 : nil }
+            }
+        }
+        hasShotCycle = cycleDay != nil
+
+        // A failed lookup hides the tile rather than offering it: unknown is not "no recap
+        // yet", and offering it could bill a second recap for a week that already has one.
+        let recapDue: Bool
+        do {
+            recapDue = WeeklyRecapSchedule.isDue(now: .now, lastRecapAt: try await lastRecap)
+        } catch {
+            recapDue = false
+        }
+
+        startSuggestions = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: logs.reduce(0) { $0 + $1.totalProteinG },
+            proteinGoalG: goal?.proteinG,
+            cycleDay: cycleDay,
+            recapDue: recapDue,
+            now: .now
+        )
+    }
+
+    // MARK: - Topics
+
+    /// Starts a fresh topic from the start screen: the conversation view and the history sent
+    /// to Pulse both begin here.
+    func startTopic(_ prompt: String) async {
+        guard !isLoading else { return }
+        beginTopic()
+        await sendMessage(prompt)
+    }
+
+    /// "Pick up where you left off" and the history button: show everything saved.
+    func resumeConversation() {
+        topicStart = .wholeHistory
+    }
+
+    /// The Monday Recap tile. The only way the weekly summary is generated now.
+    func requestWeeklyRecap() async {
+        guard !isLoading else { return }
+        beginTopic()
+        do {
+            let userId = try await supabase.auth.session.user.id
+            let asked: CoachMessage = try await repo.save(
+                NewCoachMessage(userId: userId, role: "user", content: "Monday Recap", messageType: "chat")
+            )
+            messages.append(asked)
+        } catch {
+            self.error = EdgeFunctionError.message(from: error, fallback: "Couldn't reach Pulse right now. Try again.")
+            return
+        }
+        await generateAutoMessage(type: "weekly_summary", trigger: "Weekly recap for last week.")
+        // Once written, this week's recap hides the tile.
+        await refreshStartSuggestions()
+    }
+
     private static let historyPageSize = 30
 
     // Returns whether the fetch actually succeeded — callers must not treat a failed load as
@@ -153,11 +258,9 @@ final class CoachViewModel {
             // A full page means there is probably more behind it.
             canLoadOlder = messages.count == Self.historyPageSize
             historyLoadFailed = false
-            historyIsCurrent = true
             return true
         } catch {
             historyLoadFailed = true
-            historyIsCurrent = false
             return false
         }
     }
@@ -177,42 +280,15 @@ final class CoachViewModel {
         }
     }
 
-    // MARK: - Auto-generated messages
+    // MARK: - Structured requests
 
-    private func maybeGenerateCheckin() async {
-        let cutoff = Date.now.addingTimeInterval(-8 * 3600)
-        if let last = messages.last, last.createdAt > cutoff { return }
-        let hour = Calendar.current.component(.hour, from: .now)
-        let trigger: String
-        switch hour {
-        case 5..<11:  trigger = "Morning check-in."
-        case 11..<15: trigger = "Midday check-in."
-        case 15..<20: trigger = "Afternoon check-in."
-        default:      trigger = "Evening check-in."
-        }
-        await generateAutoMessage(type: "checkin", trigger: trigger)
-    }
-
-    private func maybeGenerateWeeklySummary() async {
-        // Cheap local check first so the other six-ish days of the week don't hit the network.
-        guard WeeklyRecapSchedule.isDue(now: .now, lastRecapAt: nil) else { return }
-        let lastRecap: Date?
-        do {
-            lastRecap = try await repo.lastWeeklySummaryDate()
-        } catch {
-            // `try?` here used to turn a failed lookup into "no recap yet" and bill a
-            // duplicate. Unknown is not "never" — try again next visit.
-            return
-        }
-        guard WeeklyRecapSchedule.isDue(now: .now, lastRecapAt: lastRecap) else { return }
-        await generateAutoMessage(type: "weekly_summary", trigger: "Weekly recap for last week.")
-    }
-
+    // A request Pulse answers from a trigger rather than the user's words (today, only the
+    // weekly recap). The trigger isn't saved; the reply is, tagged with `type`.
     private func generateAutoMessage(type: String, trigger: String) async {
         isLoading = true
         await ensureProfileLoaded()
         let context = await contextBuilder.build(profile: profile, includeLastWeek: type == "weekly_summary")
-        let historyItems = messages.suffix(15).map { ChatRequest.HistoryItem(role: $0.role, content: $0.content) }
+        let historyItems = visibleMessages.suffix(15).map { ChatRequest.HistoryItem(role: $0.role, content: $0.content) }
         do {
             let userId = try await supabase.auth.session.user.id
             let req = ChatRequest(message: trigger, messageType: type, history: historyItems, context: context)
@@ -253,8 +329,8 @@ final class CoachViewModel {
 
             await ensureProfileLoaded()
             let context = await contextBuilder.build(profile: profile)
-            // Send up to 14 prior turns (7 exchanges) as history
-            let historyItems = messages.dropLast().suffix(14).map {
+            // Send up to 14 prior turns (7 exchanges) of the current topic as history
+            let historyItems = visibleMessages.dropLast().suffix(14).map {
                 ChatRequest.HistoryItem(role: $0.role, content: $0.content)
             }
 
@@ -314,6 +390,34 @@ final class CoachViewModel {
         }
     }
 }
+
+// MARK: - Preview
+
+#if DEBUG
+extension CoachViewModel {
+    // `--pulse-preview`: the start screen and a short conversation from fixtures, with no
+    // account or network, so the redesign can be checked in the simulator.
+    static var isPreview: Bool {
+        ProcessInfo.processInfo.arguments.contains("--pulse-preview")
+    }
+
+    fileprivate func loadPreview() {
+        let user = UUID()
+        let yesterday = Date.now.addingTimeInterval(-26 * 3600)
+        profile = UserProfile(
+            id: user, email: "preview@example.com", fullName: "Dustin Smith-Salinas", dob: nil, sex: nil,
+            heightCm: nil, activityLevel: nil, weightGoal: nil, dietaryPrefs: nil, createdAt: .now
+        )
+        messages = [
+            CoachMessage(id: UUID(), userId: user, role: "user",
+                         content: "Not very hungry tonight. What's easy?", messageType: "chat", createdAt: yesterday),
+            CoachMessage(id: UUID(), userId: user, role: "assistant",
+                         content: "Cottage cheese with fruit gets you about 25g without feeling like a meal.",
+                         messageType: "chat", createdAt: yesterday.addingTimeInterval(20)),
+        ]
+    }
+}
+#endif
 
 // MARK: - Private request / response types
 

@@ -61,6 +61,11 @@ enum Theme {
         static let limeLabel    = Color(hex: 0x365314)
         static let limeLine     = Color(hex: 0x4D7C0F)
 
+        /// Violet: the weekly recap.
+        static let violet       = Color(hex: 0xEDE9FE)
+        static let violetInk    = Color(hex: 0x2E1065)
+        static let violetLabel  = Color(hex: 0x5B21B6)
+
         /// Sky: water.
         static let sky          = Color(hex: 0xE0F2FE)
         static let skyInk       = Color(hex: 0x0C4A6E)
