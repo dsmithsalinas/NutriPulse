@@ -39,6 +39,22 @@ final class CoachViewModel {
     private let repo = CoachRepository()
     private let contextBuilder = CoachContextBuilder()
     private let glp1Repo = GLP1Repository()
+    private let analyticsRepo = AnalyticsRepository()
+
+    // MARK: Structured replies (docs/daylight-redesign.md)
+
+    /// The user's last 30 days of local food logs, for resolving a Pulse food suggestion to
+    /// something that can be logged again in one tap. See `PulseFoodResolver`.
+    private(set) var recentFoodLogs: [FoodLog] = []
+
+    /// Weekly recap chart data, built from the app's own local data (never from Pulse's text)
+    /// and cached per message id so scrolling the conversation doesn't re-fetch it. Lazily
+    /// loaded by the view when a recap card appears.
+    struct RecapChartData {
+        let days: [CoachContextBundle.LastWeekContext.Day]
+        let goalProteinG: Double?
+    }
+    private var recapCharts: [UUID: RecapChartData] = [:]
 
     /// The conversation as shown: the current topic, or all history when picking up.
     var visibleMessages: [CoachMessage] {
@@ -164,6 +180,7 @@ final class CoachViewModel {
     /// the foreground, since the protein gap and shot day move through the day. Cheap: local
     /// cache plus two small lookups, no model call.
     func refreshStartSuggestions() async {
+        await refreshRecentFoodLogs()
         #if DEBUG
         if Self.isPreview {
             hasShotCycle = true
@@ -211,6 +228,85 @@ final class CoachViewModel {
             recapDue: recapDue,
             now: .now
         )
+    }
+
+    // MARK: - Structured replies: food cards
+
+    // Preview sets its own fixture logs directly (loadPreview); a real fetch here would
+    // overwrite them with an empty local cache.
+    private func refreshRecentFoodLogs() async {
+        #if DEBUG
+        if Self.isPreview { return }
+        #endif
+        guard let userId = try? await supabase.auth.session.user.id else { return }
+        let since = Date.now.addingTimeInterval(-30 * 24 * 3600)
+        recentFoodLogs = (try? LocalStore.shared.fetchFoodLogs(since: since, userId: userId)) ?? []
+    }
+
+    /// The user's own log this food-card name resolves to, or nil to hide the card. Pure
+    /// matching lives in `PulseFoodResolver`; see its tests.
+    func resolveFoodLog(named name: String) -> FoodLog? {
+        PulseFoodResolver.resolve(name, in: recentFoodLogs)
+    }
+
+    /// Logs a resolved food suggestion again, to the meal for the current time of day, today —
+    /// the same local-first write `FavoritesViewModel.logAgain` uses for "log again" on a
+    /// Recents row, so a Pulse food card and a Favorites row behave identically.
+    @discardableResult
+    func logSuggestedFood(_ log: FoodLog) async -> Bool {
+        guard let userId = try? await supabase.auth.session.user.id else { return false }
+        do {
+            try LocalStore.shared.insertFoodLog(
+                id: UUID(),
+                userId: userId,
+                logDate: Date.now.isoDateString,
+                meal: Meal.current.rawValue,
+                foodItemId: log.foodItemId,
+                foodItemName: log.displayName,
+                quantity: log.quantity,
+                caloriesSnapshot: log.caloriesSnapshot,
+                proteinGSnapshot: log.proteinGSnapshot,
+                carbsGSnapshot: log.carbsGSnapshot,
+                fatGSnapshot: log.fatGSnapshot,
+                fiberGSnapshot: log.fiberGSnapshot
+            )
+            SyncEngine.shared.refreshPendingCount()
+            Task { await SyncEngine.shared.pushPendingChanges() }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    // MARK: - Structured replies: weekly recap chart
+
+    /// Already-loaded chart data for this recap message, if any. The view calls
+    /// `loadRecapChartIfNeeded` first (typically from `.task`) to populate it.
+    func recapChart(for message: CoachMessage) -> RecapChartData? {
+        recapCharts[message.id]
+    }
+
+    /// Builds the 7-day protein chart for a recap message's week from the app's own local data
+    /// — Pulse only writes the four text fields; the bars are never taken from its reply. Keyed
+    /// off the message's own `createdAt` (not `.now`) so an old recap, opened later, still shows
+    /// the week it was actually written about.
+    func loadRecapChartIfNeeded(for message: CoachMessage) async {
+        guard message.payload?.recap != nil, recapCharts[message.id] == nil else { return }
+        #if DEBUG
+        if Self.isPreview {
+            recapCharts[message.id] = Self.previewRecapChart
+            return
+        }
+        #endif
+        let interval = WeeklyRecapSchedule.lastWeek(before: message.createdAt)
+        let summaries = (try? await analyticsRepo.fetchDailySummaries(from: interval.start, through: interval.end)) ?? []
+        let userId = try? await supabase.auth.session.user.id
+        let goal = userId.flatMap { try? LocalStore.shared.fetchGoal(for: .now, userId: $0) }
+        let lastWeek = WeeklyRecapDigest.build(
+            interval: interval, summaries: summaries, movement: [], weightLogs: [], checkIns: [], foodNames: [],
+            proteinGoal: goal?.proteinG
+        )
+        recapCharts[message.id] = RecapChartData(days: lastWeek.days, goalProteinG: goal?.proteinG)
     }
 
     // MARK: - Topics
@@ -294,14 +390,36 @@ final class CoachViewModel {
             let req = ChatRequest(message: trigger, messageType: type, history: historyItems, context: context)
             let resp: ChatResponse = try await supabase.functions.invoke("coach-chat", options: .init(body: req))
             if let reply = resp.reply {
-                let saved: CoachMessage = try await repo.save(
-                    NewCoachMessage(userId: userId, role: "assistant", content: reply, messageType: type)
+                let saved = try await saveAssistantReply(
+                    userId: userId, content: reply, messageType: type, payload: resp.payload
                 )
                 messages.append(saved)
                 Telemetry.checkinMessageViewed(messageType: type)
             }
         } catch { }
         isLoading = false
+    }
+
+    // MARK: - Saving assistant replies
+
+    /// Saves an assistant message with its structured payload (foods, follow-ups, recap). The
+    /// `coach_messages.payload` column may not exist yet in this environment (the migration
+    /// hasn't shipped to production) — if the insert fails and a payload was attached, retry
+    /// once without it, since losing a card is better than losing the whole message.
+    @discardableResult
+    private func saveAssistantReply(
+        userId: UUID, content: String, messageType: String, payload: CoachMessagePayload?
+    ) async throws -> CoachMessage {
+        do {
+            return try await repo.save(
+                NewCoachMessage(userId: userId, role: "assistant", content: content, messageType: messageType, payload: payload)
+            )
+        } catch {
+            guard payload != nil else { throw error }
+            return try await repo.save(
+                NewCoachMessage(userId: userId, role: "assistant", content: content, messageType: messageType, payload: nil)
+            )
+        }
     }
 
     // MARK: - User-initiated messages
@@ -349,14 +467,14 @@ final class CoachViewModel {
             // and told the user "Couldn't reach Pulse" even though Pulse had answered.
             let assistantMsg = CoachMessage(
                 id: UUID(), userId: userId, role: "assistant",
-                content: reply, messageType: "chat", createdAt: .now
+                content: reply, messageType: "chat", createdAt: .now, payload: resp.payload
             )
             messages.append(assistantMsg)
             Telemetry.coachMessageSent(messageType: "chat")
 
             do {
-                _ = try await repo.save(
-                    NewCoachMessage(userId: userId, role: "assistant", content: reply, messageType: "chat")
+                _ = try await saveAssistantReply(
+                    userId: userId, content: reply, messageType: "chat", payload: resp.payload
                 )
             } catch {
                 // The reply is on screen and useful; it just won't survive a relaunch.
@@ -411,10 +529,77 @@ extension CoachViewModel {
         messages = [
             CoachMessage(id: UUID(), userId: user, role: "user",
                          content: "Not very hungry tonight. What's easy?", messageType: "chat", createdAt: yesterday),
-            CoachMessage(id: UUID(), userId: user, role: "assistant",
-                         content: "Cottage cheese with fruit gets you about 25g without feeling like a meal.",
-                         messageType: "chat", createdAt: yesterday.addingTimeInterval(20)),
+            CoachMessage(
+                id: UUID(), userId: user, role: "assistant",
+                content: "Go small and dense. Any of these covers most of the last 28g without a big plate: the shake alone gets you there.",
+                messageType: "chat", createdAt: yesterday.addingTimeInterval(20),
+                payload: CoachMessagePayload(
+                    foods: [
+                        .init(name: "Protein shake", why: "1 bottle · you log this often"),
+                        .init(name: "Greek yogurt", why: "1 cup, 20g"),
+                    ],
+                    followUps: ["Something warm?", "Plan tomorrow", "Dessert ideas"],
+                    recap: nil
+                )
+            ),
+            CoachMessage(id: UUID(), userId: user, role: "user",
+                         content: "Monday Recap", messageType: "chat", createdAt: yesterday.addingTimeInterval(3600)),
+            CoachMessage(
+                id: UUID(), userId: user, role: "assistant",
+                content: """
+                Steady all week, until the weekend took the protein.
+                Went well: three floor days mid-week, mostly thanks to yogurt breakfasts.
+                Pattern: your lightest days matched your low-appetite check-ins.
+                This week's focus: stage a small yogurt bowl for Saturday morning.
+                """,
+                messageType: "weekly_summary", createdAt: yesterday.addingTimeInterval(3620),
+                payload: CoachMessagePayload(
+                    foods: nil,
+                    followUps: ["Plan Saturday", "Low-appetite ideas", "Why the weekend?"],
+                    recap: .init(
+                        story: "Steady all week, until the weekend took the protein.",
+                        wentWell: "Three floor days mid-week, mostly thanks to yogurt breakfasts.",
+                        pattern: "Your lightest days matched your low-appetite check-ins.",
+                        focus: "Stage a small yogurt bowl for Saturday morning."
+                    )
+                )
+            ),
         ]
+
+        // Lets the food cards above resolve to something loggable, the same way a real
+        // conversation resolves against the last 30 days of local logs.
+        recentFoodLogs = [
+            FoodLog(
+                id: UUID(), userId: user, loggedAt: yesterday, logDate: yesterday.isoDateString,
+                meal: .snack, foodItemId: UUID(), quantity: 1,
+                caloriesSnapshot: 160, proteinGSnapshot: 30, carbsGSnapshot: 6, fatGSnapshot: 3, fiberGSnapshot: 0,
+                foodItems: .init(name: "Protein shake", brand: nil, servingDesc: nil)
+            ),
+            FoodLog(
+                id: UUID(), userId: user, loggedAt: yesterday.addingTimeInterval(-3600), logDate: yesterday.isoDateString,
+                meal: .breakfast, foodItemId: UUID(), quantity: 1,
+                caloriesSnapshot: 150, proteinGSnapshot: 20, carbsGSnapshot: 9, fatGSnapshot: 4, fiberGSnapshot: 0,
+                foodItems: .init(name: "Greek yogurt", brand: nil, servingDesc: nil)
+            ),
+        ]
+    }
+
+    // Fixture chart for the preview recap card — the only place fabricated protein numbers are
+    // allowed; a real recap always builds this from local data (`loadRecapChartIfNeeded`).
+    fileprivate static var previewRecapChart: RecapChartData {
+        let days: [(String, Bool, Int?, Bool?)] = [
+            ("Mon", true, 138, true), ("Tue", true, 121, false), ("Wed", true, 145, true),
+            ("Thu", true, 140, true), ("Fri", true, 118, false), ("Sat", false, nil, nil), ("Sun", true, 95, false),
+        ]
+        return RecapChartData(
+            days: days.map { day in
+                CoachContextBundle.LastWeekContext.Day(
+                    day: day.0, logged: day.1, calories: day.2.map { $0 * 12 }, proteinG: day.2,
+                    proteinFloorHit: day.3, workoutMinutes: nil, cycleDay: nil, appetite: nil
+                )
+            },
+            goalProteinG: 140
+        )
     }
 }
 #endif
@@ -433,7 +618,20 @@ private struct ChatRequest: Encodable {
     }
 }
 
+// Mirrors `coach-chat`'s response shape (supabase/functions/_shared/pulse-context.ts): `reply`
+// is always present when the call succeeds; the extras are absent whenever Pulse didn't produce
+// them (no length/count constraints server-side — `parsePulseReply` already clamps counts before
+// this ever reaches the client).
 private struct ChatResponse: Decodable {
     let reply: String?
     let error: String?
+    let foods: [CoachMessagePayload.FoodSuggestion]?
+    let followUps: [String]?
+    let recap: CoachMessagePayload.Recap?
+
+    /// nil when none of the extras are present, so a save never attaches an empty payload.
+    var payload: CoachMessagePayload? {
+        guard foods != nil || followUps != nil || recap != nil else { return nil }
+        return CoachMessagePayload(foods: foods, followUps: followUps, recap: recap)
+    }
 }

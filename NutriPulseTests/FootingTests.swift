@@ -1217,6 +1217,164 @@ final class CoachSuggestionTests: XCTestCase {
     }
 }
 
+// MARK: - Structured Pulse replies (docs/daylight-redesign.md)
+//
+// The wire contract lives in supabase/functions/_shared/pulse-context.ts (`pulseReplySchema`,
+// `pulseRecapSchema`); these cover the app's side of it: a missing `payload` key decodes to nil
+// (older rows, and any environment where the payload migration hasn't run yet), a nil payload
+// encodes with no key at all (so a save against that same environment looks unchanged), and the
+// pure presentation logic that decides which food cards and chips actually show.
+final class PulseStructuredReplyTests: XCTestCase {
+
+    // MARK: CoachMessagePayload round-trip
+
+    func testCoachMessagePayloadRoundTripsThroughJSON() throws {
+        let payload = CoachMessagePayload(
+            foods: [.init(name: "Protein shake", why: "30g, no cooking")],
+            followUps: ["Something warm?", "Plan tomorrow"],
+            recap: .init(story: "s", wentWell: "w", pattern: "p", focus: "f")
+        )
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(CoachMessagePayload.self, from: data)
+        XCTAssertEqual(decoded, payload)
+    }
+
+    // MARK: CoachMessage: a missing `payload` key decodes to nil
+
+    func testCoachMessageDecodesWithoutPayloadKeyAsNil() throws {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "user_id": "\(UUID().uuidString)",
+          "role": "assistant",
+          "content": "Hi",
+          "message_type": "chat",
+          "created_at": 0
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let message = try decoder.decode(CoachMessage.self, from: json)
+        XCTAssertNil(message.payload)
+    }
+
+    func testCoachMessageDecodesAPresentPayload() throws {
+        let json = """
+        {
+          "id": "\(UUID().uuidString)",
+          "user_id": "\(UUID().uuidString)",
+          "role": "assistant",
+          "content": "Hi",
+          "message_type": "chat",
+          "created_at": 0,
+          "payload": { "followUps": ["Plan tomorrow"] }
+        }
+        """.data(using: .utf8)!
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        let message = try decoder.decode(CoachMessage.self, from: json)
+        XCTAssertEqual(message.payload?.followUps, ["Plan tomorrow"])
+        XCTAssertNil(message.payload?.foods)
+        XCTAssertNil(message.payload?.recap)
+    }
+
+    // MARK: NewCoachMessage: nil payload sends no key, a present one encodes fully
+
+    func testNewCoachMessageEncodesNilPayloadWithNoKeyAtAll() throws {
+        let message = NewCoachMessage(userId: UUID(), role: "assistant", content: "Hi", messageType: "chat", payload: nil)
+        let data = try JSONEncoder().encode(message)
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNil(obj["payload"], "a nil payload must not appear as a JSON null either")
+        XCTAssertFalse(obj.keys.contains("payload"))
+    }
+
+    func testNewCoachMessageEncodesAPresentPayloadAndOmitsItsNilFields() throws {
+        let payload = CoachMessagePayload(
+            foods: [.init(name: "Greek yogurt", why: "20g")],
+            followUps: nil,
+            recap: nil
+        )
+        let message = NewCoachMessage(userId: UUID(), role: "assistant", content: "Hi", messageType: "chat", payload: payload)
+        let data = try JSONEncoder().encode(message)
+        let obj = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let payloadObj = try XCTUnwrap(obj["payload"] as? [String: Any])
+        let foods = try XCTUnwrap(payloadObj["foods"] as? [[String: Any]])
+        XCTAssertEqual(foods.first?["name"] as? String, "Greek yogurt")
+        XCTAssertNil(payloadObj["followUps"])
+        XCTAssertNil(payloadObj["recap"])
+    }
+
+    // MARK: PulseFoodResolver
+
+    private func foodLog(name: String, minutesAgo: Double, now: Date) -> FoodLog {
+        FoodLog(
+            id: UUID(), userId: UUID(), loggedAt: now.addingTimeInterval(-minutesAgo * 60),
+            logDate: now.isoDateString, meal: .snack, foodItemId: UUID(), quantity: 1,
+            caloriesSnapshot: 100, proteinGSnapshot: 20, carbsGSnapshot: 5, fatGSnapshot: 2, fiberGSnapshot: 1,
+            foodItems: .init(name: name, brand: nil, servingDesc: nil)
+        )
+    }
+
+    func testResolveMatchesCaseInsensitivelyAndTrimmed() {
+        let now = Date.now
+        let log = foodLog(name: "Greek Yogurt", minutesAgo: 10, now: now)
+        XCTAssertEqual(PulseFoodResolver.resolve("  greek yogurt  ", in: [log])?.id, log.id)
+    }
+
+    func testResolveReturnsNilWithNoMatch() {
+        let now = Date.now
+        let log = foodLog(name: "Greek Yogurt", minutesAgo: 10, now: now)
+        XCTAssertNil(PulseFoodResolver.resolve("Protein shake", in: [log]))
+    }
+
+    func testResolveReturnsTheMostRecentLogWhenTheNameRepeats() {
+        let now = Date.now
+        let older = foodLog(name: "Greek yogurt", minutesAgo: 120, now: now)
+        let newer = foodLog(name: "Greek yogurt", minutesAgo: 5, now: now)
+        XCTAssertEqual(PulseFoodResolver.resolve("Greek yogurt", in: [older, newer])?.id, newer.id)
+    }
+
+    func testResolveReturnsNilForBlankName() {
+        let now = Date.now
+        let log = foodLog(name: "Greek yogurt", minutesAgo: 5, now: now)
+        XCTAssertNil(PulseFoodResolver.resolve("   ", in: [log]))
+    }
+
+    // MARK: PulseChipSource
+
+    private func message(role: String, followUps: [String]?) -> CoachMessage {
+        CoachMessage(
+            id: UUID(), userId: UUID(), role: role, content: "x", messageType: "chat", createdAt: .now,
+            payload: followUps.map { CoachMessagePayload(foods: nil, followUps: $0, recap: nil) }
+        )
+    }
+
+    func testChipsUsesFollowUpsFromTheNewestAssistantMessage() {
+        let assistant = message(role: "assistant", followUps: ["A", "B"])
+        XCTAssertEqual(PulseChipSource.chips(latestMessage: assistant, fallback: ["Fallback"]), ["A", "B"])
+    }
+
+    func testChipsFallBackWhenTheNewestMessageIsFromTheUser() {
+        let user = message(role: "user", followUps: ["A"])
+        XCTAssertEqual(PulseChipSource.chips(latestMessage: user, fallback: ["Fallback"]), ["Fallback"])
+    }
+
+    func testChipsFallBackWhenFollowUpsAreMissingOrEmpty() {
+        XCTAssertEqual(
+            PulseChipSource.chips(latestMessage: message(role: "assistant", followUps: nil), fallback: ["Fallback"]),
+            ["Fallback"]
+        )
+        XCTAssertEqual(
+            PulseChipSource.chips(latestMessage: message(role: "assistant", followUps: []), fallback: ["Fallback"]),
+            ["Fallback"]
+        )
+    }
+
+    func testChipsFallBackWithNoMessagesYet() {
+        XCTAssertEqual(PulseChipSource.chips(latestMessage: nil, fallback: ["Fallback"]), ["Fallback"])
+    }
+}
+
 // MARK: - GLP-1 dose formatting
 
 final class GLP1DoseFormattingTests: XCTestCase {

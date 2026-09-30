@@ -487,7 +487,7 @@ struct CoachView: View {
                     }
 
                     ForEach(vm.visibleMessages) { msg in
-                        MessageBubble(message: msg)
+                        MessageBubble(message: msg, vm: vm)
                     }
                     if vm.isLoading {
                         PulseTypingIndicator()
@@ -522,14 +522,21 @@ struct CoachView: View {
 
     // MARK: - Quick actions
 
+    // The newest assistant message's own follow-ups take over the strip when it has them
+    // (docs/daylight-redesign.md: "follow-up chips"); otherwise the device-built suggestions
+    // from before structured replies. See `PulseChipSource`.
+    private var activeChips: [String] {
+        PulseChipSource.chips(latestMessage: vm.visibleMessages.last, fallback: vm.suggestedPrompts)
+    }
+
     private var showQuickActions: Bool {
-        !vm.suggestedPrompts.isEmpty && !vm.isLoading
+        !activeChips.isEmpty && !vm.isLoading
     }
 
     private var quickActionStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(vm.suggestedPrompts, id: \.self) { action in
+                ForEach(activeChips, id: \.self) { action in
                     Button {
                         Task { await vm.sendMessage(action) }
                     } label: {
@@ -646,19 +653,34 @@ struct CoachView: View {
 
 private struct MessageBubble: View {
     let message: CoachMessage
+    let vm: CoachViewModel
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            if message.isUser {
-                Spacer(minLength: 48)
-                bubbleText
-            } else {
-                pulseAvatar
-                bubbleText
-                Spacer(minLength: 48)
+        // A recap replaces the plain bubble outright (docs/daylight-redesign.md: "the weekly
+        // summary as a structured card"); a message without one — including the plain-text
+        // fallback when structured outputs didn't come back — keeps today's bubble.
+        if let recap = message.payload?.recap {
+            RecapCard(message: message, recap: recap, vm: vm)
+                .padding(.horizontal, 12)
+        } else {
+            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 8) {
+                HStack(alignment: .bottom, spacing: 6) {
+                    if message.isUser {
+                        Spacer(minLength: 48)
+                        bubbleText
+                    } else {
+                        pulseAvatar
+                        bubbleText
+                        Spacer(minLength: 48)
+                    }
+                }
+
+                if let foods = message.payload?.foods, !foods.isEmpty {
+                    FoodSuggestionCards(foods: foods, vm: vm)
+                }
             }
+            .padding(.horizontal, 12)
         }
-        .padding(.horizontal, 12)
     }
 
     // `Text(String)` does not parse markdown — only the LocalizedStringKey initializer
@@ -685,8 +707,9 @@ private struct MessageBubble: View {
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
             .background {
+                // Daylight: user bubbles are a solid indigo fill; Pulse bubbles stay white tiles.
                 if message.isUser {
-                    Theme.Colors.primaryGradient
+                    Theme.Colors.hero
                 } else {
                     Theme.Colors.surfaceCard
                 }
@@ -704,15 +727,281 @@ private struct MessageBubble: View {
     private var pulseAvatar: some View { PulseAvatar() }
 }
 
-// The brand mark on a solid gradient tile — reads as an avatar, not the loading spinner the
-// bare ring used to look like mid-chat.
+// MARK: - Food suggestion cards
+
+// Sits under an assistant bubble that suggested foods the user already eats
+// (docs/daylight-redesign.md: "one-tap food cards, from frequently logged foods"). A name that
+// doesn't resolve to a recent log is dropped rather than shown as a dead card.
+private struct FoodSuggestionCards: View {
+    let foods: [CoachMessagePayload.FoodSuggestion]
+    let vm: CoachViewModel
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ForEach(foods) { food in
+                if let log = vm.resolveFoodLog(named: food.name) {
+                    FoodSuggestionCard(food: food, log: log, vm: vm)
+                }
+            }
+        }
+        .padding(.leading, 34)
+        .padding(.trailing, 48)
+    }
+}
+
+private struct FoodSuggestionCard: View {
+    let food: CoachMessagePayload.FoodSuggestion
+    let log: FoodLog
+    let vm: CoachViewModel
+
+    @State private var isLogging = false
+    @State private var didLog = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(food.name)
+                    .font(Theme.Fonts.body(14, .bold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .lineLimit(2)
+                if !food.why.isEmpty {
+                    Text(food.why)
+                        .font(Theme.Fonts.body(12))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 8)
+            Button {
+                guard !isLogging, !didLog else { return }
+                Task {
+                    isLogging = true
+                    let ok = await vm.logSuggestedFood(log)
+                    isLogging = false
+                    if ok {
+                        didLog = true
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    }
+                }
+            } label: {
+                Group {
+                    if isLogging {
+                        ProgressView().tint(.white)
+                    } else if didLog {
+                        Image(systemName: "checkmark")
+                    } else {
+                        Image(systemName: "plus")
+                    }
+                }
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(Theme.Colors.hero, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+            .buttonStyle(.pressable)
+            .disabled(isLogging || didLog)
+            .accessibilityLabel(didLog ? "Logged \(food.name)" : "Log \(food.name)")
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 56)
+        .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .opacity(didLog ? 0.7 : 1)
+    }
+}
+
+// MARK: - Weekly recap card
+
+// Replaces the plain bubble for a message with a `recap` payload (docs/daylight-redesign.md:
+// "the weekly summary as a structured card (story, went well, pattern, focus, a 7-day bar
+// chart)"). The four text fields are Pulse's; the chart is always built from the app's own data.
+private struct RecapCard: View {
+    let message: CoachMessage
+    let recap: CoachMessagePayload.Recap
+    let vm: CoachViewModel
+
+    private var interval: (start: Date, end: Date, priorStart: Date) {
+        WeeklyRecapSchedule.lastWeek(before: message.createdAt)
+    }
+
+    private var rangeLabel: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return "\(formatter.string(from: interval.start)) – \(formatter.string(from: interval.end))"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Monday recap")
+                    .font(Theme.Fonts.body(12, .bold))
+                    .foregroundStyle(Theme.Colors.violetLabel)
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(Theme.Colors.violet, in: Capsule())
+                Spacer(minLength: 0)
+                Text(rangeLabel)
+                    .font(Theme.Fonts.body(13, .semibold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .accessibilityLabel("Week of \(rangeLabel)")
+            }
+
+            Text(recap.story)
+                .font(Theme.Fonts.display(21, .bold, relativeTo: .title3))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            WeeklyProteinBars(chart: vm.recapChart(for: message))
+                .task { await vm.loadRecapChartIfNeeded(for: message) }
+
+            HStack(alignment: .top, spacing: 10) {
+                recapRow(title: "Went well", text: recap.wentWell, fill: Theme.Colors.lime, label: Theme.Colors.limeLabel, ink: Theme.Colors.limeInk)
+                recapRow(title: "Pattern", text: recap.pattern, fill: Theme.Colors.violet, label: Theme.Colors.violetLabel, ink: Theme.Colors.violetInk)
+            }
+
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "scope")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Theme.NutrientColor.fat, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("This week's focus")
+                        .font(Theme.Fonts.body(12, .bold))
+                        .textCase(.uppercase)
+                        .tracking(Theme.Typography.eyebrowTracking)
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                    Text(recap.focus)
+                        .font(Theme.Fonts.body(14))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.NutrientColor.fat.opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .padding(18)
+        .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: Color(hex: 0x0F172A, opacity: 0.06), radius: 1, y: 1)
+    }
+
+    private func recapRow(title: String, text: String, fill: Color, label: Color, ink: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(Theme.Fonts.body(12, .bold))
+                .textCase(.uppercase)
+                .tracking(Theme.Typography.eyebrowTracking)
+                .foregroundStyle(label)
+            Text(text)
+                .font(Theme.Fonts.body(14))
+                .foregroundStyle(ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(fill, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+// The 7-day protein bar chart (Mon–Sun, `WeeklyRecapSchedule.lastWeek`), built entirely from the
+// app's own local data — Pulse never supplies these numbers. A day with no log shows an empty
+// track rather than a zero-height bar read as a miss. Bars draw in once, honoring Reduce Motion.
+private struct WeeklyProteinBars: View {
+    let chart: CoachViewModel.RecapChartData?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var grown = false
+
+    private static let barHeight: CGFloat = 88
+
+    private var days: [CoachContextBundle.LastWeekContext.Day] { chart?.days ?? [] }
+
+    // Before the async load finishes, seven bare tracks hold the layout so the card doesn't pop
+    // from blank to full height once the fetch completes.
+    private var slotCount: Int { chart == nil ? 7 : days.count }
+
+    private var maxValue: Double {
+        max(chart?.goalProteinG ?? 0, Double(days.compactMap(\.proteinG).max() ?? 0), 1)
+    }
+
+    private var goalFraction: Double? {
+        guard let goal = chart?.goalProteinG, goal > 0 else { return nil }
+        return min(goal / maxValue, 1)
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack(alignment: .bottom) {
+                HStack(alignment: .bottom, spacing: 8) {
+                    ForEach(0..<slotCount, id: \.self) { index in
+                        let day = days.indices.contains(index) ? days[index] : nil
+                        ZStack(alignment: .bottom) {
+                            Capsule()
+                                .fill(Theme.Colors.surfaceInset)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: Self.barHeight)
+                            if let proteinG = day?.proteinG {
+                                let fraction = min(Double(proteinG) / maxValue, 1)
+                                Capsule()
+                                    .fill(day?.proteinFloorHit == true ? Theme.Colors.hero : Theme.Colors.heroLabel)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: (grown || reduceMotion) ? Self.barHeight * fraction : 0)
+                            }
+                        }
+                    }
+                }
+                if let goalFraction {
+                    Rectangle()
+                        .fill(Theme.Colors.textFaint.opacity(0.6))
+                        .frame(height: 1)
+                        .offset(y: -Self.barHeight * goalFraction)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(height: Self.barHeight)
+
+            HStack(spacing: 8) {
+                ForEach(0..<slotCount, id: \.self) { index in
+                    Text(days.indices.contains(index) ? String(days[index].day.prefix(1)) : "")
+                        .font(Theme.Fonts.body(11, .semibold))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Protein by day")
+        .accessibilityValue(accessibilitySummary)
+        .onAppear {
+            guard !grown, !reduceMotion else { grown = true; return }
+            withAnimation(Theme.Motion.draw.delay(0.3)) { grown = true }
+        }
+    }
+
+    private var accessibilitySummary: String {
+        guard !days.isEmpty else { return "Not enough data yet" }
+        return days.map { day in
+            if let proteinG = day.proteinG {
+                return "\(day.day): \(proteinG) grams" + (day.proteinFloorHit == true ? ", floor met" : "")
+            }
+            return "\(day.day): no log"
+        }.joined(separator: "; ")
+    }
+}
+
+// The brand mark on a solid indigo rounded square — reads as an avatar, not the loading spinner
+// the bare ring used to look like mid-chat.
 private struct PulseAvatar: View {
     var body: some View {
         PulseMark()
             .foregroundStyle(.white)
             .padding(6)
             .frame(width: 28, height: 28)
-            .background(Theme.Colors.primaryGradient, in: Circle())
+            .background(Theme.Colors.hero, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
