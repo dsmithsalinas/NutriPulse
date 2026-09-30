@@ -32,7 +32,14 @@ Open it from claude.ai, or with `/artifacts` in Claude Code. The **C — Dayligh
 
 - **Built (Sep 29, `daylight/pulse-structured`, not deployed):** `coach-chat` asks for structured outputs. Chat returns `{reply, foods?, followUps?}` and the weekly recap `{reply, recap?, followUps?}`; `reply` always carries the full text, so older app versions are unaffected. Schemas and the clamping parser live in `_shared/pulse-context.ts`. The app renders the charts itself from its own data; Pulse only writes the words.
 - **Built:** the Strong Week outlook runs on Sonnet 5.5 with the same fields in a JSON schema instead of the forced tool call (see `docs/your-strong-week.md`).
-- **To ship, in order:** apply `20260929200000_coach_message_payload.sql` (nullable `coach_messages.payload`), deploy `coach-chat`, then redeploy `pulse-eval` (the provider and prompts changed). The app saves cards in `payload` and retries without it if the column is missing, so the order is forgiving.
+- **To ship, in order:** apply `20260929200000_coach_message_payload.sql` (nullable `coach_messages.payload`) and `20260929210000_pulse_profiles.sql`, deploy `coach-chat`, then redeploy `pulse-eval` (the provider and prompts changed). The app saves cards in `payload` and retries without it if the column is missing, and `coach-chat` treats a missing `pulse_profiles` row or table as "Pulse on", so the order is forgiving.
+
+## What Pulse knows, Pulse off, and AI consent (step 8)
+
+- **What Pulse knows** (Profile › Pulse › What Pulse knows, also from the Pulse start screen and an optional onboarding step): allergies and intolerances, how you eat (vegetarian, halal, dairy-free…), foods you love and would rather skip, and the existing kitchen situation. Stored in `pulse_profiles` (owner-only). Allergies and eating patterns are hard limits in the prompt, and `coach-chat` also drops any food card that names an allergy or avoided food.
+- **Pulse learns in chat, with permission.** The reply's `remember` field carries what the user just said ("I can't stand salmon"); the app offers "Save to what Pulse knows?" and saves only on a tap. Allergies are never saved without that tap.
+- **Three levels of off:** coaching notifications (existing toggle), Pulse on Today (hides the Pulse strip and hand-offs), and Pulse off (hides the tab, stops every AI call including the written Strong Week outlook). The setting is on the account, and `coach-chat` refuses with 403 `pulse_off` when it's off.
+- **AI consent.** Before Pulse first uses someone's data, a sheet explains what goes to the AI provider and asks. "Not now" turns Pulse off. Apple's guideline 5.1.2 now asks for exactly this disclosure and permission; check the current wording before submission. Talk to Log's food parsing also uses AI and is disclosed in the same sheet, but has its own path.
 - **Decided (Sep 29):** Your Strong Week is the only thing that goes out on Mondays (the 8 AM reminder and the Today card). Pulse never sends a weekly summary on its own; it shows a **Monday Recap** pill on the start screen, and the recap is generated only when the user taps it.
 
 ## Code changes the Pulse start screen needs
