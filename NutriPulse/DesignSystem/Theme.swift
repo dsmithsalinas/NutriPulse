@@ -39,6 +39,9 @@ enum Theme {
         static let hairline     = Color(light: 0xE2E8F0, dark: 0x273244)
         static let ringTrack    = Color(light: 0xF1F5F9, dark: 0x1F2937)
         static let textFaint    = Color(light: 0x64748B, dark: 0x7C8AA0)
+        /// Destructive actions and errors: sign out, delete, swipe-to-delete, validation. #B91C1C
+        /// on white is ~5.9:1, AA for body text.
+        static let danger       = Color(light: 0xB91C1C, dark: 0xF87171)
         /// Grams and other small indigo figures on white tiles (passes AA where `primary` is tight).
         static let primaryText  = Color(light: 0x4338CA, dark: 0xA5B4FC)
         /// A light indigo fill for secondary "+"/quick-action buttons on white rows (Log sheet
@@ -186,7 +189,7 @@ enum Theme {
 
 // MARK: - Component styles
 
-/// Primary call-to-action button — filled brand gradient, white label.
+/// Primary call-to-action button — Daylight solid indigo, white label, 52pt tall.
 /// Respects `.disabled()` — falls back to a flat grey fill, same convention
 /// every hand-rolled CTA button in the app used before this style existed.
 /// Usage: `Button("Log it") { ... }.buttonStyle(.brandPrimary)`
@@ -195,18 +198,12 @@ struct PrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.body.weight(.semibold))
-            .foregroundStyle(isEnabled ? .white : Color(.secondaryLabel))
+            .font(Theme.Fonts.body(17, .bold))
+            .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background {
-                if isEnabled {
-                    Theme.Colors.primaryGradient
-                } else {
-                    Color(.systemFill)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
+            .frame(minHeight: 52)
+            .background(isEnabled ? Theme.Colors.primary : Theme.Colors.textFaint.opacity(0.35),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .opacity(configuration.isPressed ? 0.85 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }

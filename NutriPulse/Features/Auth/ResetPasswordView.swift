@@ -28,7 +28,7 @@ struct ResetPasswordView: View {
                 Button("Continue") {
                     appState.finishPasswordRecovery()
                 }
-                .buttonStyle(.daylightPrimary)
+                .buttonStyle(.brandPrimary)
             } else {
                 VStack(spacing: Theme.Spacing.sm) {
                     daylightField {
@@ -50,7 +50,7 @@ struct ResetPasswordView: View {
                 if let error = vm.errorMessage {
                     Text(error)
                         .font(Theme.Fonts.body(13))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Theme.Colors.danger)
                         .multilineTextAlignment(.center)
                 }
 
@@ -63,7 +63,7 @@ struct ResetPasswordView: View {
                         Text("Update password")
                     }
                 }
-                .buttonStyle(.daylightPrimary)
+                .buttonStyle(.brandPrimary)
                 .disabled(
                     vm.isLoading
                         || vm.newPassword.isEmpty

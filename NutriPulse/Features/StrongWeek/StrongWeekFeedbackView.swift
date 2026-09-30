@@ -79,7 +79,7 @@ struct StrongWeekFeedbackView: View {
                         Section {
                             Text(saveError)
                                 .font(Theme.Fonts.body(13))
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Theme.Colors.danger)
                         }
                         .daylightSection()
                     }

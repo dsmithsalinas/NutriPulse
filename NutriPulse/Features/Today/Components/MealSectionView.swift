@@ -121,7 +121,10 @@ private struct SwipeToDeleteRow<Content: View>: View {
                 .frame(width: buttonWidth)
                 .frame(maxHeight: .infinity)
             }
-            .background(Theme.Colors.swipeDelete)
+            .background(Theme.Colors.danger)
+            // Only while swiping: at rest the red sat behind the row's rounded corner and showed
+            // as a thin edge down the right side of every food.
+            .opacity(offsetX < 0 ? 1 : 0)
 
             content()
                 .background(Theme.Colors.surfaceCard)
@@ -163,6 +166,3 @@ private struct SwipeToDeleteRow<Content: View>: View {
 
 // Theme has no destructive-red token of its own (see ProfileView's private `danger`, which
 // isn't visible outside that file) — the swipe-to-delete affordance needs one too.
-private extension Theme.Colors {
-    static let swipeDelete = Color(light: 0xB91C1C, dark: 0xF87171)
-}

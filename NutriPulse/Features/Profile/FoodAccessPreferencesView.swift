@@ -91,7 +91,7 @@ struct FoodAccessPreferencesView: View {
                 }
                 if let error = vm.error {
                     Text(error)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Theme.Colors.danger)
                         .font(Theme.Fonts.body(12))
                 }
             }

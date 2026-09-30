@@ -171,7 +171,7 @@ struct TodayView: View {
                         if let error = vm.errorMessage {
                             Text(error)
                                 .font(Theme.Typography.caption)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Theme.Colors.danger)
                                 .padding()
                         }
                     }
@@ -180,6 +180,12 @@ struct TodayView: View {
                 .padding(.bottom, Theme.Spacing.xl)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
+            // No navigation bar, so cover the status bar or scrolled tiles slide under the clock.
+            .overlay(alignment: .top) {
+                Color.clear
+                    .frame(height: 0)
+                    .background(Theme.Colors.ground)
+            }
             .scrollContentBackground(.hidden)
             .toolbar(.hidden, for: .navigationBar)
             // Swipe the canvas to change days — right = previous, left = next (blocked at

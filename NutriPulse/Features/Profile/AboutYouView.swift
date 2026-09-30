@@ -165,7 +165,7 @@ struct AboutYouView: View {
                     if let error = vm.saveError {
                         Text(error)
                             .font(Theme.Fonts.body(13))
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Theme.Colors.danger)
                     }
 
                     saveButton

@@ -173,7 +173,7 @@ struct StrongWeekView: View {
                     if let error = vm.error, !vm.loadFailed {
                         Text(error)
                             .font(Theme.Fonts.body(13))
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Theme.Colors.danger)
                     }
                 }
                 .padding(Theme.Spacing.page)

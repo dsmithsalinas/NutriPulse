@@ -52,7 +52,7 @@ struct OnboardingSplashView: View {
                 Spacer()
 
                 Button("Let's go", action: onContinue)
-                    .buttonStyle(.daylightPrimary)
+                    .buttonStyle(.brandPrimary)
                     .padding(.top, 8)
                     .opacity(showSubtitle ? 1 : 0)
                     .disabled(!showSubtitle)

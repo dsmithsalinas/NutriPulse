@@ -70,7 +70,7 @@ struct HealthKitStepView: View {
                             Text(isConnecting ? "Requesting…" : "Connect Apple Health")
                         }
                     }
-                    .buttonStyle(.daylightPrimary)
+                    .buttonStyle(.brandPrimary)
                     .disabled(isConnecting)
                     .padding(.top, 2)
                 }

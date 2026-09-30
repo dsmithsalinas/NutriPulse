@@ -68,7 +68,7 @@ struct SummaryStepView: View {
                     Text("Start tracking")
                 }
             }
-            .buttonStyle(.daylightPrimary)
+            .buttonStyle(.brandPrimary)
             .disabled(vm.isLoading)
             .padding(.horizontal, Theme.Spacing.page)
             .padding(.vertical, 12)

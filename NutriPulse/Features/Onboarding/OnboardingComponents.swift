@@ -5,30 +5,7 @@ import SwiftUI
 // every step is built on. Kept in one file so the visual language stays consistent across steps.
 // (Also used by Features/Auth, the other half of "the first thing new users see".)
 
-// MARK: - Primary button
-
-/// The one Continue/CTA style for onboarding and sign-in: solid indigo, white text, 52pt tall,
-/// 18pt corners — matches the Log sheet's primary action weight. Falls back to a flat grey fill
-/// when disabled, same convention as `PrimaryButtonStyle`.
-struct DaylightPrimaryButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(Theme.Fonts.body(17, .bold))
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .background(isEnabled ? Theme.Colors.primary : Theme.Colors.textFaint.opacity(0.35),
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-    }
-}
-
-extension ButtonStyle where Self == DaylightPrimaryButtonStyle {
-    static var daylightPrimary: DaylightPrimaryButtonStyle { DaylightPrimaryButtonStyle() }
-}
+// Continue and other CTAs use the app-wide `.brandPrimary` (Theme.swift).
 
 // MARK: - Drawable ring mark
 
@@ -214,7 +191,7 @@ struct NarratedStepLayout<Content: View>: View {
                 }
 
                 Button(continueTitle, action: onAdvance)
-                    .buttonStyle(.daylightPrimary)
+                    .buttonStyle(.brandPrimary)
                     .disabled(!canAdvance)
                     .padding(.horizontal, Theme.Spacing.page)
                     .padding(.top, 8)

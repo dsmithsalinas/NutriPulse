@@ -975,10 +975,6 @@ struct ProfileView: View {
 // Theme has no destructive-red or Apple-Health-rose tokens; Profile is the only screen that
 // needs them so they live here rather than in the shared DesignSystem.
 private extension Theme.Colors {
-    /// AA-compliant destructive red for the sign-out / delete-account / clear-history rows —
-    /// #B91C1C on white contrasts ~5.9:1 (AA for normal text needs 4.5:1).
-    static let danger = Color(light: 0xB91C1C, dark: 0xF87171)
-
     /// The Daylight mockup's rose family for the Apple Health tile.
     static let healthTile      = Color(hex: 0xFFE4E6)
     static let healthTileInk   = Color(hex: 0x881337)

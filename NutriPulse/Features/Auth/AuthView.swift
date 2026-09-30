@@ -64,7 +64,7 @@ struct AuthView: View {
                 if let error = vm.errorMessage {
                     Text(error)
                         .font(Theme.Fonts.body(13))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Theme.Colors.danger)
                         .multilineTextAlignment(.center)
                 }
 
@@ -79,7 +79,7 @@ struct AuthView: View {
                             Text(vm.isSignUp ? "Create Account" : "Sign In")
                         }
                     }
-                    .buttonStyle(.daylightPrimary)
+                    .buttonStyle(.brandPrimary)
                     .disabled(vm.isLoading || vm.email.isEmpty || vm.password.isEmpty)
 
                     // SWIFT CONCEPT — SignInWithAppleButton is a first-party SwiftUI view from

@@ -21,6 +21,8 @@ struct RootView: View {
                 shotDayPreview
             } else if isProfilePreview {
                 profilePreview
+            } else if isOnboardingPreview {
+                onboardingPreview
             } else if isGoalBuilderPreview {
                 CreateGoalView(
                     vm: GoalsViewModel(),
@@ -146,6 +148,23 @@ struct RootView: View {
     @ViewBuilder private var profilePreview: some View {
         #if DEBUG
         ProfileView.preview()
+        #else
+        EmptyView()
+        #endif
+    }
+
+    // `--onboarding-preview`: the whole onboarding flow from a fixture; never saves.
+    private var isOnboardingPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--onboarding-preview")
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var onboardingPreview: some View {
+        #if DEBUG
+        OnboardingView.preview()
         #else
         EmptyView()
         #endif

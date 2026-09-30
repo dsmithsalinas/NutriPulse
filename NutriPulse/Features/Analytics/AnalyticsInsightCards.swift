@@ -18,7 +18,7 @@ struct WeeklyReviewCard: View {
                 .foregroundStyle(Theme.Colors.primary)
             reviewRow("What went well", review.wentWell, "checkmark.circle.fill", .green)
             reviewRow("Where it got difficult", review.gotDifficult, "arrow.down.right.circle.fill", .orange)
-            reviewRow("Pattern noticed", review.pattern, "waveform.path.ecg", Theme.Colors.primary)
+            reviewRow("Pattern noticed", review.pattern, "point.3.connected.trianglepath.dotted", Theme.Colors.primary)
 
             VStack(alignment: .leading, spacing: 3) {
                 TileEyebrow("One thing to try")

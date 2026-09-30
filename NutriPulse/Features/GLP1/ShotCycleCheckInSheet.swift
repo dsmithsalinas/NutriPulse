@@ -141,7 +141,7 @@ struct ShotCyclePlanCard: View {
             }
 
             if let pattern = plan.learnedPattern {
-                Label(pattern, systemImage: "waveform.path.ecg")
+                Label(pattern, systemImage: "point.3.connected.trianglepath.dotted")
                     .font(.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .padding(10)

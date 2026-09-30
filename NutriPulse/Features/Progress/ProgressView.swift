@@ -984,7 +984,7 @@ private struct SummaryReviewCard: View {
                 .foregroundStyle(Theme.Colors.primary)
             row("What went well", wentWell, "checkmark.circle.fill", .green)
             row("Where it got difficult", gotDifficult, "arrow.down.right.circle.fill", .orange)
-            row("Pattern noticed", pattern, "waveform.path.ecg", Theme.Colors.primary)
+            row("Pattern noticed", pattern, "point.3.connected.trianglepath.dotted", Theme.Colors.primary)
 
             VStack(alignment: .leading, spacing: 3) {
                 TileEyebrow("One thing to try")

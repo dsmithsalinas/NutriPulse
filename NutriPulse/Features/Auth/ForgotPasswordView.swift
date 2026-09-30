@@ -47,7 +47,7 @@ struct ForgotPasswordView: View {
                         if let error = vm.errorMessage {
                             Text(error)
                                 .font(Theme.Fonts.body(13))
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Theme.Colors.danger)
                                 .multilineTextAlignment(.center)
                         }
 
@@ -60,11 +60,11 @@ struct ForgotPasswordView: View {
                                 Text("Send reset link")
                             }
                         }
-                        .buttonStyle(.daylightPrimary)
+                        .buttonStyle(.brandPrimary)
                         .disabled(vm.isLoading || vm.email.isEmpty)
                     } else {
                         Button("Done") { dismiss() }
-                            .buttonStyle(.daylightPrimary)
+                            .buttonStyle(.brandPrimary)
                     }
                 }
                 .frame(maxWidth: .infinity)

@@ -67,7 +67,7 @@ struct ShotCycleCheckInCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .top, spacing: Theme.Spacing.sm) {
-                Image(systemName: "waveform.path.ecg")
+                Image(systemName: "checklist")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(Theme.Colors.lime)
                     .frame(width: 38, height: 38)

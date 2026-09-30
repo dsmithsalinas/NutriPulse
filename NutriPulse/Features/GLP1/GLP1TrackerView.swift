@@ -373,6 +373,3 @@ struct DoseSkipControl: View {
 
 // Mirrors the private `danger` token ProfileView defines for its own destructive rows — Theme has
 // no red yet, and this file needs the same red to flag an overdue dose.
-private extension Theme.Colors {
-    static let danger = Color(light: 0xB91C1C, dark: 0xF87171)
-}

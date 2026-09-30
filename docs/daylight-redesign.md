@@ -66,9 +66,10 @@ Each step is its own branch, stacked in order; each was built, tested and checke
 | Foundation | `daylight/foundation` | Daylight tokens in `Theme`, bundled Bricolage Grotesque (96pt cut) and Figtree, `DaylightComponents` (tile, eyebrow, pop-in, meter bar, counting number, flow layout), floating tab bar |
 | Pulse start screen | `daylight/pulse-start` | No automatic check-in or weekly summary; start screen with on-device tiles and Monday Recap; New topic |
 | Today and Log sheet | `daylight/today-log` | Tile grid with liquid protein fill, water picker with Undo (synced tombstones), movement sheet; Log sheet with Talk / Search / Scan / Favorites and the header meal everywhere |
+| Secondary screens | `daylight/pulse-structured` | Every screen reached from the main tabs (Analytics, summaries, goal builder, experiments, notification and dose settings, Today's lower cards and sheets, Strong Week, Body, onboarding, sign-in), built on shared chrome in `DesignSystem/DaylightChrome.swift`: pushed pages use `DaylightPageTitle` + `.daylightSubpage`, sheets use `SheetHeader`, settings forms use `.daylightForm()` |
 | Remaining screens | `daylight/screens` | Progress (floor-days hero, trend vs the previous period, stat tiles), Goals (hero goal, experiment tile), Shot day (hold to log, with an immediate VoiceOver path), Profile (targets hero, grouped setting tiles) |
 
-Debug launch flags for checking screens without an account (`--tour` turns on all of them, with the tab bar, to click through the whole app): `--pulse-preview`, `--water-preview`, `--log-preview`, `--shot-preview`, `--profile-preview`, `--store-today`, `--store-food`, `--progress-preview`, `--goals-preview`.
+Debug launch flags for checking screens without an account (`--tour` turns on all of them, with the tab bar, to click through the whole app): `--pulse-preview`, `--water-preview`, `--log-preview`, `--shot-preview`, `--profile-preview`, `--onboarding-preview`, `--store-today`, `--store-food`, `--progress-preview`, `--goals-preview`.
 
 ### Known gaps
 
@@ -79,7 +80,6 @@ Debug launch flags for checking screens without an account (`--tour` turns on al
 - **Goals: a weekly goal's card can read "100% measured" over an all-dashed week.** Pre-existing logic (`weeklyTimelineDays` vs coverage), seen with preview data; check with real data.
 - **Goals: the experiment tile has no outcome label** ("Sleep"); `ExperimentRepository` doesn't fetch experiment metrics yet.
 - **Shot day has no titration week** ("week 6"); nothing records it.
-- CreateGoalView and ExperimentsView still use the pre-Daylight card styles.
 - The mockups are light-only; dark-mode colors are our own picks in the same slate family.
 - Everything that needs a signed-in account (real search, favorites, water sync, recap) still needs a pass on a device before TestFlight.
 
