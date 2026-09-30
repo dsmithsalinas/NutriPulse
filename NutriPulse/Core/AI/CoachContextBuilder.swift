@@ -20,6 +20,10 @@ struct CoachContextBundle: Encodable {
     var strongWeek: StrongWeekContext? = nil
     var weeklyEvidence: StrongWeekEvidence? = nil
     var foodAccess: FoodAccessContext? = nil
+    // What Pulse knows about the user (docs/daylight-redesign.md, step 8): allergies, how they
+    // eat, foods they love/avoid. nil when the user hasn't told Pulse anything yet, so the
+    // "ABOUT THE USER" prompt section can be omitted entirely rather than sent empty.
+    var aboutYou: AboutYouContext? = nil
     // Only for Pulse's weekly summary message (nil otherwise, and omitted from the JSON). The
     // rolling seven-day window ends today — on a Monday morning that's six days of last week
     // plus an empty day — so the summary was describing the wrong week.
@@ -248,6 +252,7 @@ struct CoachContextBuilder {
         // 30 days so CelebrationEngine can see streaks longer than a week;
         // the "7-day history" narrative below just slices the tail of this.
         async let foodAccessTask = FoodAccessRepository().fetch()
+        async let aboutYouTask = loadAboutYou()
         async let strongWeekTask = StrongWeekRepository().context()
         async let summariesTask = analyticsRepo.fetchDailySummaries(days: 30)
         async let glp1Task = glp1Repo.fetchRecentLogs(limit: 1)
@@ -332,11 +337,23 @@ struct CoachContextBuilder {
         context.strongWeek = try? await strongWeekTask
         do { context.foodAccess = .make(try await foodAccessTask) }
         catch { context.foodAccess = .unavailable }
+        context.aboutYou = await aboutYouTask
         if includeWeeklyEvidence {
             context.weeklyEvidence = await StrongWeekEvidenceBuilder().build(proteinTarget: goal?.proteinG)
         }
         context.lastWeek = lastWeek
         return context
+    }
+
+    // What Pulse knows about the user (PulseProfileStore). Loaded on demand — most surfaces
+    // that build context never otherwise touch the store — and nil when there's nothing saved,
+    // so an empty aboutYou block never reaches the prompt.
+    private func loadAboutYou() async -> AboutYouContext? {
+        if await !PulseProfileStore.shared.isLoaded {
+            await PulseProfileStore.shared.load()
+        }
+        let prefs = await PulseProfileStore.shared.preferences
+        return prefs.isEmpty ? nil : AboutYouContext(prefs)
     }
 
     // Everything the Monday recap needs about the completed Mon–Sun week, fetched together.

@@ -104,7 +104,7 @@ struct GlowingArrowButton: View {
 /// The step indicator — a row of capsules, the current one stretched. `current` is 1-based.
 struct OnboardingProgressDots: View {
     let current: Int
-    var total: Int = 8
+    var total: Int = 9
 
     var body: some View {
         HStack(spacing: 6) {
@@ -131,7 +131,7 @@ struct OnboardingProgressDots: View {
 /// in the space below, and the glowing arrow floating bottom-trailing. Back pops the nav stack.
 struct NarratedStepLayout<Content: View>: View {
     let step: Int
-    var totalSteps: Int = 8
+    var totalSteps: Int = 9
     var eyebrow: String? = nil
     var eyebrowGlow: Bool = false
     let question: String

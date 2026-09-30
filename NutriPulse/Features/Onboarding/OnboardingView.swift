@@ -6,7 +6,7 @@ import SwiftUI
 // Push a value onto `path` to navigate forward; pop it to go back.
 // .navigationDestination(for:) maps each route to the view that renders it.
 enum OnboardingRoute: Hashable {
-    case name, sex, dob, heightWeight, activity, goal, healthKit, glp1, summary
+    case name, sex, dob, heightWeight, activity, goal, healthKit, glp1, pulseAboutYou, summary
 }
 
 // ─── Top-level shell ─────────────────────────────────────────────────────────
@@ -36,7 +36,9 @@ struct OnboardingView: View {
                     case .healthKit:
                         HealthKitStepView { path.append(.glp1) }
                     case .glp1:
-                        GLP1SetupStepView(vm: vm) { path.append(.summary) }
+                        GLP1SetupStepView(vm: vm) { path.append(.pulseAboutYou) }
+                    case .pulseAboutYou:
+                        PulseAboutYouStepView(vm: vm) { path.append(.summary) }
                     case .summary:
                         SummaryStepView(vm: vm, onComplete: handleSave)
                     }

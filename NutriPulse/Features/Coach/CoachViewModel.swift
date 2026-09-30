@@ -309,6 +309,67 @@ final class CoachViewModel {
         recapCharts[message.id] = RecapChartData(days: lastWeek.days, goalProteinG: goal?.proteinG)
     }
 
+    // MARK: - Structured replies: "Save to what Pulse knows?" cards
+
+    private enum RememberCardState { case saving, saved }
+    // Per message, per suggestion: saving/saved (kept visible, drawn as resolved) or dismissed
+    // (hidden). In-memory only — a fresh launch re-evaluates purely from what's saved.
+    private var rememberStates: [UUID: [PulseRememberSuggestion: RememberCardState]] = [:]
+    private var rememberDismissed: [UUID: Set<PulseRememberSuggestion>] = [:]
+
+    /// The suggestion cards still worth showing under this assistant message: never something
+    /// already in what Pulse knows (the server already dedupes; this also covers a value saved
+    /// from a different message in the same session), and not "Not now"-ed. A card already being
+    /// saved or just saved stays visible — it must not vanish out from under the "Saved" state
+    /// the instant `isAlreadyKnown` starts matching it.
+    func rememberCards(for message: CoachMessage) -> [PulseRememberSuggestion] {
+        guard let all = message.payload?.remember, !all.isEmpty else { return [] }
+        let dismissed = rememberDismissed[message.id] ?? []
+        let states = rememberStates[message.id] ?? [:]
+        return all.filter { suggestion in
+            if dismissed.contains(suggestion) { return false }
+            if states[suggestion] != nil { return true }
+            return !isAlreadyKnown(suggestion)
+        }
+    }
+
+    func rememberIsSaving(_ suggestion: PulseRememberSuggestion, in message: CoachMessage) -> Bool {
+        rememberStates[message.id]?[suggestion] == .saving
+    }
+
+    func rememberIsSaved(_ suggestion: PulseRememberSuggestion, in message: CoachMessage) -> Bool {
+        rememberStates[message.id]?[suggestion] == .saved
+    }
+
+    private func isAlreadyKnown(_ suggestion: PulseRememberSuggestion) -> Bool {
+        let prefs = PulseProfileStore.shared.preferences
+        let items: [String]
+        switch suggestion.kind {
+        case .allergy: items = prefs.allergies
+        case .avoid: items = prefs.avoids
+        case .love: items = prefs.loves
+        }
+        return items.contains { $0.caseInsensitiveCompare(suggestion.value) == .orderedSame }
+    }
+
+    /// Allergies are safety-relevant and are never saved except by this explicit tap — nothing
+    /// else in the app writes to `allergies`.
+    func saveRememberSuggestion(_ suggestion: PulseRememberSuggestion, in message: CoachMessage) async {
+        guard rememberStates[message.id]?[suggestion] == nil else { return }
+        rememberStates[message.id, default: [:]][suggestion] = .saving
+        do {
+            try await PulseProfileStore.shared.remember(suggestion)
+            rememberStates[message.id, default: [:]][suggestion] = .saved
+        } catch {
+            rememberStates[message.id]?[suggestion] = nil
+            self.error = "Couldn't save that. Try again."
+        }
+    }
+
+    func dismissRememberSuggestion(_ suggestion: PulseRememberSuggestion, in message: CoachMessage) {
+        rememberDismissed[message.id, default: []].insert(suggestion)
+    }
+
     // MARK: - Topics
 
     /// Starts a fresh topic from the start screen: the conversation view and the history sent
@@ -564,7 +625,31 @@ extension CoachViewModel {
                     )
                 )
             ),
+            CoachMessage(id: UUID(), userId: user, role: "user",
+                         content: "Also, I can't do cilantro — tastes like soap to me.",
+                         messageType: "chat", createdAt: yesterday.addingTimeInterval(7200)),
+            CoachMessage(
+                id: UUID(), userId: user, role: "assistant",
+                content: "Good to know — I'll steer suggestions away from it.",
+                messageType: "chat", createdAt: yesterday.addingTimeInterval(7220),
+                payload: CoachMessagePayload(
+                    foods: nil,
+                    followUps: ["Something else?", "What's for dinner?"],
+                    recap: nil,
+                    remember: [.init(kind: .avoid, value: "Cilantro")]
+                )
+            ),
         ]
+
+        // What Pulse already knows, so the start screen's link and AboutYouView have
+        // content — and so the Cilantro card above reads as new, not a repeat.
+        PulseProfileStore.shared.setForPreview(preferences: .init(
+            allergies: ["Peanuts"],
+            allergyNote: "",
+            eatingPatterns: [.pescatarian],
+            loves: ["Greek yogurt"],
+            avoids: []
+        ))
 
         // Lets the food cards above resolve to something loggable, the same way a real
         // conversation resolves against the last 30 days of local logs.
@@ -628,10 +713,13 @@ private struct ChatResponse: Decodable {
     let foods: [CoachMessagePayload.FoodSuggestion]?
     let followUps: [String]?
     let recap: CoachMessagePayload.Recap?
+    // 0–2 things Pulse heard the user say about themselves, already deduped server-side
+    // against what's saved (supabase/functions/_shared/pulse-context.ts).
+    let remember: [PulseRememberSuggestion]?
 
     /// nil when none of the extras are present, so a save never attaches an empty payload.
     var payload: CoachMessagePayload? {
-        guard foods != nil || followUps != nil || recap != nil else { return nil }
-        return CoachMessagePayload(foods: foods, followUps: followUps, recap: recap)
+        guard foods != nil || followUps != nil || recap != nil || remember != nil else { return nil }
+        return CoachMessagePayload(foods: foods, followUps: followUps, recap: recap, remember: remember)
     }
 }
