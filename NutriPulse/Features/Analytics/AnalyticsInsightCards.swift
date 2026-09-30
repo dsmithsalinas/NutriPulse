@@ -8,52 +8,14 @@ private extension Theme.Colors {
 }
 
 
-struct WeeklyReviewCard: View {
-    let review: WeeklyReview
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            // Rule-based, from the logs; not written by Pulse.
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Your week")
-                    .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                Text("Worked out from your logs")
-                    .font(Theme.Fonts.body(13))
-                    .foregroundStyle(Theme.Colors.textSecondary)
-            }
-            reviewRow("What went well", review.wentWell, "checkmark.circle.fill", .green)
-            reviewRow("Where it got difficult", review.gotDifficult, "arrow.down.right.circle.fill", .orange)
-            reviewRow("Pattern noticed", review.pattern, "point.3.connected.trianglepath.dotted", Theme.Colors.primary)
-
-            VStack(alignment: .leading, spacing: 3) {
-                TileEyebrow("One thing to try")
-                Text(review.experiment)
-                    .font(Theme.Fonts.body(15, .semibold))
-                    .foregroundStyle(Theme.Colors.textPrimary)
-            }
-            .padding(Theme.Spacing.sm)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.Colors.primary.opacity(0.09))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .tile()
-    }
-
-    private func reviewRow(_ title: String, _ detail: String, _ icon: String, _ color: Color) -> some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: icon).foregroundStyle(color).frame(width: 18).padding(.top, 1)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(Theme.Fonts.body(12, .semibold)).foregroundStyle(Theme.Colors.textSecondary)
-                Text(detail).font(Theme.Fonts.body(15)).foregroundStyle(Theme.Colors.textPrimary)
-            }
-        }
-    }
-}
-
+// The chart inside the "How do shot days change my eating?" question. No outer `.tile()` or
+// question heading here — AnalyticsQuestionCard (AnalyticsView.swift) supplies both, along with
+// the takeaway line, so this only owns the metric picker and the chart itself.
 struct CycleAwareAnalyticsCard: View {
     let insights: [CycleDayInsight]
     let proteinGoal: Double?
+    /// The question's plain-English takeaway, read out as the chart's accessibility summary.
+    let accessibilitySummary: String
     @State private var selectedMetric: Metric = .protein
 
     private enum Metric: String, CaseIterable, Identifiable {
@@ -150,8 +112,8 @@ struct CycleAwareAnalyticsCard: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
                 Text("By day since dose")
-                    .font(Theme.Fonts.body(17, .bold, relativeTo: .headline))
-                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .font(Theme.Fonts.body(13, .semibold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
                 Spacer()
                 Picker("Metric", selection: $selectedMetric) {
                     ForEach(Metric.allCases) { metric in
@@ -224,6 +186,9 @@ struct CycleAwareAnalyticsCard: View {
                 }
                 .frame(height: 210)
                 .chartDrawIn()
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Chart of \(selectedMetric.rawValue.lowercased()) by day since dose")
+                .accessibilityValue(accessibilitySummary)
             }
 
             if let notablePoint {
@@ -236,7 +201,6 @@ struct CycleAwareAnalyticsCard: View {
                 .font(Theme.Fonts.body(11))
                 .foregroundStyle(Theme.Colors.textFaint)
         }
-        .tile()
     }
 
     private func axisLabel(_ value: Double) -> String {

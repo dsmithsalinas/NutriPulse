@@ -3881,3 +3881,250 @@ final class HoldToConfirmProgressTests: XCTestCase {
         XCTAssertTrue(state.isComplete)
     }
 }
+
+// MARK: - Analytics questions
+
+final class ProteinSourceAggregatorTests: XCTestCase {
+    private func log(_ name: String, protein: Double, loggedAt: Date = .now) -> FoodLog {
+        FoodLog(
+            id: UUID(), userId: UUID(), loggedAt: loggedAt, logDate: loggedAt.isoDateString,
+            meal: .breakfast, foodItemId: UUID(), quantity: 1,
+            caloriesSnapshot: 200, proteinGSnapshot: protein, carbsGSnapshot: 10, fatGSnapshot: 5, fiberGSnapshot: 1,
+            foodItems: FoodItemSummary(name: name, brand: nil, servingDesc: nil)
+        )
+    }
+
+    func testMergesNamesCaseInsensitivelyAndTrimmed() {
+        let sources = ProteinSourceAggregator.topSources(from: [
+            log("Greek Yogurt", protein: 20),
+            log("greek yogurt", protein: 20),
+            log(" Greek Yogurt ", protein: 20),
+        ])
+        XCTAssertEqual(sources.count, 1)
+        XCTAssertEqual(sources.first?.name, "Greek Yogurt")
+        XCTAssertEqual(sources.first?.gramsProtein, 60)
+        XCTAssertEqual(sources.first?.timesLogged, 3)
+        XCTAssertEqual(sources.first?.share, 1.0)
+    }
+
+    func testShareIsAgainstTheFullRangeTotalNotJustTheTopFive() {
+        let sources = ProteinSourceAggregator.topSources(from: [
+            log("Turkey Chili", protein: 30),
+            log("Turkey Chili", protein: 30),
+            log("Kale", protein: 10),
+        ], limit: 5)
+        XCTAssertEqual(sources.count, 2)
+        XCTAssertEqual(sources[0].name, "Turkey Chili")
+        XCTAssertEqual(sources[0].share, 60.0 / 70.0, accuracy: 0.0001)
+        XCTAssertEqual(sources[1].share, 10.0 / 70.0, accuracy: 0.0001)
+    }
+
+    func testKeepsOnlyTheTopFiveByProtein() {
+        let logs = (1...7).map { log("Food \($0)", protein: Double($0) * 10) }
+        let sources = ProteinSourceAggregator.topSources(from: logs)
+        XCTAssertEqual(sources.count, 5)
+        XCTAssertEqual(sources.first?.name, "Food 7")
+        XCTAssertEqual(sources.last?.name, "Food 3")
+    }
+
+    func testEmptyLogsProduceNoSources() {
+        XCTAssertEqual(ProteinSourceAggregator.topSources(from: []), [])
+        XCTAssertNil(ProteinSourceAggregator.headline(for: []))
+    }
+
+    func testHeadlineNamesTheTopTwoAndTheirCombinedShare() {
+        let sources = ProteinSourceAggregator.topSources(from: [
+            log("Greek Yogurt", protein: 19), log("Greek Yogurt", protein: 19),
+            log("Turkey Chili", protein: 19),
+            log("Kale", protein: 63),
+        ])
+        // Greek Yogurt 38g, Turkey Chili 19g, Kale 63g — total 120g. Top two by protein are
+        // Kale (63g) and Greek Yogurt (38g): 101/120 ≈ 84%.
+        let headline = ProteinSourceAggregator.headline(for: sources)
+        XCTAssertEqual(headline, "Kale and Greek Yogurt gave you 84% of your protein.")
+    }
+
+    func testHeadlineWithOnlyOneSourceNamesJustThatOne() {
+        let sources = ProteinSourceAggregator.topSources(from: [log("Protein Shake", protein: 25)])
+        XCTAssertEqual(ProteinSourceAggregator.headline(for: sources), "Protein Shake gave you 100% of your protein.")
+    }
+}
+
+final class GLP1DoseChangeDetectorTests: XCTestCase {
+    private func log(_ medication: String, _ doseMg: Double, daysAgo: Int) -> GLP1Log {
+        GLP1Log(
+            id: UUID(), userId: UUID(), injectedAt: Date.now.addingTimeInterval(-Double(daysAgo) * 86_400),
+            medication: medication, doseMg: doseMg, site: "Left Abdomen", nextDueAt: nil
+        )
+    }
+
+    func testNoChangeAcrossRepeatedSameDose() {
+        let logs = [log("Zepbound", 5, daysAgo: 21), log("Zepbound", 5, daysAgo: 14), log("Zepbound", 5, daysAgo: 7)]
+        XCTAssertEqual(GLP1DoseChangeDetector.changes(in: logs), [])
+    }
+
+    func testFirstLogOfAMedicationIsAStartNotAChange() {
+        let logs = [log("Zepbound", 5, daysAgo: 7)]
+        XCTAssertEqual(GLP1DoseChangeDetector.changes(in: logs), [])
+    }
+
+    func testDetectsAnIncreaseInDose() {
+        let logs = [log("Zepbound", 2.5, daysAgo: 14), log("Zepbound", 2.5, daysAgo: 7), log("Zepbound", 5, daysAgo: 0)]
+        let changes = GLP1DoseChangeDetector.changes(in: logs)
+        XCTAssertEqual(changes.count, 1)
+        XCTAssertEqual(changes.first?.doseMg, 5)
+        XCTAssertEqual(changes.first?.medication, "Zepbound")
+    }
+
+    func testTracksDosePerMedicationSoSwitchingDrugsIsNotAChange() {
+        // Switching from Ozempic 2.0mg to Zepbound 5.0mg isn't a "dose change" on a shared
+        // scale — they're different molecules — but a later Zepbound increase still is.
+        let logs = [
+            log("Ozempic", 2.0, daysAgo: 21),
+            log("Zepbound", 5.0, daysAgo: 14),
+            log("Zepbound", 7.5, daysAgo: 7),
+        ]
+        let changes = GLP1DoseChangeDetector.changes(in: logs)
+        XCTAssertEqual(changes.count, 1)
+        XCTAssertEqual(changes.first?.doseMg, 7.5)
+    }
+}
+
+final class WeightTrendEngineTests: XCTestCase {
+    private func log(_ weightKg: Double, daysAgo: Int) -> WeightLog {
+        WeightLog(id: UUID(), userId: UUID(), loggedAt: Date.now.addingTimeInterval(-Double(daysAgo) * 86_400), weightKg: weightKg, source: "manual")
+    }
+
+    func testRollingAverageSmoothsATrailingWindow() {
+        XCTAssertEqual(WeightTrendEngine.rollingAverage([100, 140, 120, 160], window: 3), [100, 120, 120, 140])
+        XCTAssertEqual(WeightTrendEngine.rollingAverage([5, 7], window: 1), [5, 7])
+        XCTAssertEqual(WeightTrendEngine.rollingAverage([], window: 3), [])
+    }
+
+    func testSmoothedSeriesSortsByDateAndSmooths() {
+        let logs = [log(82, daysAgo: 0), log(80, daysAgo: 14), log(81, daysAgo: 7)]
+        let series = WeightTrendEngine.smoothedSeries(from: logs, window: 2)
+        XCTAssertEqual(series.map(\.date), logs.sorted { $0.loggedAt < $1.loggedAt }.map(\.loggedAt))
+        XCTAssertEqual(series.map { ($0.value * 100).rounded() / 100 }, [80, 80.5, 81.5])
+    }
+
+    func testTakeawayWithNoWeighInsSaysSo() {
+        XCTAssertEqual(WeightTrendEngine.takeaway(for: [], units: .metric), "No weigh-ins logged in this range yet.")
+    }
+
+    func testTakeawayWithOneWeighInSaysNotEnoughForAChange() {
+        XCTAssertEqual(WeightTrendEngine.takeaway(for: [log(80, daysAgo: 0)], units: .metric),
+                       "Only one weigh-in logged — not enough to show a change.")
+    }
+
+    func testTakeawayBelowMinimumAdmitsItsTooFewToCallATrend() {
+        let logs = [log(82, daysAgo: 14), log(81, daysAgo: 7), log(80, daysAgo: 0)]
+        let takeaway = WeightTrendEngine.takeaway(for: logs, units: .metric)
+        XCTAssertTrue(takeaway.contains("too few weigh-ins to call a trend"), takeaway)
+        XCTAssertTrue(takeaway.contains("down"), takeaway)
+        XCTAssertTrue(takeaway.contains("3 weigh-ins"), takeaway)
+    }
+
+    func testTakeawayAtOrAboveMinimumNeverMentionsTooFew() {
+        let logs = [log(84, daysAgo: 21), log(83, daysAgo: 14), log(81.5, daysAgo: 7), log(80, daysAgo: 0)]
+        let takeaway = WeightTrendEngine.takeaway(for: logs, units: .metric)
+        XCTAssertFalse(takeaway.contains("too few"), takeaway)
+        XCTAssertTrue(takeaway.contains("down"), takeaway)
+        XCTAssertTrue(takeaway.contains("4 weigh-ins"), takeaway)
+    }
+
+    func testTakeawaySaysSteadyRatherThanUpOrDownForATinyChange() {
+        let logs = [log(80.0, daysAgo: 21), log(80.02, daysAgo: 14), log(79.98, daysAgo: 7), log(80.01, daysAgo: 0)]
+        let takeaway = WeightTrendEngine.takeaway(for: logs, units: .metric)
+        XCTAssertTrue(takeaway.contains("held steady"), takeaway)
+    }
+
+    func testTakeawayFormatsInImperialUnitsWhenSelected() {
+        // 5 kg down ≈ 11.0 lbs.
+        let logs = [log(90, daysAgo: 21), log(88, daysAgo: 14), log(86, daysAgo: 7), log(85, daysAgo: 0)]
+        let takeaway = WeightTrendEngine.takeaway(for: logs, units: .imperial)
+        XCTAssertTrue(takeaway.contains("lbs"), takeaway)
+    }
+}
+
+final class ShotDayEatingTakeawayTests: XCTestCase {
+    private func insight(day: Int, protein: Double?, samples: Int) -> CycleDayInsight {
+        CycleDayInsight(
+            cycleDay: day, sampleCount: samples, averageProteinG: protein, averageCalories: nil,
+            averageWaterMl: nil, averageWorkoutMinutes: nil, averageAppetite: nil, averageEnergy: nil,
+            averageNausea: nil, averageWeightKg: nil, nutritionSampleCount: samples, hydrationSampleCount: 0,
+            movementSampleCount: 0, checkInSampleCount: 0, weightSampleCount: 0
+        )
+    }
+
+    func testEmptyInsightsInviteMoreLogging() {
+        XCTAssertEqual(ShotDayEatingTakeaway.build(insights: []), "Log a few days around your shots to see a pattern here.")
+    }
+
+    func testNamesTheStrongestProteinDayAndSampleSize() {
+        let insights = [
+            insight(day: 0, protein: 90, samples: 3),
+            insight(day: 3, protein: 140, samples: 2),
+            insight(day: 6, protein: 100, samples: 4),
+        ]
+        XCTAssertEqual(
+            ShotDayEatingTakeaway.build(insights: insights),
+            "Protein has tended to be highest around day 3 of your dose cycle, from 9 logged days."
+        )
+    }
+
+    func testFallsBackToASampleCountWhenNoProteinDataExists() {
+        let insights = [insight(day: 0, protein: nil, samples: 2)]
+        XCTAssertEqual(ShotDayEatingTakeaway.build(insights: insights), "Based on 2 logged days across your dose cycle.")
+    }
+}
+
+final class NutritionSummaryTakeawayTests: XCTestCase {
+    func testNoLoggedDaysSaysSo() {
+        XCTAssertEqual(
+            NutritionSummaryTakeaway.build(loggedDayCount: 0, avgProtein: 0, goalProtein: 130, avgCalories: 0, goalCalories: 1600),
+            "No days logged in this range yet."
+        )
+    }
+
+    func testWithAGoalReportsPercentOfGoal() {
+        let text = NutritionSummaryTakeaway.build(loggedDayCount: 5, avgProtein: 104, goalProtein: 130, avgCalories: 1500, goalCalories: 1600)
+        XCTAssertTrue(text.contains("80% of your 130g protein goal"), text)
+        XCTAssertTrue(text.contains("1500 of 1600 kcal"), text)
+        XCTAssertTrue(text.contains("5 logged days"), text)
+    }
+
+    func testWithoutAGoalReportsRawAverages() {
+        let text = NutritionSummaryTakeaway.build(loggedDayCount: 1, avgProtein: 90, goalProtein: nil, avgCalories: 1400, goalCalories: nil)
+        XCTAssertTrue(text.contains("90g of protein a day"), text)
+        XCTAssertTrue(text.contains("1400 kcal a day"), text)
+        XCTAssertTrue(text.contains("1 logged day:"), text)
+    }
+}
+
+final class MovementTakeawayTests: XCTestCase {
+    func testNoActiveDaysSaysSo() {
+        XCTAssertEqual(MovementTakeaway.build(activeDayCount: 0, totalDayCount: 7, sessions: 0, avgMinutes: 0), "No movement logged in this range yet.")
+    }
+
+    func testReportsActiveDaysSessionsAndAverage() {
+        let text = MovementTakeaway.build(activeDayCount: 4, totalDayCount: 7, sessions: 5, avgMinutes: 32.6)
+        XCTAssertEqual(text, "You moved on 4 of 7 days — 5 sessions, averaging 33 min on active days.")
+    }
+}
+
+final class BodyFatTrendTakeawayTests: XCTestCase {
+    func testNoReadingsSaysSo() {
+        XCTAssertEqual(BodyFatTrendTakeaway.build(logs: []), "No body fat readings in this range yet.")
+    }
+
+    func testOneReadingIsTooEarlyForATrend() {
+        XCTAssertEqual(BodyFatTrendTakeaway.build(logs: [(date: .now, pct: 24.0)]), "One reading logged — too early to see a trend.")
+    }
+
+    func testReportsTheChangeAcrossReadings() {
+        let logs = [(date: Date.now.addingTimeInterval(-14 * 86_400), pct: 26.0), (date: Date.now, pct: 24.5)]
+        let text = BodyFatTrendTakeaway.build(logs: logs)
+        XCTAssertEqual(text, "Body fat is down 1.5% across 2 readings.")
+    }
+}
