@@ -49,7 +49,9 @@ struct PulseMark: View {
 // hand-off into the coach.
 struct UnderEatingNudgeCard: View {
     let nudge: DayNudge
-    let onAsk: () -> Void
+    // `nil` while Pulse can't actually take the hand-off (off, or not yet consented) — Today
+    // hides the CTA rather than show an action that would silently do nothing. See PulseGate.
+    let onAsk: (() -> Void)?
 
     // Daylight's Pulse strip: a white tile, the mark on a solid indigo square, and the hand-off
     // into the coach as its own full-width row.
@@ -70,18 +72,20 @@ struct UnderEatingNudgeCard: View {
                     .font(Theme.Fonts.body(14))
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button(action: onAsk) {
-                    HStack(spacing: 4) {
-                        Text(nudge.cta)
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 12, weight: .bold))
+                if let onAsk {
+                    Button(action: onAsk) {
+                        HStack(spacing: 4) {
+                            Text(nudge.cta)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .font(Theme.Fonts.body(14, .bold))
+                        .foregroundStyle(Theme.Colors.primaryText)
+                        .frame(minHeight: 32)
                     }
-                    .font(Theme.Fonts.body(14, .bold))
-                    .foregroundStyle(Theme.Colors.primaryText)
-                    .frame(minHeight: 32)
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
                 }
-                .buttonStyle(.plain)
-                .padding(.top, 2)
             }
 
             Spacer(minLength: 0)

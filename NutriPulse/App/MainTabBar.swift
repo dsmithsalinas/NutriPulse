@@ -31,6 +31,11 @@ extension EnvironmentValues {
 // navigation destination. The selected tab grows into a labelled white pill.
 struct MainTabBar: View {
     @Binding var selected: MainTab
+    // Pulse turned off hides the tab entirely (docs/daylight-redesign.md step 8) — there's
+    // nothing left to reach on it once it can't send anything to the AI provider. Consent (or
+    // the lack of it) doesn't affect this: PulseConsentSheet shows instead once the user lands
+    // there. Defaults true so every existing call site (and the tab-bar preview) keeps 5 tabs.
+    var showsPulse: Bool = true
     let onLog: () -> Void
 
     @Namespace private var pill
@@ -49,8 +54,10 @@ struct MainTabBar: View {
             Spacer(minLength: 0)
             logButton
             Spacer(minLength: 0)
-            tab(.pulse,    "Pulse",    .pulse)
-            Spacer(minLength: 0)
+            if showsPulse {
+                tab(.pulse, "Pulse", .pulse)
+                Spacer(minLength: 0)
+            }
             tab(.profile,  "Profile",  .symbol("person.fill"))
         }
         .padding(.horizontal, 8)

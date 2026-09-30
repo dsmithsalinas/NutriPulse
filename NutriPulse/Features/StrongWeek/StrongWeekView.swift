@@ -4,6 +4,8 @@ struct StrongWeekCard: View {
     let vm: StrongWeekViewModel
     let open: () -> Void
 
+    private var pulseActive: Bool { PulseProfileStore.shared.pulseActive }
+
     var body: some View {
         Button(action: open) {
             VStack(alignment: .leading, spacing: 10) {
@@ -20,6 +22,12 @@ struct StrongWeekCard: View {
                 } else if let outlook = vm.current?.outlook {
                     Text(outlook.observation).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
                     Text(vm.needsRefresh ? "Update with your latest data" : "Food, movement & recovery")
+                        .font(.caption.weight(.medium)).foregroundStyle(Theme.Colors.primary)
+                } else if vm.current != nil, !pulseActive {
+                    // Context is saved (the weekly plan input keeps working); there's just
+                    // nothing to write the outlook with while Pulse is off.
+                    Text("Your context is saved.").font(.subheadline).foregroundStyle(.secondary)
+                    Text("Turn on Pulse in Profile for a written outlook.")
                         .font(.caption.weight(.medium)).foregroundStyle(Theme.Colors.primary)
                 } else {
                     Text(vm.previousNeedsConfirmation
@@ -46,6 +54,7 @@ struct StrongWeekView: View {
     @State private var showAdjustments = false
     @State private var showFoodPreferences = false
     @State private var adjustments: Set<WeekAdjustment> = []
+    private var pulseActive: Bool { PulseProfileStore.shared.pulseActive }
 
     var body: some View {
         NavigationStack {
@@ -88,18 +97,30 @@ struct StrongWeekView: View {
                             StrongWeekFeedbackView(week: week, readOnly: isPreview)
                                 .id("\(week.id)-\(generatedAt.timeIntervalSince1970)")
                         }
-                        Button("Adjust this for me") {
-                            adjustments = Set(vm.current?.adjustments ?? [])
-                            showAdjustments = true
-                        }.buttonStyle(.borderedProminent)
+                        if pulseActive {
+                            Button("Adjust this for me") {
+                                adjustments = Set(vm.current?.adjustments ?? [])
+                                showAdjustments = true
+                            }.buttonStyle(.borderedProminent)
+                        }
                         Button("Update my week") { vm.beginEditing() }.buttonStyle(.borderedProminent)
-                        Button("Refresh with latest data") { Task { await vm.generate(profile: profile, updateContext: false) } }
-                        Text("Your outlook stays here until you refresh it. New logs and check-ins help Pulse adjust it.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else {
+                        if pulseActive {
+                            Button("Refresh with latest data") { Task { await vm.generate(profile: profile, updateContext: false) } }
+                            Text("Your outlook stays here until you refresh it. New logs and check-ins help Pulse adjust it.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Text("Turn on Pulse in Profile to refresh this outlook.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else if pulseActive {
                         Text("Your context is saved. Let's finish your outlook.").font(.headline)
                         Button("Generate outlook") { Task { await vm.generate(profile: profile, updateContext: false) } }
                             .buttonStyle(.borderedProminent)
+                        Button("Edit what I shared") { vm.beginEditing() }
+                    } else {
+                        Text("Your context is saved.").font(.headline)
+                        Text("Turn on Pulse in Profile for a written outlook.")
+                            .font(.subheadline).foregroundStyle(.secondary)
                         Button("Edit what I shared") { vm.beginEditing() }
                     }
                     Button { showFoodPreferences = true } label: {
@@ -213,11 +234,17 @@ struct StrongWeekView: View {
             }
             Text("For a tailored week, this outlook replaces generic coaching nudges. Your shot reminders keep their own settings.")
                 .font(.caption).foregroundStyle(.secondary)
-            Button("Build my outlook") { Task { await vm.generate(profile: profile, updateContext: true) } }
+            if !pulseActive {
+                Text("Turn on Pulse in Profile for a written outlook from this. Your answers are still saved either way.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Button(pulseActive ? "Build my outlook" : "Save this week's plan") {
+                Task { await vm.generate(profile: profile, updateContext: true) }
+            }
                 .buttonStyle(.borderedProminent)
             .disabled(vm.previousNeedsConfirmation && !vm.didConfirmPrevious)
             if vm.current == nil && !vm.previousNeedsConfirmation {
-                Button("Use my data without a check-in") {
+                Button(pulseActive ? "Use my data without a check-in" : "Save without a check-in") {
                     vm.draft = .init()
                     Task { await vm.generate(profile: profile, updateContext: true) }
                 }

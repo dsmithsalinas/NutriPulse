@@ -14,12 +14,18 @@ struct ProfileView: View {
     @State private var showClearHistoryConfirm = false
     @State private var showDeleteAccountConfirm = false
     @State private var showGLP1Tracker = false
-    @State private var showFoodPreferences = false
     @State private var isSeedingHealth = false
     @State private var isReconnectingHealth = false
     @State private var showHealthPermissionsHelp = false
     @State private var showSmartNotificationExplainer = false
+    @State private var showPulseOffConfirm = false
+    @State private var showAIDataSharingInfo = false
+    @State private var isSavingPulseSetting = false
     @Environment(\.scenePhase) private var scenePhase
+    // The device-cached Pulse settings singleton (see PulseProfileStore). Read directly, like
+    // HealthKitManager.shared above — Observation tracks the read regardless of how the
+    // reference was obtained.
+    private var pulseStore: PulseProfileStore { PulseProfileStore.shared }
 
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
 
@@ -51,6 +57,9 @@ struct ProfileView: View {
                         healthQuickTile
                     }
                     .popIn(order: 2)
+
+                    pulseTile
+                        .popIn(order: 3)
 
                     notificationsTile
                         .popIn(order: 3)
@@ -145,7 +154,6 @@ struct ProfileView: View {
             .sheet(isPresented: $vm.showLogInjection) {
                 LogInjectionSheet(vm: vm)
             }
-            .sheet(isPresented: $showFoodPreferences) { FoodAccessPreferencesView() }
             .sheet(isPresented: $showGLP1Tracker) {
                 GLP1TrackerView()
             }
@@ -662,14 +670,91 @@ struct ProfileView: View {
         }
     }
 
+    // MARK: - Pulse (on/off, on Today, what it knows, AI data sharing)
+
+    private var pulseTile: some View {
+        SettingsTile(
+            eyebrow: "Pulse",
+            footer: "Pulse is Footing's coach: a tab of its own, a nudge on Today, and the written Strong Week outlook. Turning it off stops all three; Talk to Log's food parsing is separate and keeps working."
+        ) {
+            toggleRow(
+                icon: "waveform.path.ecg",
+                title: "Pulse",
+                subtitle: pulseStore.pulseEnabled ? "On" : "Off",
+                isOn: Binding(
+                    get: { pulseStore.pulseEnabled },
+                    set: { newValue in
+                        if newValue {
+                            Task { await savePulseSetting { try await pulseStore.setPulseEnabled(true) } }
+                        } else {
+                            showPulseOffConfirm = true
+                        }
+                    }
+                ),
+                disabled: isSavingPulseSetting
+            )
+            hairline
+            toggleRow(
+                icon: "sun.max",
+                title: "Pulse on Today",
+                subtitle: "Shows Pulse's nudge card on Today",
+                isOn: Binding(
+                    get: { pulseStore.pulseOnToday },
+                    set: { newValue in
+                        Task { await savePulseSetting { try await pulseStore.setPulseOnToday(newValue) } }
+                    }
+                ),
+                disabled: isSavingPulseSetting || !pulseStore.pulseEnabled
+            )
+            hairline
+            navRow(icon: "person.text.rectangle", title: "What Pulse knows") {
+                AboutYouView()
+            }
+            hairline
+            actionRow(icon: "hand.raised", title: "AI data sharing", showChevron: true) {
+                showAIDataSharingInfo = true
+            }
+        }
+        .confirmationDialog(
+            "Turn off Pulse?",
+            isPresented: $showPulseOffConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Turn Off Pulse", role: .destructive) {
+                Task { await savePulseSetting { try await pulseStore.setPulseEnabled(false) } }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This turns off the Pulse tab, Pulse on Today, the written Strong Week outlook, and coaching notifications that come from Pulse. You can turn it back on any time.")
+        }
+        .sheet(isPresented: $showAIDataSharingInfo) {
+            if pulseStore.aiConsentAt != nil {
+                PulseConsentSheet()
+            } else {
+                PulseConsentSheet(onAgree: {
+                    await savePulseSetting { try await pulseStore.recordConsent(agreed: true) }
+                    showAIDataSharingInfo = false
+                })
+            }
+        }
+    }
+
+    /// Optimistic saves already live in PulseProfileStore; this just surfaces a failure the
+    /// same way every other Profile toggle does.
+    private func savePulseSetting(_ save: () async throws -> Void) async {
+        isSavingPulseSetting = true
+        defer { isSavingPulseSetting = false }
+        do {
+            try await save()
+        } catch {
+            vm.errorMessage = "Couldn't update Pulse. Check your connection and try again."
+        }
+    }
+
     // MARK: - Pulse coach
 
     private var coachTile: some View {
         SettingsTile(eyebrow: "Pulse coach") {
-            actionRow(icon: "fork.knife", title: "Food preferences", showChevron: true) {
-                showFoodPreferences = true
-            }
-            hairline
             actionRow(icon: "trash", title: "Clear Chat History", tint: Theme.Colors.danger) {
                 showClearHistoryConfirm = true
             }

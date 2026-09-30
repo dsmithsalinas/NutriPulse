@@ -40,6 +40,13 @@ struct TodayView: View {
     private var usualWaterMl: Double {
         storedUsualWaterMl > 0 ? storedUsualWaterMl : (waterUnit.quickAdds.first?.ml ?? 250)
     }
+    // Gates Today's Pulse-branded priority cards (see PulseGate). Read directly off the
+    // device-cached singleton, like SyncEngine.shared.statusMessage above — Observation tracks
+    // the read regardless of how the reference was obtained.
+    private var pulseOnToday: Bool { PulseGate.showsPulseStripOnToday(pulseOnToday: PulseProfileStore.shared.pulseOnToday) }
+    private var pulseActive: Bool {
+        PulseGate.isActive(pulseEnabled: PulseProfileStore.shared.pulseEnabled, aiConsentAt: PulseProfileStore.shared.aiConsentAt)
+    }
 
     // Health permissions live in the Health app (Sharing → Apps), not in this app's
     // Settings page, so openSettingsURLString would drop the user somewhere with no
@@ -384,6 +391,12 @@ struct TodayView: View {
             .onReceive(NotificationCenter.default.publisher(for: .smartCoachingSettingsChanged)) { _ in
                 Task { await vm.refreshSmartNotifications() }
             }
+            // Pulse toggled off cancels any pending smart notification immediately (see
+            // NotificationManager); toggled back on, re-evaluate now rather than waiting for
+            // the next natural trigger (a workout finishing, etc.).
+            .onReceive(NotificationCenter.default.publisher(for: .pulseProfileChanged)) { _ in
+                Task { await vm.refreshSmartNotifications() }
+            }
         }
     }
 
@@ -498,6 +511,8 @@ struct TodayView: View {
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
         } else if let recovery = vm.recoveryOpportunity {
+            // Not Pulse: a general recovery card, and "Close Xg gap" opens the local protein
+            // rescue sheet rather than handing anything to the coach. Nothing here to gate.
             RecoveryCoachCard(
                 opportunity: recovery,
                 onCloseGap: {
@@ -510,15 +525,15 @@ struct TodayView: View {
                 }
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
-        } else if let preparation = vm.lowAppetitePreparation,
+        } else if pulseOnToday, let preparation = vm.lowAppetitePreparation,
                   !LowAppetitePreparationStore.isCompleted(preparation) {
             LowAppetitePreparationCard(
                 preparation: preparation,
-                onPlan: {
+                onPlan: pulseActive ? {
                     appState.askPulse(
                         "Tomorrow is cycle day \(preparation.targetCycleDay), which has usually been a lower-appetite day for me. Help me choose one small protein-dense backup to prepare today."
                     )
-                },
+                } : nil,
                 onPrepared: {
                     LowAppetitePreparationStore.markCompleted(preparation)
                     completedPreparation = LowAppetitePreparationStore.signature(for: preparation)
@@ -527,6 +542,7 @@ struct TodayView: View {
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
         } else if let suggestion = vm.retargetSuggestion {
+            // Not Pulse: adjusts the daily target directly, no hand-off to the coach.
             RetargetCard(
                 suggestion: suggestion,
                 units: units,
@@ -534,10 +550,8 @@ struct TodayView: View {
                 onKeep: { vm.dismissRetarget() }
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
-        } else if let nudge = vm.nudge {
-            UnderEatingNudgeCard(nudge: nudge) {
-                appState.askPulse(nudge.prompt)
-            }
+        } else if pulseOnToday, let nudge = vm.nudge {
+            UnderEatingNudgeCard(nudge: nudge, onAsk: pulseActive ? { appState.askPulse(nudge.prompt) } : nil)
             .transition(.opacity.combined(with: .move(edge: .top)))
         } else if doseCardDismissedDay != Date.now.isoDateString, let log = vm.latestGLP1,
                   vm.injectionLoggedToday {

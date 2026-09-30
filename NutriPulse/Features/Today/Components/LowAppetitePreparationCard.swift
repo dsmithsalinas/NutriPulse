@@ -2,7 +2,10 @@ import SwiftUI
 
 struct LowAppetitePreparationCard: View {
     let preparation: LowAppetitePreparation
-    let onPlan: () -> Void
+    // `nil` while Pulse can't take the hand-off (off, or not yet consented) — hides the "Plan a
+    // backup with Pulse" button and keeps "I'm prepared", which never leaves the device. See
+    // PulseGate.
+    let onPlan: (() -> Void)?
     let onPrepared: () -> Void
 
     var body: some View {
@@ -37,10 +40,12 @@ struct LowAppetitePreparationCard: View {
                 .font(.subheadline.weight(.medium))
 
             VStack(spacing: Theme.Spacing.xs) {
-                Button("Plan a backup with Pulse", action: onPlan)
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.Colors.primary)
-                    .frame(maxWidth: .infinity)
+                if let onPlan {
+                    Button("Plan a backup with Pulse", action: onPlan)
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.Colors.primary)
+                        .frame(maxWidth: .infinity)
+                }
 
                 Button("I'm prepared", systemImage: "checkmark.circle", action: onPrepared)
                     .buttonStyle(.bordered)
