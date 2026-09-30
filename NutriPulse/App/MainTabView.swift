@@ -26,19 +26,24 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             TodayView(vm: todayVM, isFrontmost: todayIsFrontmost)
                 .tag(MainTab.today)
+                .toolbar(.hidden, for: .tabBar)
 
             ProgressDashboardView()
                 .tag(MainTab.progress)
+                .toolbar(.hidden, for: .tabBar)
 
             CoachView(isActive: selectedTab == .pulse)
                 .tag(MainTab.pulse)
+                .toolbar(.hidden, for: .tabBar)
 
             ProfileView()
                 .tag(MainTab.profile)
+                .toolbar(.hidden, for: .tabBar)
         }
         // Hide the native bar and pin our custom one as a bottom safe-area inset so tab
-        // content is never obscured and each tab keeps its own state.
-        .toolbar(.hidden, for: .tabBar)
+        // content is never obscured and each tab keeps its own state. The hide has to be on
+        // each tab's content: on iOS 26, hiding it on the TabView alone leaves the Liquid Glass
+        // bar drawn behind our floating one.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             MainTabBar(selected: $selectedTab, onLog: {
                 loggerInitialTab = .talk

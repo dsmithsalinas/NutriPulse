@@ -66,6 +66,16 @@ targets:
         SUPABASE_URL: "$(SUPABASE_URL)"
         SUPABASE_ANON_KEY: "$(SUPABASE_ANON_KEY)"
         TELEMETRYDECK_APP_ID: "$(TELEMETRYDECK_APP_ID)"
+        # Daylight redesign type: Bricolage Grotesque, 96pt display cut (display, numbers) and
+        # Figtree (body). SIL OFL — the licenses sit beside the files in Resources/Fonts.
+        UIAppFonts:
+          - BricolageGrotesque-Medium.ttf
+          - BricolageGrotesque-Bold.ttf
+          - BricolageGrotesque-ExtraBold.ttf
+          - Figtree-Regular.ttf
+          - Figtree-Medium.ttf
+          - Figtree-SemiBold.ttf
+          - Figtree-Bold.ttf
     entitlements:
       path: NutriPulse/NutriPulse.entitlements
       properties:

@@ -10,12 +10,11 @@ struct CoachView: View {
     @FocusState private var isInputFocused: Bool
     @State private var keyboardVisible = false
 
-    // With the keyboard down, only the raised Log (+) juts into content, so a modest gap does
-    // it. With the keyboard up, SwiftUI stops insetting content by the tab bar entirely and the
-    // bar lands right on top of the composer — hiding the text and the keyboard's Done button —
-    // so the whole bar height has to be cleared by hand. Measured, so Dynamic Type still works.
+    // The Daylight tab bar floats over content, and SwiftUI doesn't inset this pinned composer
+    // by it (with the keyboard up it also rides the keyboard and lands on the composer), so the
+    // whole measured bar height is cleared by hand in both states.
     private var composerClearance: CGFloat {
-        keyboardVisible ? max(tabBarHeight, 96) : 48
+        max(tabBarHeight, 76) + (keyboardVisible ? 0 : 4)
     }
 
     var body: some View {
