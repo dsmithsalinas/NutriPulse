@@ -20,23 +20,29 @@ struct ManualEntryView: View {
 
                 // Servings stepper — custom label so we can show the current value inline
                 HStack {
-                    Text("Servings")
+                    Text("Servings").font(Theme.Fonts.body(16))
                     Spacer()
                     Text(vm.quantity.formatted())
+                        .font(Theme.Fonts.body(16))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                     Stepper("", value: $vm.quantity, in: 0.25...20, step: 0.25)
                         .labelsHidden()
                 }
-            } header: { Text("Log details") }
+            } header: { DaylightSectionHeader("Log details") }
+                .daylightSection()
 
             Section {
                 TextField("Food name", text: $vm.name)
+                    .font(Theme.Fonts.body(16))
                     .autocorrectionDisabled()
                 TextField("Brand (optional)", text: $vm.brand)
+                    .font(Theme.Fonts.body(16))
                     .autocorrectionDisabled()
                 TextField("Serving size", text: $vm.servingDesc)
-            } header: { Text("Food") }
+                    .font(Theme.Fonts.body(16))
+            } header: { DaylightSectionHeader("Food") }
+                .daylightSection()
 
             Section {
                 MacroField(label: "Calories",  value: $vm.calories,  unit: "kcal")
@@ -44,10 +50,10 @@ struct ManualEntryView: View {
                 MacroField(label: "Carbs",     value: $vm.carbsG,    unit: "g")
                 MacroField(label: "Fat",       value: $vm.fatG,      unit: "g")
                 MacroField(label: "Fiber",     value: $vm.fiberG,    unit: "g")
-            } header: { Text("Nutrition per serving") }
+            } header: { DaylightSectionHeader("Nutrition per serving") }
+                .daylightSection()
         }
-        .scrollContentBackground(.hidden)
-        .listRowBackground(Theme.Colors.surfaceCard)
+        .daylightForm()
         .safeAreaInset(edge: .bottom) {
             logButton
         }
@@ -91,8 +97,8 @@ private struct MacroField: View {
     var body: some View {
         HStack {
             Text(label)
-                .fontWeight(accent ? .semibold : .regular)
-                .foregroundStyle(accent ? Theme.Colors.primary : .primary)
+                .font(Theme.Fonts.body(16, accent ? .semibold : .regular))
+                .foregroundStyle(accent ? Theme.Colors.primaryText : Theme.Colors.textPrimary)
             Spacer()
             // Bound to a String, not a Double. TextField(value:format:) commits to its
             // binding only on submit or focus loss, and .decimalPad has no return key —
@@ -103,6 +109,7 @@ private struct MacroField: View {
             // Parsing per keystroke keeps the ViewModel in sync, which also lets `canLog`
             // enable the Log button the moment calories are entered. See DecimalInput.
             TextField("0", text: $text)
+                .font(Theme.Fonts.body(16))
                 .multilineTextAlignment(.trailing)
                 .keyboardType(.decimalPad)
                 .frame(width: 80)
@@ -112,7 +119,8 @@ private struct MacroField: View {
                     value = DecimalInput.value(from: cleaned)
                 }
             Text(unit)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(16))
+                .foregroundStyle(Theme.Colors.textSecondary)
                 .frame(width: 36, alignment: .leading)
         }
         .onAppear { text = DecimalInput.text(from: value) }

@@ -314,7 +314,7 @@ struct FoodDetailSheet: View {
                         vm.wantsToFavorite.toggle()
                     } label: {
                         Image(systemName: vm.wantsToFavorite ? "star.fill" : "star")
-                            .foregroundStyle(vm.wantsToFavorite ? Color.yellow : Color.primary)
+                            .foregroundStyle(vm.wantsToFavorite ? Color.yellow : Theme.Colors.textPrimary)
                     }
                     .accessibilityLabel(vm.wantsToFavorite ? "Remove from favorites" : "Add \(result.name) to favorites")
                 }
@@ -334,16 +334,20 @@ struct FoodDetailSheet: View {
     }
 
     private var loadFailedView: some View {
-        ContentUnavailableView {
-            Label("Couldn't load this food", systemImage: "wifi.exclamationmark")
-        } description: {
-            Text(vm.detailError ?? "Something went wrong.")
-        } actions: {
+        VStack(spacing: 12) {
+            BrandedEmptyState(
+                icon: "wifi.exclamationmark",
+                title: "Couldn't load this food",
+                message: vm.detailError ?? "Something went wrong."
+            )
             Button("Try Again") {
                 Task { await vm.loadDetail(for: result) }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.brandPrimary)
+            .padding(.horizontal, Theme.Spacing.xl)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.Colors.ground.ignoresSafeArea())
     }
 
     @ViewBuilder
@@ -351,14 +355,17 @@ struct FoodDetailSheet: View {
         Form {
             // ── Serving picker ────────────────────────────────────────────
             if detail.servings.count > 1 {
-                Section("Serving size") {
+                Section {
                     Picker("Serving", selection: $vm.selectedServing) {
                         ForEach(detail.servings) { serving in
                             Text(serving.description).tag(Optional(serving))
                         }
                     }
                     .pickerStyle(.menu)
+                } header: {
+                    DaylightSectionHeader("Serving size")
                 }
+                .daylightSection()
             }
 
             // ── Meal + quantity ───────────────────────────────────────────
@@ -369,25 +376,30 @@ struct FoodDetailSheet: View {
                     }
                 }
                 HStack {
-                    Text("Servings")
+                    Text("Servings").font(Theme.Fonts.body(16))
                     Spacer()
                     Text(vm.quantity.formatted())
+                        .font(Theme.Fonts.body(16))
                         .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Colors.textSecondary)
                     Stepper("", value: $vm.quantity, in: 0.25...20, step: 0.25)
                         .labelsHidden()
                 }
             }
+            .daylightSection()
 
             // ── Macro preview ─────────────────────────────────────────────
             if let preview = vm.macroPreview {
-                Section("Nutrition (\(vm.quantity.formatted()) × \(vm.selectedServing?.description ?? ""))") {
+                Section {
                     MacroPreviewRow(label: "Calories",  value: preview.calories,  unit: "kcal", color: Theme.NutrientColor.calories)
                     MacroPreviewRow(label: "Protein",   value: preview.proteinG,  unit: "g",    color: Theme.NutrientColor.protein)
                     MacroPreviewRow(label: "Carbs",     value: preview.carbsG,    unit: "g",    color: Theme.NutrientColor.carbs)
                     MacroPreviewRow(label: "Fat",       value: preview.fatG,      unit: "g",    color: Theme.NutrientColor.fat)
                     MacroPreviewRow(label: "Fiber",     value: preview.fiberG,    unit: "g",    color: Theme.NutrientColor.fiber)
+                } header: {
+                    DaylightSectionHeader("Nutrition (\(vm.quantity.formatted()) × \(vm.selectedServing?.description ?? ""))")
                 }
+                .daylightSection()
             }
 
             // FatSecret attribution — this sheet displays their nutrition data (from search
@@ -398,8 +410,7 @@ struct FoodDetailSheet: View {
                     .listRowBackground(Color.clear)
             }
         }
-        .scrollContentBackground(.hidden)
-        .listRowBackground(Theme.Colors.surfaceCard)
+        .daylightForm()
         .safeAreaInset(edge: .bottom) { logButton }
     }
 
@@ -441,9 +452,12 @@ struct MacroPreviewRow: View {
         HStack {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(label)
+                .font(Theme.Fonts.body(15))
+                .foregroundStyle(Theme.Colors.textPrimary)
             Spacer()
             Text(String(format: "%.1f %@", value, unit))
-                .fontWeight(.semibold)
+                .font(Theme.Fonts.body(15, .semibold))
+                .foregroundStyle(Theme.Colors.textPrimary)
                 .monospacedDigit()
         }
     }

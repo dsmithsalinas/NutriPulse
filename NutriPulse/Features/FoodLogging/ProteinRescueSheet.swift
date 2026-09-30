@@ -31,9 +31,10 @@ struct ProteinRescueSheet: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("Close the floor")
-                            .font(Theme.Typography.title)
+                            .font(Theme.Fonts.display(24, .bold, relativeTo: .title))
+                            .foregroundStyle(Theme.Colors.textPrimary)
                         Text("You're about \(proteinGap)g short. These use foods you already trust and log the whole option in one tap.")
-                            .font(.subheadline)
+                            .font(Theme.Fonts.body(14))
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }
 
@@ -56,10 +57,12 @@ struct ProteinRescueSheet: View {
                         dismiss()
                         onBuildMyOwn()
                     }
-                    .buttonStyle(.bordered)
-                    .frame(maxWidth: .infinity)
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .padding(Theme.Spacing.md)
+                .padding(Theme.Spacing.page)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationTitle("Protein rescue")
@@ -70,6 +73,7 @@ struct ProteinRescueSheet: View {
                 }
             }
         }
+        .tint(Theme.Colors.primary)
         .task { await loadFavorites() }
         .alert("Couldn't log that", isPresented: Binding(
             get: { errorMessage != nil },
@@ -88,24 +92,26 @@ struct ProteinRescueSheet: View {
             HStack(spacing: Theme.Spacing.sm) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(option.title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(Theme.Fonts.body(15, .bold))
+                        .foregroundStyle(Theme.Colors.textPrimary)
                         .multilineTextAlignment(.leading)
                     Text("\(option.proteinG)g protein · \(option.calories) kcal")
-                        .font(.caption)
+                        .font(Theme.Fonts.body(12))
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
                 Spacer()
                 if loggingOptionID == option.id {
                     ProgressView()
                 } else {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(Theme.Colors.primary)
+                    Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
-            .padding(Theme.Spacing.md)
             .contentShape(Rectangle())
-            .card()
+            .tile(radius: Theme.Radius.row)
         }
         .buttonStyle(.plain)
         .disabled(loggingOptionID != nil)
