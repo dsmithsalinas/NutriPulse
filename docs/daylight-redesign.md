@@ -30,8 +30,9 @@ Open it from claude.ai, or with `/artifacts` in Claude Code. The **C — Dayligh
 
 ## Things the redesign needs from the backend
 
-- Structured Pulse replies (one-tap cards, the recap card) need `coach-chat` to return labelled fields alongside the text, via structured outputs. The app renders the charts itself from its own data; Pulse only writes the words.
-- The Strong Week outlook still uses a forced tool call on `claude-sonnet-4-6`. Moving it to Sonnet 5.5 means switching it to structured outputs (see `docs/your-strong-week.md`).
+- **Built (Sep 29, `daylight/pulse-structured`, not deployed):** `coach-chat` asks for structured outputs. Chat returns `{reply, foods?, followUps?}` and the weekly recap `{reply, recap?, followUps?}`; `reply` always carries the full text, so older app versions are unaffected. Schemas and the clamping parser live in `_shared/pulse-context.ts`. The app renders the charts itself from its own data; Pulse only writes the words.
+- **Built:** the Strong Week outlook runs on Sonnet 5.5 with the same fields in a JSON schema instead of the forced tool call (see `docs/your-strong-week.md`).
+- **To ship, in order:** apply `20260929200000_coach_message_payload.sql` (nullable `coach_messages.payload`), deploy `coach-chat`, then redeploy `pulse-eval` (the provider and prompts changed). The app saves cards in `payload` and retries without it if the column is missing, so the order is forgiving.
 - **Decided (Sep 29):** Your Strong Week is the only thing that goes out on Mondays (the 8 AM reminder and the Today card). Pulse never sends a weekly summary on its own; it shows a **Monday Recap** pill on the start screen, and the recap is generated only when the user taps it.
 
 ## Code changes the Pulse start screen needs
