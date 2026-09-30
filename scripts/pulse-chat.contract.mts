@@ -9,11 +9,15 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf
 const fullSource = read('../supabase/functions/_shared/pulse-context.ts') + '\n' +
   read('../supabase/functions/_shared/pulse-provider.ts') + '\n' + read('../supabase/functions/coach-chat/index.ts');
 
-async function send(body: Record<string, unknown>, modelResponse: unknown, env: Record<string, string> = {}) {
+async function send(body: Record<string, unknown>, modelResponse: unknown, env: Record<string, string> = {}, settings?: Record<string, unknown> | null) {
   let handler: any, modelRequest: any;
   runInNewContext(stripTypeScriptTypes(fullSource), {
     Deno: { env: { get: (key: string) => key in env ? env[key] : key === 'ANTHROPIC_API_KEY' ? 'test-key' : undefined }, serve: (value: any) => { handler = value; } },
-    createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'test-user' } } }) } }),
+    createClient: () => ({
+      auth: { getUser: async () => ({ data: { user: { id: 'test-user' } } }) },
+      // pulse_profiles lookup; undefined settings = no from() at all (older stub), like a missing table.
+      ...(settings === undefined ? {} : { from: () => ({ select: () => ({ maybeSingle: async () => ({ data: settings }) }) }) }),
+    }),
     checkRateLimit: async () => true, corsHeaders: {}, Request, Response, AbortSignal, performance,
     fetch: async (_url: string, options: any) => { modelRequest = JSON.parse(options.body); return new Response(JSON.stringify(modelResponse), { status: 200 }); },
     console: { error: () => {} },
@@ -48,7 +52,7 @@ test('PULSE_MODEL overrides chat but never the Strong Week outlook', async () =>
 test('every Claude request asks for the structured reply for its message type', async () => {
   const chat = await send({ message: 'Hi', messageType: 'chat' }, reply('Hello.'));
   assert.equal(chat.modelRequest.output_config.format.type, 'json_schema');
-  assert.deepEqual(chat.modelRequest.output_config.format.schema.required, ['reply', 'foods', 'followUps']);
+  assert.deepEqual(chat.modelRequest.output_config.format.schema.required, ['reply', 'foods', 'followUps', 'remember']);
   assert.equal(chat.modelRequest.tools, undefined);
   const recap = await send({ message: 'Weekly recap for last week.', messageType: 'weekly_summary' }, reply('Recap.'));
   assert.deepEqual(recap.modelRequest.output_config.format.schema.required, ['reply', 'recap', 'followUps']);
@@ -136,4 +140,46 @@ test('weekly summary context reaches the prompt through the allowlist', async ()
   assert.ok(dynamic.includes('Sep 21 – 27'));
   assert.ok(!dynamic.includes('drop me'));
   assert.ok(!dynamic.includes('injected'));
+});
+
+const about = { aboutYou: { allergies: ['Peanuts', 'Shellfish'], avoids: ['Salmon'], loves: ['Greek yogurt'], eatingPatterns: ['pescatarian', 'carnivore'], rogue: 'x' } };
+
+test('what Pulse knows reaches the prompt through the allowlist, with its rules', async () => {
+  const { modelRequest } = await send({ message: 'Hi', messageType: 'chat', context: about }, reply('Hi.'));
+  const dynamic = modelRequest.system[1].text;
+  assert.ok(dynamic.includes('Shellfish'));
+  assert.ok(dynamic.includes('pescatarian'));
+  assert.ok(!dynamic.includes('carnivore'));
+  assert.ok(!dynamic.includes('rogue'));
+  assert.ok(modelRequest.system[0].text.includes('ABOUT THE USER'));
+});
+
+test('food cards that name an allergy or an avoided food are dropped', async () => {
+  const { result } = await send({ message: 'Snack?', messageType: 'chat', context: about }, structured({
+    reply: 'A few ideas.', followUps: [], remember: [],
+    foods: [{ name: 'Peanut butter toast', why: '8g' }, { name: 'Salmon bowl', why: '42g' }, { name: 'Shrimp salad', why: '25g' },
+      { name: 'Greek yogurt', why: '20g' }],
+  }));
+  // Shrimp isn't caught by the word filter; that one rests on the prompt rule. Peanut and salmon are.
+  assert.deepEqual((await result.json()).foods.map((f: any) => f.name), ['Shrimp salad', 'Greek yogurt']);
+});
+
+test('remember offers only new, valid facts, at most two', async () => {
+  const { result } = await send({ message: 'I hate cilantro and I am allergic to shellfish', messageType: 'chat', context: about }, structured({
+    reply: 'Noted.', foods: [], followUps: [],
+    remember: [{ kind: 'avoid', value: 'Cilantro' }, { kind: 'allergy', value: 'shellfish' }, { kind: 'diet', value: 'Keto' },
+      { kind: 'love', value: '  ' }, { kind: 'love', value: 'Cottage cheese' }, { kind: 'avoid', value: 'Olives' }],
+  }));
+  assert.deepEqual((await result.json()).remember, [{ kind: 'avoid', value: 'Cilantro' }, { kind: 'love', value: 'Cottage cheese' }]);
+});
+
+test('Pulse off refuses before any model call; on, unset, or unreadable settings go through', async () => {
+  const off = await send({ message: 'Hi', messageType: 'chat' }, reply('Hi.'), {}, { pulse_enabled: false });
+  assert.equal(off.result.status, 403);
+  assert.equal((await off.result.json()).code, 'pulse_off');
+  assert.equal(off.modelRequest, undefined);
+  for (const settings of [{ pulse_enabled: true }, null, undefined]) {
+    const on = await send({ message: 'Hi', messageType: 'chat' }, reply('Hi.'), {}, settings);
+    assert.equal(on.result.status, 200);
+  }
 });

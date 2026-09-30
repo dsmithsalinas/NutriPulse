@@ -1,4 +1,4 @@
-import { type PulseReply, parsePulseReply, parseStrongWeekFields, parseStrongWeekOutlook, pulseSchemaFor, strongWeekTool, type SystemBlock } from './pulse-context.ts'
+import { type PulseGuard, type PulseReply, parsePulseReply, parseStrongWeekFields, parseStrongWeekOutlook, pulseSchemaFor, strongWeekTool, type SystemBlock } from './pulse-context.ts'
 
 export type Provider = 'claude' | 'gpt'
 export function selectProvider(value?: string): Provider {
@@ -27,6 +27,7 @@ export const REFUSAL_REPLY = "That one's outside what I can help with here — y
 export async function generatePulse(options: {
   provider: Provider; apiKey: string; systemPrompt: string | SystemBlock[];
   messages: { role: string; content: string }[]; messageType: string; model?: string;
+  guard?: PulseGuard;
 }, transport: typeof fetch = fetch) {
   const { provider, apiKey, systemPrompt, messages, messageType } = options
   if (!apiKey) throw new Error('Missing provider key')
@@ -84,7 +85,7 @@ export async function generatePulse(options: {
     output = { outlook }
   } else {
     if (provider === 'claude' ? data.stop_reason !== 'end_turn' : data.status !== 'completed') throw new Error('Incomplete model response')
-    const parsed = parsePulseReply(textOf(), messageType)
+    const parsed = parsePulseReply(textOf(), messageType, options.guard)
     if (!parsed) throw new Error('Empty model response')
     output = parsed
   }

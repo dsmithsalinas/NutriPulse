@@ -1,4 +1,4 @@
-import { sanitizeContext, buildSystemBlocks } from '../_shared/pulse-context.ts'
+import { sanitizeContext, buildSystemBlocks, guardFrom } from '../_shared/pulse-context.ts'
 import { generatePulse, selectProvider } from '../_shared/pulse-provider.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
@@ -62,6 +62,19 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Pulse off is an account setting (pulse_profiles), so it holds on every device and for app
+    // versions that predate the switch. Read with the caller's own JWT under RLS. If the row or
+    // table isn't there, nothing was turned off; don't block on a lookup failure either.
+    try {
+      const { data: settings } = await supabase.from('pulse_profiles').select('pulse_enabled').maybeSingle()
+      if (settings?.pulse_enabled === false) {
+        return new Response(JSON.stringify({ error: 'Pulse is turned off. You can turn it back on in Profile.', code: 'pulse_off' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    } catch { /* lookup unavailable: fall through */ }
+
     const { message, messageType = 'chat', history = [], context } = await req.json()
 
     if (typeof message !== 'string' || message.trim() === '') {
@@ -114,7 +127,8 @@ Deno.serve(async (req) => {
     const { conversation, recentPulseMessages } = splitHistory(cleanHistory)
 
     // Rebuild the context from a strict allowlist before it ever reaches the prompt.
-    const systemPrompt = buildSystemBlocks(sanitizeContext(context), messageType, recentPulseMessages)
+    const safeContext = sanitizeContext(context)
+    const systemPrompt = buildSystemBlocks(safeContext, messageType, recentPulseMessages)
 
     const apiMessages = [
       ...conversation.map((m) => ({ role: m.role, content: m.content })),
@@ -126,7 +140,7 @@ Deno.serve(async (req) => {
     const model = provider === 'gpt'
       ? Deno.env.get('PULSE_GPT_MODEL')
       : messageType === 'weekly_outlook' ? undefined : Deno.env.get('PULSE_MODEL')
-    const result = await generatePulse({ provider, apiKey, systemPrompt, messages: apiMessages, messageType, model })
+    const result = await generatePulse({ provider, apiKey, systemPrompt, messages: apiMessages, messageType, model, guard: guardFrom(safeContext) })
     // Usage only, never content. console.log is absent in the contract-test sandbox.
     console.log?.('coach-chat usage', JSON.stringify({ messageType, ...result.metadata }))
     return new Response(JSON.stringify(result.output), {
