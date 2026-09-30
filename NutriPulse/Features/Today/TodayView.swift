@@ -499,9 +499,10 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 DoseSkipControl(schedule: vm.doseSchedule) { await vm.loadData() }
                 Button("Log a shot instead") { showRitual = true }
-                    .buttonStyle(.borderless)
+                    .font(Theme.Fonts.body(14, .semibold))
+                    .foregroundStyle(Theme.Colors.primaryText)
             }
-            .padding(Theme.Spacing.md).card()
+            .tile(radius: Theme.Radius.tileSmall, padding: Theme.Spacing.md)
         } else if dismissedShotCheckInDay != Date.now.isoDateString,
                   vm.scheduledShotCycleCheckInDue,
                   let cycleDay = vm.currentShotCycleDay {
@@ -579,9 +580,10 @@ private struct SyncStatusBanner: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(status.title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
                 Text(status.detail)
-                    .font(.caption)
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
 
@@ -589,17 +591,14 @@ private struct SyncStatusBanner: View {
 
             if status.canRetry {
                 Button("Try again", action: retry)
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.bordered)
+                    .font(Theme.Fonts.body(12, .semibold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .background(Theme.Colors.primarySoft, in: Capsule())
             }
         }
-        .padding(Theme.Spacing.sm)
-        .background(Theme.Colors.surfaceCard)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
-        }
+        .tile(radius: Theme.Radius.row, padding: Theme.Spacing.sm)
         .accessibilityElement(children: .combine)
     }
 }

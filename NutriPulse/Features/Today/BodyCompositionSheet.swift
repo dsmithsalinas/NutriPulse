@@ -35,7 +35,7 @@ struct BodyCompositionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Body composition") {
+                Section {
                     LabeledContent("\(units.weightUnit.capitalized)") {
                         TextField("e.g. \(units == .metric ? "75.0" : "165.0")", text: $weightText)
                             .keyboardType(.decimalPad)
@@ -57,14 +57,16 @@ struct BodyCompositionSheet: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                     }
-                }
+                } header: { DaylightSectionHeader("Body composition") }
+                .daylightSection()
 
                 if heightCm != nil {
                     Section {
                         Text("BMI auto-calculates from your height and the weight you enter. You can override it.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(Theme.Fonts.body(12))
+                            .foregroundStyle(Theme.Colors.textSecondary)
                     }
+                    .daylightSection()
                 }
 
                 Section {
@@ -77,20 +79,23 @@ struct BodyCompositionSheet: View {
                         Button("Also add hips, chest, arm, or thigh") {
                             showMoreSites = true
                         }
-                        .font(.subheadline)
+                        .font(Theme.Fonts.body(15))
                     }
                 } header: {
-                    Text("Tape measurements")
+                    DaylightSectionHeader("Tape measurements")
                 } footer: {
-                    Text("Measurements move slowly — every few weeks is plenty.")
+                    DaylightSectionFooter("Measurements move slowly — every few weeks is plenty.")
                 }
+                .daylightSection()
 
                 if hkAvailable {
-                    Section("Apple Health") {
+                    Section {
                         Toggle("Write to Apple Health", isOn: $writeToHK)
-                    }
+                    } header: { DaylightSectionHeader("Apple Health") }
+                    .daylightSection()
                 }
             }
+            .daylightForm()
             .navigationTitle("Log Body Composition")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

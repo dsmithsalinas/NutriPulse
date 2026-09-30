@@ -1,8 +1,9 @@
 import SwiftUI
 
-// The "make it forward" piece: on dose day (or overdue), a prominent living-gradient card on
+// The "make it forward" piece: on dose day (or overdue), a prominent Daylight lime card on
 // Today that opens the injection ritual. Only shown when a dose is actually due — the rest of
-// the time Today stays clean.
+// the time Today stays clean. Flat lime fill, in the same family as the Shot cycle tile and
+// the ritual screen itself (InjectionRitualView) rather than the old aurora gradient.
 struct DoseDayCard: View {
     let medication: String
     let doseText: String       // e.g. "2.5 mg"
@@ -24,11 +25,10 @@ struct DoseDayCard: View {
             if let onDismiss {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(7)
-                        .background(.black.opacity(0.18), in: Circle())
-                        .overlay(Circle().strokeBorder(.white.opacity(0.25)))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Theme.Colors.limeInk)
+                        .frame(width: 32, height: 32)
+                        .background(Theme.Colors.surfaceCard, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .padding(12)
@@ -39,42 +39,37 @@ struct DoseDayCard: View {
 
     private var card: some View {
         ZStack(alignment: .leading) {
-            AuroraView()
-                .opacity(0.9)
-                .overlay(Color.black.opacity(0.12))
-
+            Theme.Colors.lime
             if completed { completedContent } else { promptContent }
         }
         .frame(maxWidth: .infinity, minHeight: 176, alignment: .leading)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .shadow(color: Theme.Colors.primary.opacity(0.4), radius: 18, y: 8)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
     }
 
     private var promptContent: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
                 PulseDot()
-                Text(overdue ? "SHOT PLANNED" : "IT\u{2019}S DOSE DAY")
-                    .font(.system(size: 12, weight: .bold)).tracking(0.6)
+                TileEyebrow(overdue ? "Shot planned" : "It\u{2019}s dose day", color: Theme.Colors.limeLabel)
             }
-            .foregroundStyle(.white.opacity(0.92))
 
             Text(overdue ? "Your shot log" : "Time for your shot")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundStyle(.white).padding(.top, 8)
+                .font(Theme.Fonts.display(24, .bold, relativeTo: .title3))
+                .foregroundStyle(Theme.Colors.limeInk)
+                .padding(.top, 8)
             Text("\(medication) \u{00B7} \(doseText)")
-                .font(.system(size: 13.5, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9)).padding(.top, 1)
+                .font(Theme.Fonts.body(14, .semibold))
+                .foregroundStyle(Theme.Colors.limeLabel)
+                .padding(.top, 1)
 
             HStack(spacing: 7) {
                 Text("Log your shot")
                 Image(systemName: "arrow.right").font(.system(size: 13, weight: .bold))
             }
-            .font(.system(size: 15, weight: .bold))
-            .foregroundStyle(.white)
+            .font(Theme.Fonts.body(15, .bold))
+            .foregroundStyle(Theme.Colors.lime)
             .padding(.horizontal, 16).padding(.vertical, 11)
-            .background(.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(.white.opacity(0.28)))
+            .background(Theme.Colors.limeInk, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
             .padding(.top, 16)
         }
         .padding(20)
@@ -84,18 +79,19 @@ struct DoseDayCard: View {
         HStack(spacing: 14) {
             CompletedCheck()
             VStack(alignment: .leading, spacing: 3) {
-                Text("SHOT LOGGED")
-                    .font(.system(size: 12, weight: .bold)).tracking(0.6)
-                    .foregroundStyle(.white.opacity(0.92))
+                TileEyebrow("Shot logged", color: Theme.Colors.limeLabel)
                 Text("You took your shot")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white).padding(.top, 6)
+                    .font(Theme.Fonts.display(22, .bold, relativeTo: .title3))
+                    .foregroundStyle(Theme.Colors.limeInk)
+                    .padding(.top, 6)
                 Text("\(medication) \u{00B7} \(doseText) \u{00B7} logged today")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9)).padding(.top, 1)
+                    .font(Theme.Fonts.body(13, .semibold))
+                    .foregroundStyle(Theme.Colors.limeLabel)
+                    .padding(.top, 1)
                 Text("Protecting your muscle \u{2014} see you next week.")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(.white.opacity(0.8)).padding(.top, 8)
+                    .font(Theme.Fonts.body(12.5))
+                    .foregroundStyle(Theme.Colors.limeLabel)
+                    .padding(.top, 8)
             }
             Spacer(minLength: 0)
         }
@@ -110,11 +106,10 @@ private struct CompletedCheck: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(.white.opacity(0.18)).frame(width: 46, height: 46)
-                .overlay(Circle().strokeBorder(.white.opacity(0.4)))
+            Circle().fill(Theme.Colors.limeInk).frame(width: 46, height: 46)
             Image(systemName: "checkmark")
                 .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.Colors.lime)
         }
         .scaleEffect(shown || reduceMotion ? 1 : 0.4)
         .opacity(shown || reduceMotion ? 1 : 0)
@@ -130,10 +125,10 @@ private struct PulseDot: View {
 
     var body: some View {
         Circle()
-            .fill(.white)
+            .fill(Theme.Colors.limeInk)
             .frame(width: 8, height: 8)
             .overlay(
-                Circle().stroke(.white, lineWidth: 2)
+                Circle().stroke(Theme.Colors.limeInk, lineWidth: 2)
                     .scaleEffect(pulse ? 2.4 : 1)
                     .opacity(pulse ? 0 : 0.6)
             )

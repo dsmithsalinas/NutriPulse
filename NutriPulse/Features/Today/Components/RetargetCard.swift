@@ -39,36 +39,34 @@ struct RetargetCard: View {
                 Image(systemName: isMaintenance ? "checkmark.seal" : "arrow.triangle.2.circlepath")
                     .foregroundStyle(Theme.Colors.primary)
                 Text(titleText)
-                    .fontWeight(.semibold)
+                    .font(Theme.Fonts.body(16, .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
             }
 
             Text(bodyText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(Theme.Fonts.body(14))
+                .foregroundStyle(Theme.Colors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: Theme.Spacing.sm) {
                 Button(action: onAccept) {
                     Text(isMaintenance ? "Shift to maintenance" : "Update targets")
-                        .font(.subheadline.weight(.medium))
+                        .font(Theme.Fonts.body(14, .semibold))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Theme.Colors.primary.opacity(0.12))
-                        .foregroundStyle(Theme.Colors.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(.vertical, 10)
+                        .background(Theme.Colors.primarySoft, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
+                        .foregroundStyle(Theme.Colors.primaryText)
                 }
                 Button(action: onKeep) {
                     Text("Keep current")
-                        .font(.subheadline.weight(.medium))
+                        .font(Theme.Fonts.body(14, .semibold))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(Theme.Colors.surfaceInset)
-                        .foregroundStyle(.secondary)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(.vertical, 10)
+                        .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
+                        .foregroundStyle(Theme.Colors.textSecondary)
                 }
             }
         }
-        .padding(Theme.Spacing.md)
-        .card()
+        .tile(radius: Theme.Radius.tileSmall, padding: Theme.Spacing.md)
     }
 }
