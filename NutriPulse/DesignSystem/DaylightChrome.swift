@@ -36,10 +36,10 @@ enum DaylightChrome {
         UINavigationBar.appearance().compactAppearance = bar
         UINavigationBar.appearance().tintColor = UIColor(Theme.Colors.primary)
 
-        // Segmented pickers: ink selection, Figtree labels (matches the Log sheet's tab bar).
+        // Segmented pickers: an inverted selection, Figtree labels (matches the Log sheet's tab bar).
         let segmented = UISegmentedControl.appearance()
-        segmented.selectedSegmentTintColor = UIColor(Theme.Colors.ink)
-        segmented.setTitleTextAttributes([.foregroundColor: UIColor.white, .font: font("Figtree-Bold", 14, .subheadline)], for: .selected)
+        segmented.selectedSegmentTintColor = UIColor(Theme.Colors.selectionFill)
+        segmented.setTitleTextAttributes([.foregroundColor: UIColor(Theme.Colors.selectionText), .font: font("Figtree-Bold", 14, .subheadline)], for: .selected)
         segmented.setTitleTextAttributes([.foregroundColor: ink, .font: font("Figtree-SemiBold", 14, .subheadline)], for: .normal)
     }
 }

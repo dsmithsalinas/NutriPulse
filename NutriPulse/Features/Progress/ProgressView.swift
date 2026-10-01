@@ -134,13 +134,13 @@ struct ProgressDashboardView: View {
                     } label: {
                         Text(range.pillLabel)
                             .font(Theme.Fonts.body(14, .bold))
-                            .foregroundStyle(selectedRange == range ? .white : Theme.Colors.textSecondary)
+                            .foregroundStyle(selectedRange == range ? Theme.Colors.selectionText : Theme.Colors.textSecondary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 40)
                             .background {
                                 if selectedRange == range {
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(Theme.Colors.ink)
+                                        .fill(Theme.Colors.selectionFill)
                                 }
                             }
                     }

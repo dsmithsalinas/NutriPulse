@@ -397,11 +397,13 @@ struct ProfileView: View {
                     Text(glp1QuickTitle)
                         .font(Theme.Fonts.body(16, .bold))
                         .foregroundStyle(Theme.Colors.limeInk)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(glp1QuickSubtitle)
                         .font(Theme.Fonts.body(13))
                         .foregroundStyle(Theme.Colors.limeLabel)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(14)
@@ -417,7 +419,7 @@ struct ProfileView: View {
     private var glp1QuickTitle: String {
         guard let last = vm.mostRecentInjection else { return "Set up tracking" }
         if !glp1Tracking.isTracking { return glp1Tracking.status == .stopped ? "Tracking stopped" : "Tracking paused" }
-        return "\(last.medication) \(last.doseMg.formatted())mg"
+        return "\(last.medication) \(last.doseMg.glp1DoseString) mg"
     }
 
     private var glp1QuickSubtitle: String {
@@ -438,11 +440,13 @@ struct ProfileView: View {
                     Text(healthQuickTitle)
                         .font(Theme.Fonts.body(16, .bold))
                         .foregroundStyle(Theme.Colors.healthTileInk)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text("Weight, workouts, sleep")
                         .font(Theme.Fonts.body(13))
                         .foregroundStyle(Theme.Colors.healthTileLabel)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(14)
@@ -549,7 +553,7 @@ struct ProfileView: View {
                 }
 
                 if let last = vm.mostRecentInjection {
-                    valueRow(icon: "pill", label: "Medication", value: "\(last.medication) \(last.doseMg.formatted())mg")
+                    valueRow(icon: "pill", label: "Medication", value: "\(last.medication) \(last.doseMg.glp1DoseString) mg")
                     hairline
                 }
 

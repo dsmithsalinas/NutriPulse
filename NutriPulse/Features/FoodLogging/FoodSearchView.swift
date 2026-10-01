@@ -108,10 +108,10 @@ struct FoodSearchView: View {
                         Text(filter.rawValue)
                     }
                     .font(Theme.Fonts.body(13, selected ? .bold : .semibold))
-                    .foregroundStyle(selected ? .white : Theme.Colors.textPrimary)
+                    .foregroundStyle(selected ? Theme.Colors.selectionText : Theme.Colors.textPrimary)
                     .padding(.horizontal, 14)
                     .frame(height: 36)
-                    .background(selected ? Theme.Colors.ink : Theme.Colors.surfaceCard, in: Capsule())
+                    .background(selected ? Theme.Colors.selectionFill : Theme.Colors.surfaceCard, in: Capsule())
                 }
                 .buttonStyle(.pressable)
                 .accessibilityAddTraits(selected ? [.isSelected] : [])

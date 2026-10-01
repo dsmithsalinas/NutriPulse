@@ -875,17 +875,20 @@ private struct GoalHeroCard: View {
                         .tracking(Theme.Typography.eyebrowTracking)
                         .textCase(.uppercase)
                         .foregroundStyle(Theme.Colors.textSecondary)
+                    // The user's own words: wrap as far as needed rather than truncate.
                     Text(state.bundle.version.title)
                         .font(Theme.Fonts.display(22, .bold, relativeTo: .title2))
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 Text(statusPill.label)
                     .font(Theme.Fonts.body(13, .bold))
                     .foregroundStyle(statusPill.text)
+                    .lineLimit(1)
+                    .fixedSize()
                     .padding(.horizontal, 10)
-                    .frame(height: 30)
+                    .frame(minHeight: 30)
                     .background(statusPill.fill, in: Capsule())
             }
 

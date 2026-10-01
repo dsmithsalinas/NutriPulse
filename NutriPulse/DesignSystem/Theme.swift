@@ -61,6 +61,11 @@ enum Theme {
 
         /// The dark floating tab bar and other "ink" surfaces.
         static let ink          = Color(light: 0x0F172A, dark: 0x1E293B)
+        /// The selected segment in segmented controls and pill rows. In dark mode `ink` is
+        /// #1E293B, almost the track's own colour, so the selection vanished; here it inverts to
+        /// a light pill with dark text, the way light mode's dark pill does.
+        static let selectionFill = Color(light: 0x0F172A, dark: 0xE2E8F0)
+        static let selectionText = Color(light: 0xFFFFFF, dark: 0x0F172A)
         static let inkIcon      = Color(hex: 0xCBD5E1)
 
         /// Protein hero tile: deep indigo base, liquid fill in `hero`, pale indigo labels.
@@ -85,6 +90,10 @@ enum Theme {
         static let skyInk       = Color(hex: 0x0C4A6E)
         static let skyLabel     = Color(hex: 0x075985)
         static let skyAction    = Color(hex: 0x0284C7)
+        /// Water amounts on adaptive tiles (white in light, dark in dark mode). The sky inks above
+        /// are for the fixed light-sky fill and went dark-on-dark on a dark tile.
+        static let skyText      = Color(light: 0x0C4A6E, dark: 0x7DD3FC)
+        static let skySubtext   = Color(light: 0x075985, dark: 0x7CB9DA)
     }
 
     /// Ring/chart colors, tuned as one family instead of raw system colors.
