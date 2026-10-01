@@ -570,6 +570,7 @@ final class CoachViewModel {
             )
             messages.append(assistantMsg)
             Telemetry.coachMessageSent(messageType: "chat")
+            FirstDayChecklistStore.recordStep(.pulse, userId: userId.uuidString)
 
             do {
                 _ = try await saveAssistantReply(

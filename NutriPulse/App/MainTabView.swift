@@ -99,6 +99,18 @@ struct MainTabView: View {
             appState.pendingProfileDailyTargetsFocus = false
             selectedTab = .profile
         }
+        // Today's first-day checklist: "Log your first meal" and "Ask Pulse anything".
+        .onChange(of: appState.pendingOpenTalkToLog) { _, pending in
+            guard pending else { return }
+            appState.pendingOpenTalkToLog = false
+            loggerInitialTab = .talk
+            showLogger = true
+        }
+        .onChange(of: appState.pendingSelectTab) { _, tab in
+            guard let tab else { return }
+            appState.pendingSelectTab = nil
+            selectedTab = tab
+        }
         // Landing on the Pulse tab is itself a hand-off: show the consent sheet the first time,
         // same as asking Pulse something from elsewhere.
         .onChange(of: selectedTab) { _, tab in

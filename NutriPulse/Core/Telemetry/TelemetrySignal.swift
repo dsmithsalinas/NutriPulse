@@ -38,6 +38,14 @@ enum TelemetrySignal: String {
     /// Parameters: `messageType` ("chat" | "checkin" | "weekly_summary").
     case coachMessageSent = "coach.messageSent"
 
+    // MARK: First day — does the checklist get new accounts through the core loop?
+
+    /// A first-day checklist step was done for the first time. Parameters: `step`
+    /// ("meal" | "shot" | "water" | "pulse"). Drop-off between steps shows where new users stall.
+    case firstDayStepDone = "firstDay.stepDone"
+    /// The checklist was closed. Parameters: `doneCount`, `stepCount`.
+    case firstDayDismissed = "firstDay.dismissed"
+
     /// An auto-generated check-in or weekly summary was actually seen, not
     /// just silently sitting unread in the Coach tab. Parameters: `messageType`.
     case checkinMessageViewed = "coach.checkinViewed"

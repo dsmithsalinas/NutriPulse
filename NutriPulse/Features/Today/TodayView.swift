@@ -52,6 +52,141 @@ struct TodayView: View {
     // in memory for the rest of this session.
     private var currentAccountId: String? { appState.session?.user.id.uuidString }
 
+    // Pieces of the body pulled out so the compiler can type-check it in reasonable time.
+
+    private var header: some View {
+        TodayHeaderView(
+            date: vm.selectedDate,
+            isToday: vm.isToday,
+            onPrevious: vm.goToPreviousDay,
+            onNext: vm.goToNextDay,
+            onToday: vm.goToToday,
+            onPickDate: { showDatePicker = true }
+        )
+        .padding(.top, Theme.Spacing.sm)
+        .popIn(order: 0)
+        .popoverTip(DaySwipeTip(), arrowEdge: .top)
+    }
+
+    @ViewBuilder private var firstDayCard: some View {
+        if let checklist = firstDayChecklist {
+            FirstDayChecklistCard(
+                checklist: checklist,
+                onStep: openFirstDayStep,
+                onDismiss: dismissFirstDay
+            )
+            .popIn(order: 1)
+            .transition(.opacity)
+        }
+    }
+
+    private var mealSections: some View {
+        ForEach(Meal.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { meal in
+            let logs = vm.logsByMeal[meal] ?? []
+            if !logs.isEmpty {
+                MealSectionView(
+                    meal: meal,
+                    logs: logs,
+                    onEdit: { editingLog = $0 },
+                    onDelete: { log in Task { await vm.deleteLog(id: log.id) } }
+                )
+                .popIn(order: 7)
+                // Only on the first meal shown, so the tip points at one row.
+                .popoverTip(MealRowTip(), arrowEdge: .bottom, when: meal == firstLoggedMeal)
+            }
+        }
+    }
+
+    /// The first meal section Today shows, where the meal-row tip points.
+    private var firstLoggedMeal: Meal? {
+        Meal.allCases.sorted { $0.sortOrder < $1.sortOrder }.first { !(vm.logsByMeal[$0] ?? []).isEmpty }
+    }
+
+    // MARK: First day
+
+    /// Ticks first-day steps off as they happen, re-reads on coming back to Today (the Pulse
+    /// step is recorded on the Pulse tab), and lets the tips know food has been logged.
+    private var firstDayObserver: some View {
+        Color.clear
+            .accessibilityHidden(true)
+            .task {
+                recordFirstDayProgress()
+                if !vm.foodLogs.isEmpty { FootingTips.hasLoggedFood = true }
+            }
+            .onChange(of: vm.foodLogs.count) {
+                recordFirstDayProgress()
+                if !vm.foodLogs.isEmpty { FootingTips.hasLoggedFood = true }
+            }
+            .onChange(of: vm.waterIntakeMl) { recordFirstDayProgress() }
+            .onChange(of: vm.latestGLP1?.id) { recordFirstDayProgress() }
+            .onChange(of: isFrontmost) { _, frontmost in
+                guard frontmost else { return }
+                recordFirstDayProgress()
+                firstDayRevision += 1
+            }
+    }
+
+    // Bumped when a step is recorded or the card dismissed, so the card re-reads the store.
+    @State private var firstDayRevision = 0
+
+    /// The first-day checklist, or nil when it shouldn't show (not today, an older account,
+    /// dismissed, or finished on an earlier day). See FirstDayChecklist.
+    private var firstDayChecklist: FirstDayChecklist? {
+        _ = firstDayRevision
+        guard vm.isToday else { return nil }
+        #if DEBUG
+        // Its own flag (not part of --tour, which has no account): the card with the shot done.
+        if ProcessInfo.processInfo.arguments.contains("--first-day-preview") {
+            let steps = FirstDayChecklist.steps(tracksGLP1: true, pulseEnabled: true)
+            return FirstDayChecklist(steps: steps, done: [.shot])
+        }
+        #endif
+        guard let userId = currentAccountId, FirstDayChecklist.isVisible(
+            accountCreated: appState.profile?.createdAt,
+            dismissed: FirstDayChecklistStore.isDismissed(userId: userId),
+            completedOn: FirstDayChecklistStore.completedOn(userId: userId)
+        ) else { return nil }
+        let steps = FirstDayChecklist.steps(
+            tracksGLP1: GLP1TrackingStore.shared.isTracking,
+            pulseEnabled: PulseProfileStore.shared.pulseEnabled
+        )
+        return FirstDayChecklist(steps: steps, done: FirstDayChecklistStore.done(userId: userId))
+    }
+
+    /// Ticks off steps from what Today can already see: a meal or water logged today, a shot on
+    /// record. Pulse is ticked from the Pulse tab when a message sends (CoachViewModel).
+    private func recordFirstDayProgress() {
+        guard vm.isToday, let userId = currentAccountId,
+              appState.profile.map({ FirstDayChecklist.isVisible(accountCreated: $0.createdAt, dismissed: false, completedOn: nil) }) == true
+        else { return }
+        var changed = false
+        if !vm.foodLogs.isEmpty { changed = FirstDayChecklistStore.recordStep(.meal, userId: userId) || changed }
+        if vm.waterIntakeMl > 0 { changed = FirstDayChecklistStore.recordStep(.water, userId: userId) || changed }
+        if vm.latestGLP1 != nil { changed = FirstDayChecklistStore.recordStep(.shot, userId: userId) || changed }
+        if let checklist = firstDayChecklist, checklist.isComplete {
+            FirstDayChecklistStore.markCompleted(on: Date.now.isoDateString, userId: userId)
+        }
+        if changed { firstDayRevision += 1 }
+    }
+
+    private func openFirstDayStep(_ step: FirstDayStep) {
+        switch step {
+        case .meal: appState.pendingOpenTalkToLog = true
+        case .shot: showRitual = true
+        case .water: showWaterPicker = true
+        case .pulse: appState.pendingSelectTab = .pulse
+        }
+    }
+
+    private func dismissFirstDay() {
+        guard let userId = currentAccountId else { return }
+        if let checklist = firstDayChecklist {
+            Telemetry.firstDayDismissed(doneCount: checklist.doneCount, stepCount: checklist.steps.count)
+        }
+        FirstDayChecklistStore.dismiss(userId: userId)
+        withAnimation(.easeOut(duration: 0.2)) { firstDayRevision += 1 }
+    }
+
     // Health permissions live in the Health app (Sharing → Apps), not in this app's
     // Settings page, so openSettingsURLString would drop the user somewhere with no
     // Health controls at all. Fall back to it only if the Health app can't be opened.
@@ -92,16 +227,7 @@ struct TodayView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: Theme.Spacing.tileGap) {
-                    TodayHeaderView(
-                        date: vm.selectedDate,
-                        isToday: vm.isToday,
-                        onPrevious: vm.goToPreviousDay,
-                        onNext: vm.goToNextDay,
-                        onToday: vm.goToToday,
-                        onPickDate: { showDatePicker = true }
-                    )
-                    .padding(.top, Theme.Spacing.sm)
-                    .popIn(order: 0)
+                    header
 
                     // No account in the tour, so every sync "fails"; that banner is noise there.
                     if let status = SyncEngine.shared.statusMessage, !DebugLaunch.tour {
@@ -119,6 +245,8 @@ struct TodayView: View {
                         pulsePriorityCard
                             .popIn(order: 1)
 
+                        firstDayCard
+
                         tileGrid
 
                         if vm.foodLogs.isEmpty {
@@ -126,18 +254,7 @@ struct TodayView: View {
                                 .popIn(order: 7)
                         } else {
                             // Meal sections in fixed display order (breakfast → snack)
-                            ForEach(Meal.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { meal in
-                                let logs = vm.logsByMeal[meal] ?? []
-                                if !logs.isEmpty {
-                                    MealSectionView(
-                                        meal: meal,
-                                        logs: logs,
-                                        onEdit: { editingLog = $0 },
-                                        onDelete: { log in Task { await vm.deleteLog(id: log.id) } }
-                                    )
-                                    .popIn(order: 7)
-                                }
-                            }
+                            mealSections
                         }
 
                         if vm.isToday, !vm.availableYesterdayMeals.isEmpty {
@@ -354,6 +471,9 @@ struct TodayView: View {
                 ringCelebrationTrigger += 1
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             }
+            // First-day checklist and tips: their observers live on a hidden view of their own
+            // (firstDayObserver) to keep this modifier chain short enough to type-check.
+            .background { firstDayObserver }
             .onChange(of: vm.justHitProteinGoal) { _, justHit in
                 guard vm.isToday, justHit else { return }
                 // A fresh view model (new launch, or swiping back to today from another day)

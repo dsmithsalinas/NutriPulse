@@ -98,6 +98,19 @@ enum Telemetry {
         )
     }
 
+    // MARK: - First day
+
+    static func firstDayStepDone(step: String) {
+        TelemetryDeck.signal(TelemetrySignal.firstDayStepDone.rawValue, parameters: ["step": step])
+    }
+
+    static func firstDayDismissed(doneCount: Int, stepCount: Int) {
+        TelemetryDeck.signal(
+            TelemetrySignal.firstDayDismissed.rawValue,
+            parameters: ["doneCount": String(doneCount), "stepCount": String(stepCount)]
+        )
+    }
+
     // MARK: - Feedback
 
     static func feedbackSubmitted(category: FeedbackCategory) {
