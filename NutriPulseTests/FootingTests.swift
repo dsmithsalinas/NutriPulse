@@ -4650,3 +4650,55 @@ final class GLP1TrackingStoreTests: XCTestCase {
         XCTAssertNil(try decoder.decode(UserProfile.self, from: Data(old.utf8)).glp1Tracking)
     }
 }
+
+// Experiment outcomes: typed-in ratings are recorded at the check-in (latest answer per day);
+// automatic outcomes are read live over the experiment's window.
+final class ExperimentOutcomeTests: XCTestCase {
+    private var calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    private func day(_ d: Int, hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 10, day: d, hour: hour))!
+    }
+
+    func testRunningTotalsLeaveTodayOutButSleepKeepsIt() {
+        let today = day(10, hour: 9)
+        let steps = ExperimentOutcomeWindow.dates(start: "2026-10-07", end: "2026-10-27", source: .steps, today: today, calendar: calendar)
+        XCTAssertEqual(steps.map { $0.isoDateString(in: calendar.timeZone) }, ["2026-10-07", "2026-10-08", "2026-10-09"])
+        let sleep = ExperimentOutcomeWindow.dates(start: "2026-10-07", end: "2026-10-27", source: .sleepDuration, today: today, calendar: calendar)
+        XCTAssertEqual(sleep.last?.isoDateString(in: calendar.timeZone), "2026-10-10")
+    }
+
+    func testWindowStopsAtTheEndDateAndIsEmptyBeforeItStarts() {
+        let ended = ExperimentOutcomeWindow.dates(start: "2026-10-01", end: "2026-10-03", source: .protein, today: day(20), calendar: calendar)
+        XCTAssertEqual(ended.count, 3)
+        XCTAssertTrue(ExperimentOutcomeWindow.dates(start: "2026-10-10", end: nil, source: .protein, today: day(10), calendar: calendar).isEmpty)
+    }
+
+    func testSeveralReadingsInADayKeepTheLatest() {
+        let values = [
+            GoalDailyValue(date: day(3, hour: 7), number: 80.4),
+            GoalDailyValue(date: day(3, hour: 21), number: 80.9),
+            GoalDailyValue(date: day(4, hour: 7), number: 80.1),
+        ]
+        XCTAssertEqual(ExperimentOutcomeWindow.byDate(values, calendar: calendar), ["2026-10-03": 80.9, "2026-10-04": 80.1])
+    }
+
+    func testARatingAnsweredTwiceInADayKeepsTheLatestAnswer() {
+        let rows = [
+            ExperimentObservationValue(localDate: "2026-10-01", number: 2),
+            ExperimentObservationValue(localDate: "2026-10-01", number: 4),
+            ExperimentObservationValue(localDate: "2026-10-02", number: 3),
+        ]
+        XCTAssertEqual(ExperimentObservationValue.latestPerDay(rows).map(\.number), [4, 3])
+    }
+
+    func testOnlySourceBackedOutcomesAreReadLive() {
+        XCTAssertTrue(ExperimentMetricSummary(name: "Sleep", unit: "hours", sourceType: .automatic, sourceMetric: .sleepDuration).isAutomatic)
+        XCTAssertFalse(ExperimentMetricSummary(name: "Morning energy", unit: "out of 5", sourceType: .manualRating).isAutomatic)
+        XCTAssertFalse(ExperimentMetricSummary(name: "Old row", unit: nil).isAutomatic)
+    }
+}

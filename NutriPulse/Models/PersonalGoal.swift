@@ -285,6 +285,21 @@ struct PersonalExperiment: Codable, Identifiable {
 struct ExperimentMetricSummary: Codable, Equatable {
     let name: String
     let unit: String?
+    /// Where the outcome comes from: typed in at the check-in (a rating), or read live from its
+    /// source (HealthKit, food logs). Optional so a summary decoded without them still labels.
+    var sourceType: GoalSourceType? = nil
+    var sourceMetric: GoalSourceMetric? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case name, unit
+        case sourceType = "source_type"
+        case sourceMetric = "source_metric"
+    }
+
+    /// Read live from its source rather than from what was typed in.
+    var isAutomatic: Bool {
+        (sourceType == .automatic || sourceType == .combined) && sourceMetric != nil
+    }
 }
 
 /// One row of `experiment_measurements`, with its `experiment_metrics` joined in.
@@ -308,6 +323,13 @@ struct ExperimentOutcomeMeasurement: Codable, Equatable, Identifiable {
 struct ExperimentObservationValue: Equatable {
     let localDate: String
     let number: Double?
+
+    /// One value per day from rows ordered oldest first: the last one for a day wins.
+    static func latestPerDay(_ ordered: [ExperimentObservationValue]) -> [ExperimentObservationValue] {
+        var byDate: [String: ExperimentObservationValue] = [:]
+        for value in ordered where value.number != nil { byDate[value.localDate] = value }
+        return byDate.values.sorted { $0.localDate < $1.localDate }
+    }
 }
 
 struct ExperimentMetric: Codable, Identifiable {

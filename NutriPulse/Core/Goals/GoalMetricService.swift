@@ -27,67 +27,29 @@ struct GoalMetricService {
 
         guard let source = measurement.sourceMetric else { return .init(values: [], quality: nil) }
         let dates = datesForLoading(version: bundle.version, today: today)
-        guard let firstDate = dates.first, let lastDate = dates.last else {
-            return .init(values: [], quality: nil)
-        }
+        guard !dates.isEmpty else { return .init(values: [], quality: nil) }
 
+        guard let raw = await dailyValues(source: source, dates: dates) else {
+            return qualityEvaluation(values: [], dates: dates, source: source, measurement: measurement, today: today)
+        }
         let values: [GoalDailyValue]
-        switch source {
-        case .steps:
-            values = await healthKitValues(dates) { await $0.fetchSteps(for: $1) }
-        case .sleepDuration:
-            values = await healthKitValues(dates) { await $0.fetchSleepHours(for: $1) }
-        case .activeEnergy:
-            values = await healthKitValues(dates) { await $0.fetchActiveCalories(for: $1) }
-        case .restingHeartRate:
-            values = await healthKitValues(dates) { await $0.fetchRestingHeartRate(for: $1) }
-        case .hrv:
-            values = await healthKitValues(dates) { await $0.fetchHRV(for: $1) }
-        case .workouts, .workoutMinutes:
-            guard let movement = try? await analytics.fetchDailyMovement(
-                from: firstDate, through: lastDate
-            ) else {
-                return qualityEvaluation(values: [], dates: dates, source: source, measurement: measurement, today: today)
-            }
-            values = movement.map {
-                GoalDailyValue(
-                    date: $0.date,
-                    number: source == .workouts ? Double($0.sessions) : $0.minutes
-                )
-            }
-        case .protein:
-            guard let summaries = try? await analytics.fetchDailySummaries(
-                from: firstDate, through: lastDate
-            ) else {
-                return qualityEvaluation(values: [], dates: dates, source: source, measurement: measurement, today: today)
-            }
+        if source == .protein {
+            // A protein goal is met or missed against today's target; the grams stay for display.
             let goal = try? await GoalRepository().fetchGoal(for: today)
             guard let proteinTarget = goal?.proteinG else {
                 return qualityEvaluation(values: [], dates: dates, source: source, measurement: measurement, today: today)
             }
-            values = summaries.compactMap { summary in
-                guard summary.hasData else { return nil }
+            values = raw.compactMap { value in
+                guard let grams = value.number else { return nil }
                 return GoalDailyValue(
-                    date: summary.date,
-                    boolean: summary.proteinG >= proteinTarget,
-                    displayValue: summary.proteinG,
+                    date: value.date,
+                    boolean: grams >= proteinTarget,
+                    displayValue: grams,
                     displayTarget: proteinTarget
                 )
             }
-        case .water:
-            guard let hydration = try? await analytics.fetchDailyHydration(
-                from: firstDate, through: lastDate
-            ) else {
-                return qualityEvaluation(values: [], dates: dates, source: source, measurement: measurement, today: today)
-            }
-            values = hydration.map { GoalDailyValue(date: $0.date, number: $0.amountMl) }
-        case .weight:
-            guard let weights = try? await analytics.fetchWeightLogs(
-                from: firstDate, through: lastDate
-            ) else {
-                return qualityEvaluation(values: [], dates: dates, source: source, measurement: measurement, today: today)
-            }
-            values = weights.map { GoalDailyValue(date: $0.loggedAt, number: $0.weightKg) }
+        } else {
+            values = raw
         }
         let sourceAwareObservations: [HealthQualityObservation]
         if dates.count <= 60,
@@ -106,6 +68,41 @@ struct GoalMetricService {
             today: today,
             sourceAwareObservations: sourceAwareObservations
         )
+    }
+
+    /// One number per day from the metric's own store: HealthKit, or Footing's logs (protein in
+    /// grams, water in ml, weight in kg). Nil when the Footing fetch failed; HealthKit days with
+    /// nothing readable are simply absent. Shared by goals and experiment outcomes.
+    func dailyValues(source: GoalSourceMetric, dates: [Date]) async -> [GoalDailyValue]? {
+        guard let firstDate = dates.first, let lastDate = dates.last else { return [] }
+        switch source {
+        case .steps:
+            return await healthKitValues(dates) { await $0.fetchSteps(for: $1) }
+        case .sleepDuration:
+            return await healthKitValues(dates) { await $0.fetchSleepHours(for: $1) }
+        case .activeEnergy:
+            return await healthKitValues(dates) { await $0.fetchActiveCalories(for: $1) }
+        case .restingHeartRate:
+            return await healthKitValues(dates) { await $0.fetchRestingHeartRate(for: $1) }
+        case .hrv:
+            return await healthKitValues(dates) { await $0.fetchHRV(for: $1) }
+        case .workouts, .workoutMinutes:
+            guard let movement = try? await analytics.fetchDailyMovement(from: firstDate, through: lastDate) else { return nil }
+            return movement.map {
+                GoalDailyValue(date: $0.date, number: source == .workouts ? Double($0.sessions) : $0.minutes)
+            }
+        case .protein:
+            guard let summaries = try? await analytics.fetchDailySummaries(from: firstDate, through: lastDate) else { return nil }
+            return summaries.compactMap { summary in
+                summary.hasData ? GoalDailyValue(date: summary.date, number: summary.proteinG) : nil
+            }
+        case .water:
+            guard let hydration = try? await analytics.fetchDailyHydration(from: firstDate, through: lastDate) else { return nil }
+            return hydration.map { GoalDailyValue(date: $0.date, number: $0.amountMl) }
+        case .weight:
+            guard let weights = try? await analytics.fetchWeightLogs(from: firstDate, through: lastDate) else { return nil }
+            return weights.map { GoalDailyValue(date: $0.loggedAt, number: $0.weightKg) }
+        }
     }
 
     private func qualityEvaluation(
@@ -192,6 +189,39 @@ struct GoalMetricService {
         guard parts.count == 3 else { return nil }
         return Calendar.current.date(
             from: DateComponents(year: parts[0], month: parts[1], day: parts[2])
+        )
+    }
+}
+
+// MARK: - Experiment outcomes
+
+extension GoalMetricService {
+    /// An experiment's primary outcome by day ("yyyy-MM-dd"). Typed-in outcomes (a rating) come
+    /// from what the user recorded at the check-in; automatic ones (sleep, steps, protein) are
+    /// read live from their source, the same as goals, over the experiment's window. Nil when
+    /// it couldn't be loaded, so the result reads "not enough data" rather than a wrong number.
+    func experimentOutcomes(
+        for experiment: PersonalExperiment,
+        outcome: ExperimentOutcomeMeasurement,
+        repository: ExperimentRepository = ExperimentRepository(),
+        today: Date = .now
+    ) async -> [String: Double]? {
+        if let metric = outcome.metric, metric.isAutomatic, let source = metric.sourceMetric {
+            let dates = ExperimentOutcomeWindow.dates(
+                start: experiment.baselineStart ?? experiment.interventionStart,
+                end: experiment.endDate,
+                source: source,
+                today: today
+            )
+            guard let values = await dailyValues(source: source, dates: dates) else { return nil }
+            return ExperimentOutcomeWindow.byDate(values)
+        }
+        guard let observations = try? await repository.fetchOutcomeObservations(measurementId: outcome.measurementId) else {
+            return nil
+        }
+        return Dictionary(
+            observations.compactMap { observation in observation.number.map { (observation.localDate, $0) } },
+            uniquingKeysWith: { _, latest in latest }
         )
     }
 }

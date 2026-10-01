@@ -330,7 +330,7 @@ final class GoalsViewModel {
             createdAt: offset(-6), completedAt: nil,
             outcomeMeasurements: [ExperimentOutcomeMeasurement(
                 measurementId: UUID(), role: "primary_outcome",
-                metric: ExperimentMetricSummary(name: "Sleep duration", unit: "hours")
+                metric: ExperimentMetricSummary(name: "Sleep duration", unit: "hours", sourceType: .automatic, sourceMetric: .sleepDuration)
             )]
         )
 
@@ -343,7 +343,7 @@ final class GoalsViewModel {
             createdAt: offset(-35), completedAt: offset(-14),
             outcomeMeasurements: [ExperimentOutcomeMeasurement(
                 measurementId: UUID(), role: "primary_outcome",
-                metric: ExperimentMetricSummary(name: "Morning energy", unit: "out of 5")
+                metric: ExperimentMetricSummary(name: "Morning energy", unit: "out of 5", sourceType: .manualRating)
             )]
         )
 
