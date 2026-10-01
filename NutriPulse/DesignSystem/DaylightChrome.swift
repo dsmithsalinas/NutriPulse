@@ -109,7 +109,10 @@ struct DaylightSubpage: ViewModifier {
             .toolbar {
                 ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
             }
-            .toolbarBackground(.hidden, for: .navigationBar)
+            // The page's own ground behind the bar once content scrolls under it. Hidden, the
+            // in-content title and controls slid under the clock and the floating back button.
+            // At rest the bar matches the page, so nothing changes until the user scrolls.
+            .toolbarBackground(Theme.Colors.ground, for: .navigationBar)
             .background(Theme.Colors.ground.ignoresSafeArea())
     }
 }

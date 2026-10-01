@@ -720,6 +720,8 @@ private struct ProgressDestinationRow: View {
                     .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
+            // NavigationLink labels centre wrapped text by default, which read as an indent.
+            .multilineTextAlignment(.leading)
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .semibold))
