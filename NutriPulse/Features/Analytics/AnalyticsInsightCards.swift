@@ -64,6 +64,11 @@ struct CycleAwareAnalyticsCard: View {
         var id: Int { day }
     }
 
+    private var cycleDayDomain: ClosedRange<Double> {
+        let days = insights.map(\.cycleDay)
+        return Double(days.min() ?? 0) - 0.5 ... Double(days.max() ?? 0) + 0.5
+    }
+
     private var points: [Point] {
         insights.compactMap { day in
             let value: Double? = switch selectedMetric {
@@ -147,7 +152,7 @@ struct CycleAwareAnalyticsCard: View {
                 Chart {
                     ForEach(points) { point in
                         LineMark(
-                            x: .value("Cycle day", point.day),
+                            x: .value("Cycle day", Double(point.day)),
                             y: .value(selectedMetric.rawValue, point.value)
                         )
                         .foregroundStyle(selectedMetric.color)
@@ -159,16 +164,25 @@ struct CycleAwareAnalyticsCard: View {
                         RuleMark(y: .value("Protein goal", proteinGoal))
                             .foregroundStyle(Theme.Colors.textFaint)
                             .lineStyle(.init(lineWidth: 1, dash: [4, 4]))
-                            .annotation(position: .top, alignment: .trailing) {
+                            // Leading, kept inside the plot (like the calories chart): at the
+                            // trailing end it ran into the last cycle day's point ("Goa●").
+                            .annotation(
+                                position: .top,
+                                alignment: .leading,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                            ) {
                                 Text("Goal")
                                     .font(Theme.Fonts.body(11))
                                     .foregroundStyle(Theme.Colors.textSecondary)
                             }
                     }
                 }
+                // Half a day of room at each end, so the first and last points sit off the edges
+                // and the last day's label isn't dropped for lack of space (D6 went missing).
+                .chartXScale(domain: cycleDayDomain)
                 .chartXAxis {
-                    AxisMarks(values: insights.map(\.cycleDay)) { value in
-                        AxisValueLabel { if let day = value.as(Int.self) { Text("D\(day)") } }
+                    AxisMarks(values: insights.map { Double($0.cycleDay) }) { value in
+                        AxisValueLabel { if let day = value.as(Double.self) { Text("D\(Int(day))") } }
                             .foregroundStyle(Theme.Colors.textFaint)
                         AxisGridLine().foregroundStyle(Theme.Colors.hairline)
                     }

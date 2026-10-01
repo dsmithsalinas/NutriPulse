@@ -531,7 +531,7 @@ struct ProfileView: View {
     private var glp1DetailsTile: some View {
         SettingsTile(eyebrow: "GLP-1 tracker") {
             if glp1Logs.isEmpty {
-                actionRow(icon: "syringe", title: "Set Up GLP-1 Tracker") {
+                actionRow(icon: "syringe", title: "Set up GLP-1 tracker") {
                     vm.showLogInjection = true
                 }
             } else {
@@ -587,7 +587,7 @@ struct ProfileView: View {
                     hairline
                 }
 
-                actionRow(icon: "syringe", title: "Log Dose") {
+                actionRow(icon: "syringe", title: "Log dose") {
                     vm.showLogInjection = true
                 }
 
@@ -609,7 +609,7 @@ struct ProfileView: View {
                         }
                     }
                     hairline
-                    navRow(icon: "list.bullet.rectangle", title: "Dose History") {
+                    navRow(icon: "list.bullet.rectangle", title: "Dose history") {
                         GLP1HistoryView()
                     }
                 }
@@ -714,7 +714,7 @@ struct ProfileView: View {
                 valueRow(icon: "figure.run", label: "Activity", value: level.displayName)
                 hairline
             }
-            actionRow(icon: "pencil", title: "Edit Stats") {
+            actionRow(icon: "pencil", title: "Edit stats") {
                 vm.showEditProfile = true
             }
         }
@@ -784,7 +784,7 @@ struct ProfileView: View {
                 showAIDataSharingInfo = true
             }
             hairline
-            actionRow(icon: "trash", title: "Clear Chat History", tint: Theme.Colors.danger) {
+            actionRow(icon: "trash", title: "Clear chat history", tint: Theme.Colors.danger) {
                 showClearHistoryConfirm = true
             }
         }
@@ -831,7 +831,7 @@ struct ProfileView: View {
             eyebrow: "Support",
             footer: "Footing is a wellness tracker, not a medical device, and Pulse is not a medical professional. Nothing in the app is medical advice — always consult your doctor about medication and health decisions."
         ) {
-            actionRow(icon: "envelope", title: "Send Feedback", showChevron: true) {
+            actionRow(icon: "envelope", title: "Send feedback", showChevron: true) {
                 vm.showSendFeedback = true
             }
             hairline
@@ -864,7 +864,7 @@ struct ProfileView: View {
 
     private var accountTile: some View {
         SettingsTile(eyebrow: "Account") {
-            actionRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign Out", tint: Theme.Colors.danger) {
+            actionRow(icon: "rectangle.portrait.and.arrow.right", title: "Sign out", tint: Theme.Colors.danger) {
                 // `try?` swallowed the failure: the user tapped Sign Out, nothing happened,
                 // and nothing said why.
                 Task {
@@ -876,7 +876,7 @@ struct ProfileView: View {
                 }
             }
             hairline
-            actionRow(icon: "trash", title: "Delete Account", tint: Theme.Colors.danger, isLoading: vm.isDeletingAccount) {
+            actionRow(icon: "trash", title: "Delete account", tint: Theme.Colors.danger, isLoading: vm.isDeletingAccount) {
                 showDeleteAccountConfirm = true
             }
             .disabled(vm.isDeletingAccount)
@@ -1303,7 +1303,7 @@ private struct EditProfileSheet: View {
                 .daylightSection()
             }
             .daylightForm()
-            .navigationTitle("Edit Stats")
+            .navigationTitle("Edit stats")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1623,7 +1623,7 @@ private struct LogInjectionSheet: View {
                 .daylightSection()
             }
             .daylightForm()
-            .navigationTitle("Log Dose")
+            .navigationTitle("Log dose")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

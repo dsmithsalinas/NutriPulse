@@ -4550,7 +4550,7 @@ final class BodyFatTrendTakeawayTests: XCTestCase {
     func testReportsTheChangeAcrossReadings() {
         let logs = [(date: Date.now.addingTimeInterval(-14 * 86_400), pct: 26.0), (date: Date.now, pct: 24.5)]
         let text = BodyFatTrendTakeaway.build(logs: logs)
-        XCTAssertEqual(text, "Body fat is down 1.5% across 2 readings.")
+        XCTAssertEqual(text, "Body fat is down 1.5 points across 2 readings.")
     }
 }
 

@@ -87,8 +87,14 @@ struct ProteinTile: View {
         .frame(maxWidth: .infinity, minHeight: 260, maxHeight: .infinity, alignment: .topLeading)
         .background {
             ZStack {
-                Theme.Colors.heroDeep
-                LiquidFill(level: level, color: Theme.Colors.hero)
+                // Faded out once the lime has covered them: left underneath, the indigo bled
+                // through the rounded corner's anti-aliasing as a thin edge on the lime tile.
+                Group {
+                    Theme.Colors.heroDeep
+                    LiquidFill(level: level, color: Theme.Colors.hero)
+                }
+                .opacity(showsClear ? 0 : 1)
+                .animation(reduceMotion ? nil : .linear(duration: 0.01).delay(0.8), value: showsClear)
                 // Lime floods up through the indigo when the floor is cleared.
                 LiquidFill(level: showsClear ? 1 : 0, color: Theme.Colors.lime, change: Self.flood)
             }
