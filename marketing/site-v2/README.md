@@ -6,7 +6,7 @@ from `NutriPulse/DesignSystem/Theme.swift`).
 - `src/` — the home page (React + Vite). `sections/Home.tsx` holds every section;
   `ProteinTile.tsx` is the animated hero, a port of the app's floor-cleared moment.
 - `public/` — static pages served as-is: `privacy.html`, `terms.html`, `contact.html`,
-  `404.html`, styled by `legal.css`. The fonts in `public/fonts/` are the app's own files
+  `404.html`, styled by `legal.css`. The fonts in `public/fonts/` are the app's own files, converted to woff2
   (SIL Open Font License, included).
 - Every product claim must be one the app actually makes. The FAQ's privacy answer and
   `public/privacy.html` must agree: change both in the same commit.
