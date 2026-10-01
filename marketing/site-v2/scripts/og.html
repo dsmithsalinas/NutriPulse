@@ -1,0 +1,60 @@
+<!doctype html>
+<!--
+  The 1200×630 share card (public/og.png), in Daylight. Rendered by scripts/make-brand-assets.mjs
+  with headless Chrome so it uses the site's real fonts. Restates the hero: headline on the left,
+  the protein tile at "Floor cleared" on the right.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+@font-face { font-family: 'Bricolage'; src: url('../public/fonts/BricolageGrotesque-ExtraBold.ttf'); font-weight: 800; }
+@font-face { font-family: 'Figtree'; src: url('../public/fonts/Figtree-SemiBold.ttf'); font-weight: 600; }
+@font-face { font-family: 'Figtree'; src: url('../public/fonts/Figtree-Bold.ttf'); font-weight: 700; }
+html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+body { background: #EEF1F6; font-family: 'Figtree', sans-serif; color: #0F172A; -webkit-font-smoothing: antialiased; }
+.card { box-sizing: border-box; width: 1200px; height: 630px; padding: 64px 72px; display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 56px; align-items: center; }
+.left { display: flex; flex-direction: column; gap: 28px; }
+.brand { display: flex; align-items: center; gap: 16px; }
+.mark { width: 60px; height: 60px; border-radius: 18px; background: #4F46E5; display: flex; align-items: center; justify-content: center; }
+.word { font-family: 'Bricolage'; font-weight: 800; font-size: 36px; letter-spacing: -0.02em; }
+h1 { margin: 0; font-family: 'Bricolage'; font-weight: 800; font-size: 104px; line-height: .94; letter-spacing: -0.03em; }
+.sub { font-size: 28px; font-weight: 600; color: #475569; }
+.tiles { position: relative; display: grid; grid-template-columns: 1fr; gap: 14px; }
+.protein { position: relative; height: 330px; border-radius: 36px; background: #D9F99D; padding: 28px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; color: #1A2E05; }
+.top { display: flex; justify-content: space-between; font-size: 18px; font-weight: 600; color: #365314; }
+.eb { font-size: 17px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; }
+.n { font-family: 'Bricolage'; font-weight: 800; font-size: 120px; line-height: 1; letter-spacing: -0.03em; }
+.n small { font-size: 44px; }
+.s { font-size: 24px; font-weight: 700; }
+.bubble { position: absolute; border-radius: 50%; background: #D9F99D; border: 3px solid #4D7C0F; }
+.pill { border-radius: 26px; background: #FFFFFF; padding: 20px 24px; display: flex; align-items: center; gap: 14px; font-size: 21px; font-weight: 600; line-height: 1.35; }
+.pill .m { flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px; background: #4F46E5; display: flex; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="left">
+    <div class="brand">
+      <span class="mark"><svg width="36" height="36" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.3" stroke="#fff" stroke-opacity="0.28" stroke-width="3.2"/><path d="M12 3.7 A8.3 8.3 0 1 1 4.2 14.84" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><circle cx="4.2" cy="14.84" r="2.7" fill="#fff"/></svg></span>
+      <span class="word">Footing</span>
+    </div>
+    <h1>Coached,<br>not scolded.</h1>
+    <span class="sub">Protein-first coaching for life on a GLP-1.</span>
+  </div>
+  <div class="tiles">
+    <span class="bubble" style="left: 22%; top: -30px; width: 20px; height: 20px"></span>
+    <span class="bubble" style="left: 46%; top: -52px; width: 26px; height: 26px"></span>
+    <span class="bubble" style="left: 68%; top: -22px; width: 15px; height: 15px"></span>
+    <div class="protein">
+      <div class="top"><span class="eb">Protein</span><span>floor 140</span></div>
+      <div><div class="n">146<small>g</small></div><div class="s">Floor cleared</div></div>
+    </div>
+    <div class="pill">
+      <span class="m"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.3" stroke="#fff" stroke-opacity="0.28" stroke-width="3.2"/><path d="M12 3.7 A8.3 8.3 0 1 1 4.2 14.84" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><circle cx="4.2" cy="14.84" r="2.7" fill="#fff"/></svg></span>
+      Cleared before dinner, three days running.
+    </div>
+  </div>
+</div>
+</body>
+</html>
