@@ -105,5 +105,8 @@ struct DatePickerSheet: View {
                     }
                 }
         }
+        // A solid sheet like the others: without it, iOS 26's translucent sheet material let
+        // Today's tiles show through under the calendar's day numbers.
+        .presentationBackground(Theme.Colors.ground)
     }
 }

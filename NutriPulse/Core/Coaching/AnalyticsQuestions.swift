@@ -253,6 +253,8 @@ enum BodyFatTrendTakeaway {
             return "Body fat has held steady across \(logs.count) readings."
         }
         let direction = change < 0 ? "down" : "up"
-        return "Body fat is \(direction) \(String(format: "%.1f", abs(change)))% across \(logs.count) readings."
+        // A change in a percentage is in points: 29% → 26.6% is down 2.4 points, not 2.4%.
+        let points = String(format: "%.1f", abs(change))
+        return "Body fat is \(direction) \(points) \(points == "1.0" ? "point" : "points") across \(logs.count) readings."
     }
 }

@@ -134,13 +134,13 @@ struct ProgressDashboardView: View {
                     } label: {
                         Text(range.pillLabel)
                             .font(Theme.Fonts.body(14, .bold))
-                            .foregroundStyle(selectedRange == range ? .white : Theme.Colors.textSecondary)
+                            .foregroundStyle(selectedRange == range ? Theme.Colors.selectionText : Theme.Colors.textSecondary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 40)
                             .background {
                                 if selectedRange == range {
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(Theme.Colors.ink)
+                                        .fill(Theme.Colors.selectionFill)
                                 }
                             }
                     }
@@ -741,6 +741,8 @@ private struct ProgressDestinationRow: View {
                     .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
+            // NavigationLink labels centre wrapped text by default, which read as an indent.
+            .multilineTextAlignment(.leading)
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .semibold))

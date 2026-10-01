@@ -68,13 +68,13 @@ struct LogTabBar: View {
                 } label: {
                     Text(tab.rawValue)
                         .font(Theme.Fonts.body(14, selected ? .bold : .semibold))
-                        .foregroundStyle(selected ? .white : Theme.Colors.textSecondary)
+                        .foregroundStyle(selected ? Theme.Colors.selectionText : Theme.Colors.textSecondary)
                         // Slightly taller than the mockup's 40pt track for a ≥44pt tap target.
                         .frame(maxWidth: .infinity, minHeight: 44)
                         .background {
                             if selected {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(Theme.Colors.ink)
+                                    .fill(Theme.Colors.selectionFill)
                             }
                         }
                 }
