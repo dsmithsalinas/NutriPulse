@@ -16,4 +16,12 @@ enum EdgeFunctionError {
         }
         return fallback
     }
+
+    /// coach-chat's 403 for an account whose Pulse setting is off on the server (turned off on
+    /// another device, say) while this one still had it on.
+    static func isPulseOff(_ error: Error) -> Bool {
+        guard case let FunctionsError.httpError(code, data) = error, code == 403 else { return false }
+        struct Body: Decodable { let code: String? }
+        return (try? JSONDecoder().decode(Body.self, from: data))?.code == "pulse_off"
+    }
 }

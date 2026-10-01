@@ -134,13 +134,13 @@ struct ProgressDashboardView: View {
                     } label: {
                         Text(range.pillLabel)
                             .font(Theme.Fonts.body(14, .bold))
-                            .foregroundStyle(selectedRange == range ? .white : Theme.Colors.textSecondary)
+                            .foregroundStyle(selectedRange == range ? Theme.Colors.selectionText : Theme.Colors.textSecondary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 40)
                             .background {
                                 if selectedRange == range {
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(Theme.Colors.ink)
+                                        .fill(Theme.Colors.selectionFill)
                                 }
                             }
                     }
@@ -186,13 +186,17 @@ struct ProgressDashboardView: View {
 
     private var noticeRow: some View {
         HStack(spacing: Theme.Spacing.tileGap) {
-            NoticeTile(
-                eyebrow: "Worth noticing",
-                text: noticeText,
-                fill: Theme.Colors.violet,
-                eyebrowColor: Theme.Colors.violetLabel,
-                textColor: Theme.Colors.violetInk
-            )
+            // Paused or stopped: no shot cycles to notice anything about, so "Try this" takes
+            // the row alone (Android's NoticeRow does the same).
+            if GLP1TrackingStore.shared.isTracking {
+                NoticeTile(
+                    eyebrow: "Worth noticing",
+                    text: noticeText,
+                    fill: Theme.Colors.violet,
+                    eyebrowColor: Theme.Colors.violetLabel,
+                    textColor: Theme.Colors.violetInk
+                )
+            }
             NoticeTile(
                 eyebrow: "Try this",
                 text: tryThisText,
@@ -519,19 +523,27 @@ private struct FloorDaysGraphic: View {
 private struct Sparkline: View {
     let values: [Double]
     var color: Color = Theme.Colors.primary
+    /// Explicit (min, max) to draw within, e.g. `SparklineScale.weightBounds`. When nil, falls
+    /// back to anchoring the bottom at 60% of the peak — see `defaultBounds` below.
+    var bounds: (min: Double, max: Double)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drawn = false
+
+    /// Anchor the bottom well below the data (at most 60% of the peak) instead of at its
+    /// minimum: min-to-max scaling stretched a 110–140 g protein week into full-height spikes,
+    /// so ordinary day-to-day wobble read as a crisis.
+    static func defaultBounds(_ values: [Double]) -> (min: Double, max: Double) {
+        let maxV = values.max() ?? 1
+        let minV = min(values.min() ?? 0, maxV * 0.6)
+        return (minV, maxV)
+    }
 
     var body: some View {
         GeometryReader { geo in
             Path { path in
                 guard values.count > 1 else { return }
-                // Anchor the bottom well below the data (at most 60% of the peak) instead of at
-                // its minimum: min-to-max scaling stretched a 110–140 g week into full-height
-                // spikes, so ordinary day-to-day wobble read as a crisis.
-                let maxV = values.max() ?? 1
-                let minV = min(values.min() ?? 0, maxV * 0.6)
+                let (minV, maxV) = bounds ?? Self.defaultBounds(values)
                 let range = max(maxV - minV, 0.0001)
                 let stepX = geo.size.width / CGFloat(values.count - 1)
                 for (index, value) in values.enumerated() {
@@ -600,11 +612,20 @@ private struct WeightTrendStatTile: View {
         return last.weightKg - first.weightKg
     }
 
+    // The sparkline is always plotted in kg (weightLogs' native unit), so the floor under its
+    // span is expressed in kg too — about 1 kg, or the equivalent ~2 lb for imperial users.
+    private var minimumSparklineSpanKg: Double { units == .imperial ? 2 / 2.20462 : 1.0 }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             TileEyebrow("Weight trend")
             if ordered.count > 1 {
-                Sparkline(values: ordered.map(\.weightKg), color: Theme.Colors.textPrimary)
+                let weights = ordered.map(\.weightKg)
+                Sparkline(
+                    values: weights,
+                    color: Theme.Colors.textPrimary,
+                    bounds: SparklineScale.weightBounds(weights, minimumSpan: minimumSparklineSpanKg)
+                )
                     .frame(height: 32)
             } else {
                 Spacer(minLength: 32)
@@ -720,6 +741,8 @@ private struct ProgressDestinationRow: View {
                     .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
+            // NavigationLink labels centre wrapped text by default, which read as an indent.
+            .multilineTextAlignment(.leading)
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .semibold))
@@ -739,8 +762,19 @@ private struct ProgressSummariesView: View {
     @State private var viewModel = ProgressSummaryViewModel()
 
     init(initialPeriod: ProgressSummaryPeriod) {
-        self.initialPeriod = initialPeriod
-        _selectedPeriod = State(initialValue: initialPeriod)
+        // Paused or stopped: there are no shot cycles to show "Since last shot" for, so it's
+        // never offered (see `availablePeriods`) — fall back rather than open on a period that
+        // isn't in the picker.
+        let period = (initialPeriod == .sinceLastShot && !GLP1TrackingStore.shared.isTracking) ? .week : initialPeriod
+        self.initialPeriod = period
+        _selectedPeriod = State(initialValue: period)
+    }
+
+    /// Mirrors Android's `SummaryReview.periods(tracking)`.
+    private var availablePeriods: [ProgressSummaryPeriod] {
+        GLP1TrackingStore.shared.isTracking
+            ? ProgressSummaryPeriod.allCases
+            : ProgressSummaryPeriod.allCases.filter { $0 != .sinceLastShot }
     }
 
     private var currentWindow: ClosedRange<Date>? {
@@ -803,7 +837,7 @@ private struct ProgressSummariesView: View {
 
     private var periodPicker: some View {
         Picker("Summary period", selection: $selectedPeriod) {
-            ForEach(ProgressSummaryPeriod.allCases) { period in
+            ForEach(availablePeriods) { period in
                 Text(period.label).tag(period)
             }
         }

@@ -4550,7 +4550,7 @@ final class BodyFatTrendTakeawayTests: XCTestCase {
     func testReportsTheChangeAcrossReadings() {
         let logs = [(date: Date.now.addingTimeInterval(-14 * 86_400), pct: 26.0), (date: Date.now, pct: 24.5)]
         let text = BodyFatTrendTakeaway.build(logs: logs)
-        XCTAssertEqual(text, "Body fat is down 1.5% across 2 readings.")
+        XCTAssertEqual(text, "Body fat is down 1.5 points across 2 readings.")
     }
 }
 
@@ -4686,5 +4686,288 @@ final class LongGapDoseCardTests: XCTestCase {
 
     func testNoShotHistoryIsNeverALongGap() {
         XCTAssertFalse(GLP1DoseSchedule(latest: nil, skips: [], now: date(2026, 10, 1)).missedMoreThanOneDose)
+    }
+}
+
+// Experiment outcomes: typed-in ratings are recorded at the check-in (latest answer per day);
+// automatic outcomes are read live over the experiment's window.
+final class ExperimentOutcomeTests: XCTestCase {
+    private var calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    private func day(_ d: Int, hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 10, day: d, hour: hour))!
+    }
+
+    func testRunningTotalsLeaveTodayOutButSleepKeepsIt() {
+        let today = day(10, hour: 9)
+        let steps = ExperimentOutcomeWindow.dates(start: "2026-10-07", end: "2026-10-27", source: .steps, today: today, calendar: calendar)
+        XCTAssertEqual(steps.map { $0.isoDateString(in: calendar.timeZone) }, ["2026-10-07", "2026-10-08", "2026-10-09"])
+        let sleep = ExperimentOutcomeWindow.dates(start: "2026-10-07", end: "2026-10-27", source: .sleepDuration, today: today, calendar: calendar)
+        XCTAssertEqual(sleep.last?.isoDateString(in: calendar.timeZone), "2026-10-10")
+    }
+
+    func testWindowStopsAtTheEndDateAndIsEmptyBeforeItStarts() {
+        let ended = ExperimentOutcomeWindow.dates(start: "2026-10-01", end: "2026-10-03", source: .protein, today: day(20), calendar: calendar)
+        XCTAssertEqual(ended.count, 3)
+        XCTAssertTrue(ExperimentOutcomeWindow.dates(start: "2026-10-10", end: nil, source: .protein, today: day(10), calendar: calendar).isEmpty)
+    }
+
+    func testSeveralReadingsInADayKeepTheLatest() {
+        let values = [
+            GoalDailyValue(date: day(3, hour: 7), number: 80.4),
+            GoalDailyValue(date: day(3, hour: 21), number: 80.9),
+            GoalDailyValue(date: day(4, hour: 7), number: 80.1),
+        ]
+        XCTAssertEqual(ExperimentOutcomeWindow.byDate(values, calendar: calendar), ["2026-10-03": 80.9, "2026-10-04": 80.1])
+    }
+
+    func testARatingAnsweredTwiceInADayKeepsTheLatestAnswer() {
+        let rows = [
+            ExperimentObservationValue(localDate: "2026-10-01", number: 2),
+            ExperimentObservationValue(localDate: "2026-10-01", number: 4),
+            ExperimentObservationValue(localDate: "2026-10-02", number: 3),
+        ]
+        XCTAssertEqual(ExperimentObservationValue.latestPerDay(rows).map(\.number), [4, 3])
+    }
+
+    func testOnlySourceBackedOutcomesAreReadLive() {
+        XCTAssertTrue(ExperimentMetricSummary(name: "Sleep", unit: "hours", sourceType: .automatic, sourceMetric: .sleepDuration).isAutomatic)
+        XCTAssertFalse(ExperimentMetricSummary(name: "Morning energy", unit: "out of 5", sourceType: .manualRating).isAutomatic)
+        XCTAssertFalse(ExperimentMetricSummary(name: "Old row", unit: nil).isAutomatic)
+    }
+}
+
+// iOS parity fixes found in the Android port: values that must not drift or go to the wrong place.
+final class DataCorrectnessTests: XCTestCase {
+    private func goals(weightKg: Double?, bodyFat: Double?, leanKg: Double?) -> BodyGoals {
+        BodyGoals(userId: UUID(), weightKgTarget: weightKg, bodyFatPctTarget: bodyFat, leanMassKgFloor: leanKg, updatedAt: nil)
+    }
+
+    func testUntouchedBodyGoalsKeepTheirStoredValuesExactly() {
+        let stored = goals(weightKg: 78.0, bodyFat: 28.25, leanKg: 55.0)
+        let opened = BodyGoalsFields(goals: stored, units: .imperial)
+        let values = opened.values(opened: opened, stored: stored, units: .imperial)
+        XCTAssertEqual(values.weightKg, 78.0)
+        XCTAssertEqual(values.bodyFatPct, 28.25)
+        XCTAssertEqual(values.leanKg, 55.0)
+    }
+
+    func testChangedBodyGoalIsParsedAndOthersStay() {
+        let stored = goals(weightKg: 78.0, bodyFat: 28.25, leanKg: nil)
+        let opened = BodyGoalsFields(goals: stored, units: .metric)
+        var typed = opened
+        typed.weight = "75"
+        typed.bodyFat = " \(opened.bodyFat) "  // whitespace alone isn't an edit
+        let values = typed.values(opened: opened, stored: stored, units: .metric)
+        XCTAssertEqual(values.weightKg, 75)
+        XCTAssertEqual(values.bodyFatPct, 28.25)
+        XCTAssertNil(values.leanKg)
+        XCTAssertEqual(typed.changed(from: opened).weight, true)
+        XCTAssertEqual(typed.changed(from: opened).bodyFat, false)
+    }
+
+    func testClearedBodyGoalIsRemoved() {
+        let stored = goals(weightKg: 78.0, bodyFat: nil, leanKg: nil)
+        let opened = BodyGoalsFields(goals: stored, units: .metric)
+        var typed = opened
+        typed.weight = ""
+        XCTAssertNil(typed.values(opened: opened, stored: stored, units: .metric).weightKg)
+    }
+
+    func testOnboardingDoseLabelsShowEveryDoseExactly() {
+        XCTAssertEqual(12.5.glp1DoseString, "12.5")
+        XCTAssertEqual(7.5.glp1DoseString, "7.5")
+        XCTAssertEqual(0.25.glp1DoseString, "0.25")
+        XCTAssertEqual(15.0.glp1DoseString, "15")
+    }
+
+    func testUsualWaterFallsBackToTheFirstPresetForTheUnits() {
+        XCTAssertEqual(WaterUnit.usualMl(stored: 0, units: .metric), 250)
+        XCTAssertEqual(WaterUnit.usualMl(stored: 0, units: .imperial), 8 * 29.5735, accuracy: 0.001)
+        XCTAssertEqual(WaterUnit.usualMl(stored: 500, units: .imperial), 500)
+    }
+
+    func testSearchSummaryPortion() {
+        XCTAssertEqual(FoodSearchMacros.portion("Per 3/4 cup - Calories: 120kcal | Protein: 16.00g"), "3/4 cup")
+        XCTAssertEqual(FoodSearchMacros.portion("Per 100g - Calories: 61kcal | Protein: 3.15g"), "100g")
+        XCTAssertNil(FoodSearchMacros.portion("A food with no macro summary"))
+    }
+
+    func testQuickAddLogsTheServingTheRowDescribes() {
+        func serving(_ id: String, _ desc: String, protein: Double) -> FoodServing {
+            FoodServing(id: id, description: desc, grams: 100, calories: 100, proteinG: protein, carbsG: 0, fatG: 0, fiberG: 0)
+        }
+        let servings = [serving("1", "1 cup", protein: 24), serving("2", "100 g", protein: 10), serving("3", "3/4 cup", protein: 18)]
+        XCTAssertEqual(FoodSearchMacros.serving(matching: "Per 100g - Calories: 61kcal | Protein: 10.00g", in: servings)?.id, "2")
+        XCTAssertEqual(FoodSearchMacros.serving(matching: "Per 3/4 Cup - Calories: 61kcal | Protein: 18.00g", in: servings)?.id, "3")
+        XCTAssertNil(FoodSearchMacros.serving(matching: "Per 1 bar - Calories: 200kcal | Protein: 20.00g", in: servings))
+    }
+
+    func testPulseOffIsRecognisedOnlyFromTheServersCode() {
+        let off = Data(#"{"error":"Pulse is turned off. You can turn it back on in Profile.","code":"pulse_off"}"#.utf8)
+        XCTAssertTrue(EdgeFunctionError.isPulseOff(FunctionsError.httpError(code: 403, data: off)))
+        XCTAssertFalse(EdgeFunctionError.isPulseOff(FunctionsError.httpError(code: 429, data: off)))
+        XCTAssertFalse(EdgeFunctionError.isPulseOff(FunctionsError.httpError(code: 403, data: Data(#"{"error":"Forbidden"}"#.utf8))))
+        XCTAssertFalse(EdgeFunctionError.isPulseOff(URLError(.notConnectedToInternet)))
+    }
+}
+
+// MARK: - Daylight alignment: weight sparkline scale, dose-change range filtering
+
+final class DaylightAlignmentTests: XCTestCase {
+
+    // MARK: SparklineScale
+
+    func testWeightBoundsPadsAroundTheDatasMinAndMax() {
+        let (lo, hi) = SparklineScale.weightBounds([80, 81, 79, 82], minimumSpan: 1.0)
+        // Data spans 79...82 (3kg); 15% padding on each side is 0.45kg, comfortably over the
+        // 1kg floor, so the floor shouldn't kick in.
+        XCTAssertEqual(lo, 79 - 0.45, accuracy: 0.001)
+        XCTAssertEqual(hi, 82 + 0.45, accuracy: 0.001)
+    }
+
+    func testWeightBoundsEnforcesAMinimumSpanForATinyWeek() {
+        // A near-flat week (0.2kg of noise) shouldn't collapse to a near-zero span — the sparkline
+        // would draw a dramatic zig-zag out of ordinary day-to-day water-weight wobble.
+        let (lo, hi) = SparklineScale.weightBounds([80.0, 80.1, 79.9, 80.2], minimumSpan: 1.0)
+        XCTAssertGreaterThanOrEqual(hi - lo, 1.0)
+        // Still centered on the data, not shifted to one side.
+        XCTAssertEqual((lo + hi) / 2, 80.05, accuracy: 0.05)
+    }
+
+    func testWeightBoundsHandlesASingleRepeatedValue() {
+        let (lo, hi) = SparklineScale.weightBounds([80, 80, 80], minimumSpan: 1.0)
+        XCTAssertEqual(hi - lo, 1.0, accuracy: 0.001)
+        XCTAssertEqual((lo + hi) / 2, 80, accuracy: 0.001)
+    }
+
+    func testWeightBoundsEmptyValuesReturnsAPlaceholderRange() {
+        let (lo, hi) = SparklineScale.weightBounds([], minimumSpan: 1.0)
+        XCTAssertLessThan(lo, hi)
+    }
+
+    // MARK: ChartRangeFilter
+
+    func testChartRangeFilterKeepsOnlyDatesInsideTheTrailingWindow() {
+        let now = Date()
+        let calendar = Calendar.current
+        let inRange = calendar.date(byAdding: .day, value: -2, to: now)!
+        let onBoundary = calendar.date(byAdding: .day, value: -6, to: now)!
+        let outOfRange = calendar.date(byAdding: .day, value: -10, to: now)!
+        let kept = ChartRangeFilter.withinRange([inRange, onBoundary, outOfRange], days: 7, date: { $0 }, now: now)
+        XCTAssertEqual(kept.count, 2)
+        XCTAssertTrue(kept.contains(inRange))
+        XCTAssertTrue(kept.contains(onBoundary))
+        XCTAssertFalse(kept.contains(outOfRange))
+    }
+
+    func testChartRangeFilterOnDoseChangeMarksMatchesAndroidsInWindowBehavior() {
+        let now = Date()
+        let calendar = Calendar.current
+        let recentChange = DoseChangeMark(date: calendar.date(byAdding: .day, value: -3, to: now)!, doseMg: 7.5, medication: "Zepbound")
+        let oldChange = DoseChangeMark(date: calendar.date(byAdding: .day, value: -60, to: now)!, doseMg: 2.5, medication: "Zepbound")
+        let kept = ChartRangeFilter.withinRange([recentChange, oldChange], days: 7, date: \.date, now: now)
+        XCTAssertEqual(kept, [recentChange])
+    }
+}
+
+// MARK: - Daylight alignment: meal row serving text, floor-cleared celebration store
+
+final class DaylightAlignmentFollowUpTests: XCTestCase {
+
+    // MARK: MealRowFormatting (Android: TodayLogic.foodServingText)
+
+    func testServingTextIsJustTheDescriptionForASingleServing() {
+        XCTAssertEqual(MealRowFormatting.servingText(quantity: 1, servingDesc: "1 serving"), "1 serving")
+        XCTAssertEqual(MealRowFormatting.servingText(quantity: 1, servingDesc: "1 cup"), "1 cup")
+    }
+
+    func testServingTextShowsTheQuantityForAnyOtherAmount() {
+        XCTAssertEqual(MealRowFormatting.servingText(quantity: 1.5, servingDesc: "1 cup"), "1.5 × 1 cup")
+        XCTAssertEqual(MealRowFormatting.servingText(quantity: 2, servingDesc: "100 g"), "2 × 100 g")
+        XCTAssertEqual(MealRowFormatting.servingText(quantity: 0.25, servingDesc: "1 bar"), "0.25 × 1 bar")
+    }
+
+    func testServingTextWithNoDescriptionCountsServingsInstead() {
+        XCTAssertEqual(MealRowFormatting.servingText(quantity: 1, servingDesc: nil), "1 serving")
+        XCTAssertEqual(MealRowFormatting.servingText(quantity: 2, servingDesc: " "), "2 servings")
+    }
+
+    func testFormatQuantityTrimsTrailingZerosLikeAndroid() {
+        XCTAssertEqual(MealRowFormatting.formatQuantity(1), "1")
+        XCTAssertEqual(MealRowFormatting.formatQuantity(1.5), "1.5")
+        XCTAssertEqual(MealRowFormatting.formatQuantity(0.25), "0.25")
+    }
+
+    // MARK: FloorClearedCelebrationStore
+
+    func testFloorClearedCelebrationStoreHasNotCelebratedUntilMarked() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let today = Date()
+        XCTAssertFalse(FloorClearedCelebrationStore.hasCelebrated(userId: "user-1", on: today, defaults: defaults))
+        FloorClearedCelebrationStore.markCelebrated(userId: "user-1", on: today, defaults: defaults)
+        XCTAssertTrue(FloorClearedCelebrationStore.hasCelebrated(userId: "user-1", on: today, defaults: defaults))
+    }
+
+    func testFloorClearedCelebrationStoreKeepsAccountsSeparate() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let today = Date()
+        FloorClearedCelebrationStore.markCelebrated(userId: "user-1", on: today, defaults: defaults)
+        XCTAssertTrue(FloorClearedCelebrationStore.hasCelebrated(userId: "user-1", on: today, defaults: defaults))
+        XCTAssertFalse(FloorClearedCelebrationStore.hasCelebrated(userId: "user-2", on: today, defaults: defaults))
+    }
+
+    func testFloorClearedCelebrationStoreDoesNotCarryOverToADifferentDay() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        let calendar = Calendar.current
+        let today = Date()
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        FloorClearedCelebrationStore.markCelebrated(userId: "user-1", on: yesterday, defaults: defaults)
+        XCTAssertFalse(FloorClearedCelebrationStore.hasCelebrated(userId: "user-1", on: today, defaults: defaults))
+    }
+}
+
+// One hour → meal rule (Meal.forHour) and English weekday labels in Recents.
+final class MealRuleAndRecentsTests: XCTestCase {
+    func testOneHourToMealRule() {
+        XCTAssertEqual(Meal.forHour(4), .snack)
+        XCTAssertEqual(Meal.forHour(5), .breakfast)
+        XCTAssertEqual(Meal.forHour(10), .breakfast)
+        XCTAssertEqual(Meal.forHour(11), .lunch)
+        XCTAssertEqual(Meal.forHour(15), .snack)
+        XCTAssertEqual(Meal.forHour(17), .dinner)
+        XCTAssertEqual(Meal.forHour(20), .dinner)
+        XCTAssertEqual(Meal.forHour(22), .snack)
+    }
+
+    func testPulseMealSuggestionFollowsTheLoggersMeal() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let tenPM = calendar.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 22))!
+        let late = CoachSuggestionBuilder.startSuggestions(
+            totalProteinG: 0, proteinGoalG: nil, cycleDay: nil, recapDue: false, now: tenPM, calendar: calendar
+        )
+        XCTAssertEqual(late.last?.eyebrow, "Snack")
+        XCTAssertEqual(late.last?.prompt, "Give me a protein snack idea")
+        let pills = CoachSuggestionBuilder.suggestions(
+            hasFoodLogs: false, totalProteinG: 0, proteinGoalG: nil, hasWorkout: false, hour: 22
+        )
+        XCTAssertTrue(pills.contains("Give me a protein snack idea"))
+    }
+
+    func testRecentsWeekdayIsEnglishWhateverTheDeviceLanguage() {
+        var german = Calendar(identifier: .gregorian)
+        german.locale = Locale(identifier: "de_DE")
+        german.timeZone = TimeZone(identifier: "UTC")!
+        let now = german.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: 12))!  // Thursday
+        let monday = german.date(byAdding: .day, value: -3, to: now)!
+        XCTAssertEqual(RecentFoodsGrouper.dayLabel(for: monday, now: now, calendar: german), "Monday")
     }
 }

@@ -114,6 +114,29 @@ enum GLP1DoseChangeDetector {
     }
 }
 
+/// Keeps a weight chart's shot-day ticks and dose-change rules from stretching past the
+/// selected range. `doseChanges`/`shotDays` are derived from the user's whole GLP-1 history (a
+/// dose change needs that context to tell a start from a change), but Swift Charts infers its
+/// x-axis from every mark plotted — so an old dose change outside the chosen week/month/quarter
+/// would still widen the axis and squeeze the actual weight data into a sliver. Matches
+/// Android's `ChartScale.inWindow` filtering in AnalyticsScreen's weight-trend question.
+enum ChartRangeFilter {
+    static func withinRange<T>(
+        _ items: [T],
+        days: Int,
+        date: (T) -> Date,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [T] {
+        let end = calendar.startOfDay(for: now)
+        guard let start = calendar.date(byAdding: .day, value: -(days - 1), to: end) else { return items }
+        return items.filter {
+            let day = calendar.startOfDay(for: date($0))
+            return day >= start && day <= end
+        }
+    }
+}
+
 enum WeightTrendEngine {
     /// Below this many weigh-ins, a change is real data but not a "trend" — see `takeaway`.
     static let minimumForTrend = 4
@@ -230,6 +253,8 @@ enum BodyFatTrendTakeaway {
             return "Body fat has held steady across \(logs.count) readings."
         }
         let direction = change < 0 ? "down" : "up"
-        return "Body fat is \(direction) \(String(format: "%.1f", abs(change)))% across \(logs.count) readings."
+        // A change in a percentage is in points: 29% → 26.6% is down 2.4 points, not 2.4%.
+        let points = String(format: "%.1f", abs(change))
+        return "Body fat is \(direction) \(points) \(points == "1.0" ? "point" : "points") across \(logs.count) readings."
     }
 }

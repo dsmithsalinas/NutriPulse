@@ -43,7 +43,7 @@ struct ExperimentRepository {
         }
         let rows: [Row] = try await supabase
             .from("experiment_measurements")
-            .select("experiment_id, measurement_id, role, experiment_metrics(name, unit)")
+            .select("experiment_id, measurement_id, role, experiment_metrics(name, unit, source_type, source_metric)")
             .in("experiment_id", values: experimentIds)
             .execute()
             .value
@@ -52,8 +52,9 @@ struct ExperimentRepository {
         }
     }
 
-    /// Daily values for one outcome measurement, oldest first — what `ExperimentComparisonEngine`
-    /// compares against the intervention goal's own check-ins.
+    /// Typed-in values for one outcome measurement (a rating), by day. One value per day: when a
+    /// day was answered more than once, the latest answer wins. Automatic outcomes aren't stored
+    /// here; they're read live from their source (`GoalMetricService.experimentOutcomes`).
     func fetchOutcomeObservations(measurementId: UUID) async throws -> [ExperimentObservationValue] {
         struct Row: Decodable {
             let localDate: String
@@ -70,14 +71,31 @@ struct ExperimentRepository {
             .select("local_date, value_number, value_boolean")
             .eq("measurement_id", value: measurementId)
             .order("local_date", ascending: true)
+            .order("observed_at", ascending: true)
             .execute()
             .value
-        return rows.map { row in
+        return ExperimentObservationValue.latestPerDay(rows.map { row in
             ExperimentObservationValue(
                 localDate: row.localDate,
                 number: row.valueNumber ?? row.valueBoolean.map { $0 ? 1 : 0 }
             )
-        }
+        })
+    }
+
+    /// Saves today's typed-in outcome (the check-in's rating). Observations are append-only (no
+    /// updates, by design and by RLS): answering again the same day adds a newer row, and
+    /// `fetchOutcomeObservations` keeps the latest one for each day.
+    func recordOutcome(
+        _ value: Double, experimentId: UUID, measurementId: UUID, localDate: String
+    ) async throws {
+        let userId = try await supabase.auth.session.user.id
+        try await supabase
+            .from("experiment_observations")
+            .insert(NewExperimentObservation(
+                experimentId: experimentId, measurementId: measurementId, userId: userId,
+                localDate: localDate, valueNumber: value
+            ))
+            .execute()
     }
 
     func create(
@@ -170,5 +188,21 @@ private struct NewExperimentMeasurement: Encodable {
         case measurementId = "measurement_id"
         case userId = "user_id"
         case role
+    }
+}
+
+private struct NewExperimentObservation: Encodable {
+    let experimentId: UUID
+    let measurementId: UUID
+    let userId: UUID
+    let localDate: String
+    let valueNumber: Double
+
+    enum CodingKeys: String, CodingKey {
+        case experimentId = "experiment_id"
+        case measurementId = "measurement_id"
+        case userId = "user_id"
+        case localDate = "local_date"
+        case valueNumber = "value_number"
     }
 }

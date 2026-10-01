@@ -41,6 +41,9 @@ struct DoseDayCard: View {
                 .accessibilityLabel("Dismiss")
             }
         }
+        // Lime in either theme, so the close button's white circle stays white: in dark mode it
+        // turned into a dark ✕ on a dark circle.
+        .environment(\.colorScheme, .light)
     }
 
     private var card: some View {

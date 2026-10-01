@@ -55,10 +55,15 @@ struct AppStoreScreenshotPreview: View {
         }
         vm.waterIntakeMl = 1250
         // Mid-cycle, so the shot-cycle tile shows: last shot three days ago, next in four.
-        let lastShot = Calendar.current.date(byAdding: .day, value: -3, to: .now)!
-        vm.latestGLP1 = GLP1Log(id: UUID(), userId: sampleUser, injectedAt: lastShot, medication: "Zepbound",
-                                doseMg: 5, site: "abdomen_left",
-                                nextDueAt: Calendar.current.date(byAdding: .day, value: 7, to: lastShot))
+        // But `--tour --glp1-paused` should still show the paused state — this fixture used to
+        // set latestGLP1 unconditionally, so GLP1TrackingStore's own "--glp1-paused" handling
+        // (it reads the launch argument directly) never reached the Today tab.
+        if GLP1TrackingStore.shared.isTracking {
+            let lastShot = Calendar.current.date(byAdding: .day, value: -3, to: .now)!
+            vm.latestGLP1 = GLP1Log(id: UUID(), userId: sampleUser, injectedAt: lastShot, medication: "Zepbound",
+                                    doseMg: 5, site: "abdomen_left",
+                                    nextDueAt: Calendar.current.date(byAdding: .day, value: 7, to: lastShot))
+        }
         vm.activeCalories = 280
         vm.sleepHours = 7.5
         vm.restingHeartRate = 62

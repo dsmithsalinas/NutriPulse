@@ -38,7 +38,9 @@ enum Theme {
         static let surfaceInset = Color(light: 0xF1F5F9, dark: 0x1F2937)
         static let hairline     = Color(light: 0xE2E8F0, dark: 0x273244)
         static let ringTrack    = Color(light: 0xF1F5F9, dark: 0x1F2937)
-        static let textFaint    = Color(light: 0x64748B, dark: 0x7C8AA0)
+        /// Captions and footers. #55637A is 5.4:1 on the ground (#64748B was 4.2:1, under AA's
+        /// 4.5); #8391A7 is at least 4.59:1 on every dark surface, inset tiles included.
+        static let textFaint    = Color(light: 0x55637A, dark: 0x8391A7)
         /// Destructive actions and errors: sign out, delete, swipe-to-delete, validation. #B91C1C
         /// on white is ~5.9:1, AA for body text.
         static let danger       = Color(light: 0xB91C1C, dark: 0xF87171)
@@ -61,6 +63,11 @@ enum Theme {
 
         /// The dark floating tab bar and other "ink" surfaces.
         static let ink          = Color(light: 0x0F172A, dark: 0x1E293B)
+        /// The selected segment in segmented controls and pill rows. In dark mode `ink` is
+        /// #1E293B, almost the track's own colour, so the selection vanished; here it inverts to
+        /// a light pill with dark text, the way light mode's dark pill does.
+        static let selectionFill = Color(light: 0x0F172A, dark: 0xE2E8F0)
+        static let selectionText = Color(light: 0xFFFFFF, dark: 0x0F172A)
         static let inkIcon      = Color(hex: 0xCBD5E1)
 
         /// Protein hero tile: deep indigo base, liquid fill in `hero`, pale indigo labels.
@@ -85,6 +92,10 @@ enum Theme {
         static let skyInk       = Color(hex: 0x0C4A6E)
         static let skyLabel     = Color(hex: 0x075985)
         static let skyAction    = Color(hex: 0x0284C7)
+        /// Water amounts on adaptive tiles (white in light, dark in dark mode). The sky inks above
+        /// are for the fixed light-sky fill and went dark-on-dark on a dark tile.
+        static let skyText      = Color(light: 0x0C4A6E, dark: 0x7DD3FC)
+        static let skySubtext   = Color(light: 0x075985, dark: 0x7CB9DA)
     }
 
     /// Ring/chart colors, tuned as one family instead of raw system colors.

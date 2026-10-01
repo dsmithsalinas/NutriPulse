@@ -26,6 +26,25 @@ enum FoodSearchMacros {
         let digits = rest.prefix { $0.isNumber || $0 == "." }
         return Double(digits)
     }
+
+    /// The portion a search summary describes: "Per 3/4 cup - Calories: …" → "3/4 cup".
+    static func portion(_ description: String) -> String? {
+        guard description.hasPrefix("Per "), let dash = description.range(of: " - ") else { return nil }
+        let portion = description[description.index(description.startIndex, offsetBy: 4)..<dash.lowerBound]
+            .trimmingCharacters(in: .whitespaces)
+        return portion.isEmpty ? nil : portion
+    }
+
+    /// The serving the summary's numbers are for ("100g" matches "100 g"), so the row's protein
+    /// is what "+" logs and what the confirm sheet opens on. Nil when none matches.
+    static func serving(matching description: String, in servings: [FoodServing]) -> FoodServing? {
+        guard let portion = portion(description).map(normalized) else { return nil }
+        return servings.first { normalized($0.description) == portion }
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text.lowercased().filter { !$0.isWhitespace }
+    }
 }
 
 // "Protein-dense" (docs/daylight-redesign.md) needs a concrete threshold — chosen here as

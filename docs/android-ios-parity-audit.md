@@ -90,3 +90,17 @@ Android files in this table live under `app/src/main/java/com/tryfooting/app/`.
 ## What remains uncertain
 
 The reporting user's exact build, medication history, and dismissal state are unknown. Local source establishes these gaps but not their specific trigger. Current production schema/function versions, installed-store versions, live model behavior, Android device performance, and complete end-to-end parity still require verification during implementation. No implementation-duration estimate is given before the Android build baseline and first slice are validated.
+
+## iOS follow-ups from the Android Daylight port (October 1, 2026)
+
+The Android Daylight port (`footing-android/docs/daylight-android.md`) turned up iOS gaps. Owner decisions: faint text #55637A / #8391A7 on both platforms, the widget turns fully lime when the floor is cleared, one hour → meal rule (`Meal.forHour`), and experiment observations get built rather than the results being hidden.
+
+**Data correctness (`ios/data-correctness`, NutriPulse#13; Android search fix footing-android#1):** body goals keep untouched stored values; the consent sheet waits for Pulse settings; Pulse hand-offs survive a reply in progress; coach-chat's 403 `pulse_off` turns Pulse off on the device; onboarding dose labels are exact; widget, Home Screen and notification water actions add the usual amount to today; search "+" logs the portion the row describes (both platforms).
+
+**Daylight alignment (`ios/daylight-alignment`):** lime widget when cleared; floor-cleared moment once per day per account, persisted; meal rows read "1 cup · 320 cal" / "1.5 × 1 cup"; the floor card's Profile link; no shot wording on Progress while GLP-1 is paused; the Analytics weight chart's dose marks stay inside the selected range; the Progress weight sparkline scales to the data (with a ~1 kg / ~2 lb minimum span); `--tour --glp1-paused`; one meal-time rule for the logger and Pulse's suggestions; English weekday labels in Recents; faint text colour (Android's dark value lifted to match on `daylight/faint-text-dark`).
+
+**Still open:**
+- Android: the weight sparkline still anchors at 60% of the peak (iOS now scales to the data); the floor card link only opens Profile on iOS, where Android also scrolls to Daily targets.
+- Both: nothing writes `experiment_observations`, and HealthKit / Health Connect sleep and steps outcomes aren't evaluated into experiment results (approved to build).
+- Both: the dark-mode indigo hero has low contrast on the dark ground (needs a design pass); Pulse history is one stream with no `conversation_id`.
+- Not changed on purpose: `WeeklyRecapDigest.weightChange` uses an ASCII hyphen, but it's only context sent to Pulse, never shown on screen.

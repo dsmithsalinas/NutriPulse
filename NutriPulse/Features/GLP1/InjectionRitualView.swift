@@ -35,6 +35,10 @@ struct InjectionRitualView: View {
             }
             .ignoresSafeArea()
         }
+        // The screen is lime in either theme, so its white tiles, close button and site chips
+        // keep their light colours too. In dark mode they turned navy on lime, and the close
+        // button became a dark ✕ on a dark circle.
+        .environment(\.colorScheme, .light)
         .task {
             vm.load(from: latest)
             suggestedSite = vm.site

@@ -39,18 +39,30 @@ struct ProteinTile: View {
         return remaining <= 0 && !holdsClear
     }
 
+    @ViewBuilder private var floorLabel: some View {
+        if let goalG {
+            Text("floor \(Int(goalG.rounded()))")
+                .font(Theme.Fonts.body(12, .semibold))
+                .foregroundStyle(label)
+        }
+    }
+
     private var ink: Color { showsClear ? Theme.Colors.limeInk : .white }
     private var label: Color { showsClear ? Theme.Colors.limeLabel : Theme.Colors.heroLabel }
 
     var body: some View {
         VStack(alignment: .leading) {
-            HStack {
-                TileEyebrow("Protein", color: label)
-                Spacer(minLength: 4)
-                if let goalG {
-                    Text("floor \(Int(goalG.rounded()))")
-                        .font(Theme.Fonts.body(12, .semibold))
-                        .foregroundStyle(label)
+            // Side by side when it fits; at large text the floor drops below instead of
+            // squeezing the eyebrow until it breaks mid-word ("PROTEI / N").
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    TileEyebrow("Protein", color: label).fixedSize()
+                    Spacer(minLength: 4)
+                    floorLabel.fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    TileEyebrow("Protein", color: label)
+                    floorLabel
                 }
             }
             Spacer(minLength: 12)
@@ -75,8 +87,14 @@ struct ProteinTile: View {
         .frame(maxWidth: .infinity, minHeight: 260, maxHeight: .infinity, alignment: .topLeading)
         .background {
             ZStack {
-                Theme.Colors.heroDeep
-                LiquidFill(level: level, color: Theme.Colors.hero)
+                // Faded out once the lime has covered them: left underneath, the indigo bled
+                // through the rounded corner's anti-aliasing as a thin edge on the lime tile.
+                Group {
+                    Theme.Colors.heroDeep
+                    LiquidFill(level: level, color: Theme.Colors.hero)
+                }
+                .opacity(showsClear ? 0 : 1)
+                .animation(reduceMotion ? nil : .linear(duration: 0.01).delay(0.8), value: showsClear)
                 // Lime floods up through the indigo when the floor is cleared.
                 LiquidFill(level: showsClear ? 1 : 0, color: Theme.Colors.lime, change: Self.flood)
             }
@@ -244,19 +262,31 @@ struct CaloriesTile: View {
         return left >= 0 ? (left.formatted(), "left") : ((-left).formatted(), "over")
     }
 
+    private var caloriesValue: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(caloriesLine.value)
+                .font(Theme.Fonts.number(20, .bold, relativeTo: .headline))
+                .foregroundStyle(Theme.Colors.textPrimary)
+            Text(caloriesLine.unit)
+                .font(Theme.Fonts.body(12, .semibold))
+                .foregroundStyle(Theme.Colors.textSecondary)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    TileEyebrow("Calories")
-                    Spacer(minLength: 4)
-                    HStack(alignment: .firstTextBaseline, spacing: 3) {
-                        Text(caloriesLine.value)
-                            .font(Theme.Fonts.number(20, .bold, relativeTo: .headline))
-                            .foregroundStyle(Theme.Colors.textPrimary)
-                        Text(caloriesLine.unit)
-                            .font(Theme.Fonts.body(12, .semibold))
-                            .foregroundStyle(Theme.Colors.textSecondary)
+                // At large text the number goes under the eyebrow rather than truncating both
+                // ("CALORI… 8… left").
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        TileEyebrow("Calories").fixedSize()
+                        Spacer(minLength: 4)
+                        caloriesValue.fixedSize()
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        TileEyebrow("Calories")
+                        caloriesValue
                     }
                 }
                 if let goal, goal.calories > 0 {

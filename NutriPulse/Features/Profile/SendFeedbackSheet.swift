@@ -41,7 +41,7 @@ struct SendFeedbackSheet: View {
                 .daylightSection()
             }
             .daylightForm()
-            .navigationTitle("Send Feedback")
+            .navigationTitle("Send feedback")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
