@@ -4,11 +4,11 @@
  * product. Fonts are the app's own files, self-hosted from /fonts (no third-party font CDN).
  */
 
-@font-face { font-family: 'Bricolage'; src: url('/fonts/BricolageGrotesque-ExtraBold.ttf') format('truetype'); font-weight: 800; font-display: swap; }
-@font-face { font-family: 'Bricolage'; src: url('/fonts/BricolageGrotesque-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
-@font-face { font-family: 'Figtree'; src: url('/fonts/Figtree-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'Figtree'; src: url('/fonts/Figtree-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
-@font-face { font-family: 'Figtree'; src: url('/fonts/Figtree-Bold.ttf') format('truetype'); font-weight: 700 800; font-display: swap; }
+@font-face { font-family: 'Bricolage'; src: url('/fonts/BricolageGrotesque-ExtraBold.woff2') format('woff2'); font-weight: 800; font-display: swap; }
+@font-face { font-family: 'Bricolage'; src: url('/fonts/BricolageGrotesque-Bold.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url('/fonts/Figtree-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url('/fonts/Figtree-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Figtree'; src: url('/fonts/Figtree-Bold.woff2') format('woff2'); font-weight: 700 800; font-display: swap; }
 
 :root {
   --ground: #EEF1F6;
