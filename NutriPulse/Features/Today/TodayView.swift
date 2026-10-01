@@ -511,6 +511,8 @@ struct TodayView: View {
                     doseText: "\(log.doseMg.glp1DoseString) mg",
                     overdue: vm.doseStatus?.urgent ?? false,
                     plannedFor: vm.doseSchedule.nextDue,
+                    lastShot: log.injectedAt,
+                    missedMoreThanOneDose: vm.doseSchedule.missedMoreThanOneDose,
                     completed: false,
                     onTap: { showRitual = true },
                     onDismiss: { doseCardDismissedDay = Date.now.isoDateString }

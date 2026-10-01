@@ -10,6 +10,10 @@ struct DoseDayCard: View {
     var overdue: Bool = false
     /// When the dose was planned, for the past-due wording ("Planned for Aug 26").
     var plannedFor: Date? = nil
+    /// More than one dose missed (`GLP1DoseSchedule.missedMoreThanOneDose`): the card names the
+    /// last shot and points to the prescriber instead of showing an old plan as current.
+    var lastShot: Date? = nil
+    var missedMoreThanOneDose: Bool = false
     var completed: Bool = false
     var onTap: () -> Void = {}
     var onDismiss: (() -> Void)? = nil
@@ -52,11 +56,13 @@ struct DoseDayCard: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
                 PulseDot()
-                TileEyebrow(overdue ? plannedLabel : "It\u{2019}s dose day", color: Theme.Colors.limeLabel)
+                TileEyebrow(eyebrow, color: Theme.Colors.limeLabel)
             }
 
             // Past the planned day: factual and calm, never "overdue" (same voice as Pulse).
-            Text(overdue ? "Log it when you\u{2019}ve taken it" : "Time for your shot")
+            // After more than one missed dose, restarting is a question for the prescriber, so the
+            // card says that rather than "log it" (it gives no restart advice of its own).
+            Text(headline)
                 .font(Theme.Fonts.display(24, .bold, relativeTo: .title3))
                 .foregroundStyle(Theme.Colors.limeInk)
                 .padding(.top, 8)
@@ -76,6 +82,20 @@ struct DoseDayCard: View {
             .padding(.top, 16)
         }
         .padding(20)
+    }
+
+    private var longGap: Bool { overdue && missedMoreThanOneDose && lastShot != nil }
+
+    private var eyebrow: String {
+        if longGap, let lastShot {
+            return "Your last shot was \(lastShot.formatted(.dateTime.month(.abbreviated).day()))"
+        }
+        return overdue ? plannedLabel : "It\u{2019}s dose day"
+    }
+
+    private var headline: String {
+        if longGap { return "Check with your prescriber before restarting" }
+        return overdue ? "Log it when you\u{2019}ve taken it" : "Time for your shot"
     }
 
     private var plannedLabel: String {
