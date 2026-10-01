@@ -11,11 +11,14 @@
  * Why a script rather than hand-authored files: the OG card restates the hero —
  * same dial, same fill, same floor tick, same headline. When the hero changes,
  * this needs to change with it, and a script makes that a one-line edit instead
- * of redrawing an image. Text is rasterised with real Inter (installed
- * system-wide), so the card matches the site rather than approximating it.
+ * of redrawing an image. The card is scripts/og.html, rendered by headless
+ * Chrome with the site's own fonts.
  */
 import sharp from 'sharp'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -24,19 +27,6 @@ mkdirSync(OUT, { recursive: true })
 
 const INDIGO = '#6366F1'
 const VIOLET = '#8B5CF6'
-const SUBGRADE = '#07070F'
-const ON_DARK = '#F6F5FC'
-
-/** Fraction of the dial that's filled, and where the protein floor sits.
- *  Mirrors TRACK[0].fill and FLOOR_AT in src/hero/Rings.tsx. */
-const FILL = 0.34
-const FLOOR = 0.76
-
-/** Point on a circle at `t` (0–1) clockwise from twelve o'clock. */
-const at = (cx, cy, r, t) => {
-  const a = t * Math.PI * 2
-  return [cx + r * Math.sin(a), cy - r * Math.cos(a)]
-}
 
 /* ── The mark ───────────────────────────────────────────────────────────
    Same geometry as orbit-exports/export/footing-mark.svg. `inset` controls how
@@ -86,67 +76,18 @@ const touch = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width
 await sharp(Buffer.from(touch)).png().toFile(join(OUT, 'apple-touch-icon.png'))
 
 /* ── og.png ──────────────────────────────────────────────────────────────
-   1200×630 — the ratio every major platform crops to. Deliberately restates
-   the hero: same dial at the same fill, the floor tick, and the headline, so a
-   shared link and the site read as one thing. */
-const W = 1200
-const H = 630
-const CX = 895
-const CY = 315
-const R = 158
-const BAND = 34
-
-const [fx, fy] = at(CX, CY, R, FILL)
-const [tx1, ty1] = at(CX, CY, R - BAND / 2 - 9, FLOOR)
-const [tx2, ty2] = at(CX, CY, R + BAND / 2 + 9, FLOOR)
-
-const og = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-  <defs>
-    <linearGradient id="arc" gradientUnits="userSpaceOnUse" x1="${CX}" y1="${CY - R}" x2="${fx}" y2="${fy}">
-      <stop offset="0%" stop-color="${INDIGO}"/><stop offset="100%" stop-color="${VIOLET}"/>
-    </linearGradient>
-    <radialGradient id="bloom" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0%" stop-color="${VIOLET}" stop-opacity="0.30"/>
-      <stop offset="100%" stop-color="${VIOLET}" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-
-  <rect width="${W}" height="${H}" fill="${SUBGRADE}"/>
-  <ellipse cx="${CX}" cy="${CY + 60}" rx="430" ry="330" fill="url(#bloom)"/>
-
-  <!-- lockup -->
-  <g transform="translate(80, 68) scale(0.78)">${mark({ ids: 'o' })}</g>
-  <text x="136" y="108" font-family="Inter" font-size="33" font-weight="600"
-        letter-spacing="-1.3" fill="${ON_DARK}">Footing</text>
-
-  <!-- the promise -->
-  <text x="80" y="300" font-family="Inter" font-size="78" font-weight="600"
-        letter-spacing="-3.4" fill="${ON_DARK}">Coached,</text>
-  <text x="80" y="382" font-family="Inter" font-size="78" font-weight="600"
-        letter-spacing="-3.4" fill="${ON_DARK}">not scolded.</text>
-  <text x="82" y="443" font-family="Inter" font-size="25" font-weight="400"
-        letter-spacing="-0.4" fill="${ON_DARK}" opacity="0.62">Protein-first GLP-1 coaching</text>
-  <text x="82" y="556" font-family="Inter" font-size="21" font-weight="500"
-        letter-spacing="-0.2" fill="${ON_DARK}" opacity="0.40">tryfooting.app</text>
-
-  <!-- the dial -->
-  <!-- Track kept visible enough that the unfilled arc reads as part of the dial.
-       Any dimmer and the floor tick looks like a stray dash floating in space
-       rather than a threshold marked on the ring. -->
-  <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${INDIGO}"
-          stroke-opacity="0.34" stroke-width="${BAND}"/>
-  <path d="M ${CX} ${CY - R} A ${R} ${R} 0 0 1 ${fx.toFixed(1)} ${fy.toFixed(1)}"
-        fill="none" stroke="url(#arc)" stroke-width="${BAND}" stroke-linecap="round"/>
-  <!-- the floor tick: the one mark that makes this Footing's dial -->
-  <line x1="${tx1.toFixed(1)}" y1="${ty1.toFixed(1)}" x2="${tx2.toFixed(1)}" y2="${ty2.toFixed(1)}"
-        stroke="#fff" stroke-width="5" stroke-linecap="round"/>
-
-  <text x="${CX}" y="${CY + 6}" text-anchor="middle" font-family="Inter" font-size="72"
-        font-weight="600" letter-spacing="-3" fill="${ON_DARK}">63</text>
-  <text x="${CX}" y="${CY + 44}" text-anchor="middle" font-family="Inter" font-size="21"
-        font-weight="500" letter-spacing="0.2" fill="${ON_DARK}" opacity="0.5">of 185g protein</text>
-</svg>`
-
-await sharp(Buffer.from(og)).png({ compressionLevel: 9 }).toFile(join(OUT, 'og.png'))
+   1200×630, the ratio every platform crops to. Restates the hero in Daylight:
+   the headline beside the protein tile at "Floor cleared". Rendered from
+   scripts/og.html by headless Chrome, so it uses the site's real fonts without
+   installing anything system-wide. Set CHROME to another binary if needed. */
+const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+const shot = join(tmpdir(), `footing-og-${process.pid}.png`)
+execFileSync(CHROME, [
+  '--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=1',
+  '--window-size=1200,630', '--virtual-time-budget=3000', `--screenshot=${shot}`,
+  pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), 'og.html')).href,
+], { stdio: 'ignore' })
+await sharp(shot).resize(1200, 630).png({ compressionLevel: 9 }).toFile(join(OUT, 'og.png'))
+rmSync(shot, { force: true })
 
 console.log('wrote favicon.svg, apple-touch-icon.png, og.png')
