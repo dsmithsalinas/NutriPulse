@@ -90,20 +90,30 @@ final class FoodSearchViewModel {
     private(set) var quickLoggedIDs: Set<String> = []
 
     /// Tapping a result's name opens the full confirm sheet; tapping "+" logs it immediately
-    /// at quantity 1, first serving, straight to whichever meal the header shows.
-    func quickLog(_ result: FoodSearchResult, meal: Meal, on date: Date) async {
+    /// at quantity 1, straight to whichever meal the header shows, in the portion the row's
+    /// numbers describe. When no serving matches that portion, it opens the confirm sheet
+    /// instead, so the user picks one rather than logging a portion the row didn't show.
+    /// Returns whether it logged.
+    func quickLog(_ result: FoodSearchResult, meal: Meal, on date: Date) async -> Bool {
         quickLoggingID = result.id
         defer { quickLoggingID = nil }
         do {
             let detail = try await client.getFood(id: result.id)
-            guard let serving = detail.servings.first else {
-                errorMessage = "Couldn't log \(result.name). Try again."
-                return
+            guard let serving = FoodSearchMacros.serving(matching: result.description, in: detail.servings) else {
+                guard !detail.servings.isEmpty else {
+                    errorMessage = "Couldn't log \(result.name). Try again."
+                    return false
+                }
+                selectedMeal = meal
+                await loadDetail(for: result)
+                return false
             }
             try await persistLog(detail: detail, serving: serving, quantity: 1, meal: meal, date: date, favorite: false)
             quickLoggedIDs.insert(result.id)
+            return true
         } catch {
             errorMessage = "Couldn't log \(result.name). Try again."
+            return false
         }
     }
 
@@ -192,7 +202,8 @@ final class FoodSearchViewModel {
             let loaded = try await client.getFood(id: result.id)
             guard detailRequestID == requestID else { return }   // superseded; drop it
             detail = loaded
-            selectedServing = loaded.servings.first
+            selectedServing = FoodSearchMacros.serving(matching: result.description, in: loaded.servings)
+                ?? loaded.servings.first
         } catch {
             guard detailRequestID == requestID else { return }
             // Shown inside the sheet. Stored in errorMessage, it went to the alert on the

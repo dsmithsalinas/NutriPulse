@@ -210,7 +210,7 @@ final class NotificationManager {
         )
         let addWater = UNNotificationAction(
             identifier: Self.addWaterAction,
-            title: "Add 250 ml",
+            title: "Add your usual water",
             options: [.foreground]
         )
         let repeatMeal = UNNotificationAction(

@@ -35,13 +35,10 @@ struct TodayView: View {
     // it returns on the next dose day (or as an overdue prompt the following day).
     @AppStorage("doseCardDismissedDay") private var doseCardDismissedDay = ""
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
-    // The water tile's one-tap amount, in ml. 0 until the user picks a size, which falls back
-    // to the first preset for their units (250 ml or 8 oz).
-    @AppStorage("waterUsualMl") private var storedUsualWaterMl: Double = 0
-    private var waterUnit: WaterUnit { units == .imperial ? .oz : .ml }
-    private var usualWaterMl: Double {
-        storedUsualWaterMl > 0 ? storedUsualWaterMl : (waterUnit.quickAdds.first?.ml ?? 250)
-    }
+    // The water tile's one-tap amount, in ml. 0 until the user picks a size (see WaterUnit.usualMl).
+    @AppStorage(WaterUnit.usualMlKey) private var storedUsualWaterMl: Double = 0
+    private var waterUnit: WaterUnit { WaterUnit(units: units) }
+    private var usualWaterMl: Double { WaterUnit.usualMl(stored: storedUsualWaterMl, units: units) }
     // Gates Today's Pulse-branded priority cards (see PulseGate). Read directly off the
     // device-cached singleton, like SyncEngine.shared.statusMessage above — Observation tracks
     // the read regardless of how the reference was obtained.

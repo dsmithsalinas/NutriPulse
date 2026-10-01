@@ -73,7 +73,7 @@ struct GLP1SetupStepView: View {
             sectionLabel("Weekly dose")
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 8)], alignment: .leading, spacing: 8) {
                 ForEach(vm.glp1Medication.availableDoses, id: \.self) { dose in
-                    OnboardingPill(title: String(format: "%.2g mg", dose), isSelected: vm.glp1DoseMg == dose) {
+                    OnboardingPill(title: "\(dose.glp1DoseString) mg", isSelected: vm.glp1DoseMg == dose) {
                         vm.glp1DoseMg = dose
                     }
                 }
