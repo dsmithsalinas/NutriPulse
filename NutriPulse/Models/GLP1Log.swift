@@ -58,6 +58,18 @@ struct GLP1DoseSchedule {
     var isPastDueDay: Bool {
         nextDue.map { calendar.startOfDay(for: $0) < calendar.startOfDay(for: now) } ?? false
     }
+
+    /// More than one dose has gone by with no shot or skip logged: the planned day is a full
+    /// cycle or more in the past, so the next one has been missed too. Today's card then shows
+    /// the last shot and points to the prescriber rather than presenting an old plan as current
+    /// (docs/skipped-shot-support.md).
+    var missedMoreThanOneDose: Bool {
+        guard let latest, let due = nextDue else { return false }
+        let daysPast = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: due), to: calendar.startOfDay(for: now)
+        ).day ?? 0
+        return daysPast >= latest.cycleLengthDays
+    }
 }
 
 extension GLP1Log {

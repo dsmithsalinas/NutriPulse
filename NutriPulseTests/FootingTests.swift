@@ -4651,6 +4651,44 @@ final class GLP1TrackingStoreTests: XCTestCase {
     }
 }
 
+// Today's dose card after a long gap: past one full cycle beyond the planned day, it shows the
+// last shot and points to the prescriber instead of presenting the old plan as current.
+final class LongGapDoseCardTests: XCTestCase {
+    private let calendar = Calendar.current
+    private func date(_ y: Int, _ m: Int, _ d: Int) -> Date {
+        calendar.date(from: DateComponents(year: y, month: m, day: d, hour: 9))!
+    }
+    private func weeklyShot(on day: Date) -> GLP1Log {
+        GLP1Log(id: UUID(), userId: UUID(), injectedAt: day, medication: "Zepbound", doseMg: 7.5,
+                site: nil, nextDueAt: calendar.date(byAdding: .day, value: 7, to: day))
+    }
+
+    func testOneMissedDoseKeepsThePlannedWording() {
+        let shot = weeklyShot(on: date(2026, 8, 19))  // next due Aug 26
+        XCTAssertFalse(GLP1DoseSchedule(latest: shot, skips: [], now: date(2026, 8, 28)).missedMoreThanOneDose)
+        XCTAssertFalse(GLP1DoseSchedule(latest: shot, skips: [], now: date(2026, 9, 1)).missedMoreThanOneDose)
+    }
+
+    func testAFullCyclePastThePlannedDayIsALongGap() {
+        let shot = weeklyShot(on: date(2026, 8, 19))
+        XCTAssertTrue(GLP1DoseSchedule(latest: shot, skips: [], now: date(2026, 9, 2)).missedMoreThanOneDose)
+        XCTAssertTrue(GLP1DoseSchedule(latest: shot, skips: [], now: date(2026, 10, 1)).missedMoreThanOneDose)
+    }
+
+    func testALoggedSkipMovesThePlanForward() {
+        let shot = weeklyShot(on: date(2026, 8, 19))
+        let skip = GLP1SkippedDose(id: UUID(), userId: shot.userId, injectionId: shot.id,
+                                   scheduledAt: shot.nextDueAt!, nextReminderAt: date(2026, 9, 2),
+                                   createdAt: date(2026, 8, 26))
+        // Due moves to Sep 2, so Sep 5 is three days past it: not yet a long gap.
+        XCTAssertFalse(GLP1DoseSchedule(latest: shot, skips: [skip], now: date(2026, 9, 5)).missedMoreThanOneDose)
+    }
+
+    func testNoShotHistoryIsNeverALongGap() {
+        XCTAssertFalse(GLP1DoseSchedule(latest: nil, skips: [], now: date(2026, 10, 1)).missedMoreThanOneDose)
+    }
+}
+
 // Experiment outcomes: typed-in ratings are recorded at the check-in (latest answer per day);
 // automatic outcomes are read live over the experiment's window.
 final class ExperimentOutcomeTests: XCTestCase {
