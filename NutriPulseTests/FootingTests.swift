@@ -4971,3 +4971,53 @@ final class MealRuleAndRecentsTests: XCTestCase {
         XCTAssertEqual(RecentFoodsGrouper.dayLabel(for: monday, now: now, calendar: german), "Monday")
     }
 }
+
+// "Your first day" on Today: who sees it, which steps apply, and how progress is kept.
+final class FirstDayChecklistTests: XCTestCase {
+    private var calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+    private func day(_ d: Int) -> Date { calendar.date(from: DateComponents(year: 2026, month: 10, day: d, hour: 12))! }
+
+    func testOnlyNewAccountsSeeIt() {
+        let now = day(20)
+        XCTAssertTrue(FirstDayChecklist.isVisible(accountCreated: day(20), dismissed: false, completedOn: nil, now: now, calendar: calendar))
+        XCTAssertTrue(FirstDayChecklist.isVisible(accountCreated: day(7), dismissed: false, completedOn: nil, now: now, calendar: calendar))
+        XCTAssertFalse(FirstDayChecklist.isVisible(accountCreated: day(6), dismissed: false, completedOn: nil, now: now, calendar: calendar))
+        XCTAssertFalse(FirstDayChecklist.isVisible(accountCreated: nil, dismissed: false, completedOn: nil, now: now, calendar: calendar))
+    }
+
+    func testDismissedOrFinishedOnAnEarlierDayHidesIt() {
+        let now = day(20)
+        XCTAssertFalse(FirstDayChecklist.isVisible(accountCreated: day(19), dismissed: true, completedOn: nil, now: now, calendar: calendar))
+        XCTAssertTrue(FirstDayChecklist.isVisible(accountCreated: day(19), dismissed: false, completedOn: "2026-10-20", now: now, calendar: calendar))
+        XCTAssertFalse(FirstDayChecklist.isVisible(accountCreated: day(19), dismissed: false, completedOn: "2026-10-19", now: now, calendar: calendar))
+    }
+
+    func testStepsFollowGLP1TrackingAndPulse() {
+        XCTAssertEqual(FirstDayChecklist.steps(tracksGLP1: true, pulseEnabled: true), [.meal, .shot, .water, .pulse])
+        XCTAssertEqual(FirstDayChecklist.steps(tracksGLP1: false, pulseEnabled: false), [.meal, .water])
+    }
+
+    func testCompleteOnlyWhenEveryShownStepIsDone() {
+        let steps = FirstDayChecklist.steps(tracksGLP1: false, pulseEnabled: true)
+        XCTAssertFalse(FirstDayChecklist(steps: steps, done: [.meal, .water]).isComplete)
+        // A done step that no longer applies (the shot, tracking now off) doesn't count.
+        let list = FirstDayChecklist(steps: steps, done: [.meal, .water, .pulse, .shot])
+        XCTAssertTrue(list.isComplete)
+        XCTAssertEqual(list.doneCount, 3)
+    }
+
+    func testStoreKeepsAccountsApartAndCountsAStepOnce() {
+        let defaults = UserDefaults(suiteName: "FirstDayChecklistTests-\(UUID())")!
+        XCTAssertTrue(FirstDayChecklistStore.markDone(.meal, userId: "a", defaults: defaults))
+        XCTAssertFalse(FirstDayChecklistStore.markDone(.meal, userId: "a", defaults: defaults))
+        XCTAssertEqual(FirstDayChecklistStore.done(userId: "a", defaults: defaults), [.meal])
+        XCTAssertEqual(FirstDayChecklistStore.done(userId: "b", defaults: defaults), [])
+        FirstDayChecklistStore.markCompleted(on: "2026-10-20", userId: "a", defaults: defaults)
+        FirstDayChecklistStore.markCompleted(on: "2026-10-21", userId: "a", defaults: defaults)
+        XCTAssertEqual(FirstDayChecklistStore.completedOn(userId: "a", defaults: defaults), "2026-10-20")
+    }
+}

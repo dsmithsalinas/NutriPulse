@@ -49,6 +49,10 @@ final class AppState {
     // / ProfileModel.focusTargets). MainTabView switches to the Profile tab on this and consumes it
     // right away, same shape as the other pending hand-offs above.
     var pendingProfileDailyTargetsFocus = false
+    // Today's first-day checklist opening the Log sheet on Talk, or the Pulse tab. MainTabView
+    // owns both and consumes these right away, like the hand-offs above.
+    var pendingOpenTalkToLog = false
+    var pendingSelectTab: MainTab? = nil
 
     func askPulse(_ prompt: String) {
         pendingCoachPrompt = prompt

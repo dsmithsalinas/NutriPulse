@@ -69,7 +69,7 @@ Each step is its own branch, stacked in order; each was built, tested and checke
 | Secondary screens | `daylight/pulse-structured` | Every screen reached from the main tabs (Analytics, summaries, goal builder, experiments, notification and dose settings, Today's lower cards and sheets, Strong Week, Body, onboarding, sign-in), built on shared chrome in `DesignSystem/DaylightChrome.swift`: pushed pages use `DaylightPageTitle` + `.daylightSubpage`, sheets use `SheetHeader`, settings forms use `.daylightForm()` |
 | Remaining screens | `daylight/screens` | Progress (floor-days hero, trend vs the previous period, stat tiles), Goals (hero goal, experiment tile), Shot day (hold to log, with an immediate VoiceOver path), Profile (targets hero, grouped setting tiles) |
 
-Debug launch flags for checking screens without an account (`--tour` turns on all of them, with the tab bar, to click through the whole app): `--pulse-preview`, `--water-preview`, `--log-preview`, `--shot-preview`, `--profile-preview`, `--onboarding-preview`, `--widget-preview`, `--store-today`, `--store-food`, `--progress-preview`, `--goals-preview`. `--floor-cleared-preview` (not part of `--tour`; use with it) tops protein past the floor two seconds in and plays the floor-cleared moment.
+Debug launch flags for checking screens without an account (`--tour` turns on all of them, with the tab bar, to click through the whole app): `--pulse-preview`, `--water-preview`, `--log-preview`, `--shot-preview`, `--profile-preview`, `--onboarding-preview`, `--widget-preview`, `--store-today`, `--store-food`, `--progress-preview`, `--goals-preview`. `--floor-cleared-preview` (not part of `--tour`; use with it) tops protein past the floor two seconds in and plays the floor-cleared moment. `--first-day-preview` (use with `--tour`) shows the first-day checklist with the shot step done; `--tips-preview` shows the TipKit tips, which `--tour` otherwise hides.
 
 ### Known gaps
 
@@ -99,3 +99,7 @@ Debug launch flags for checking screens without an account (`--tour` turns on al
 ## Process rule
 
 Commit and push before any deploy or TestFlight upload, whichever tool does it. Builds 183/184 shipped from uncommitted code, which is how the Strong Week work nearly got lost.
+
+## First day (new accounts)
+
+A "Your first day" card on Today, in Pulse's voice, for accounts in their first 14 days: log your first meal (opens Talk to Log), log your shot (GLP-1 tracking only; opens Shot day), add a glass of water (opens the water picker), and ask Pulse anything (Pulse only; opens the Pulse tab). Steps tick off from what actually happened (a meal or water logged, a shot on record, a message sent to Pulse), are kept per account on the device, and are counted once each in analytics (`firstDay.stepDone`, `firstDay.dismissed`). The card goes away when dismissed, the day after it's finished, or after the first two weeks, so existing users updating never see it. Two one-time TipKit tips (at most one a day, both only once food is logged) cover gestures people don't find: tapping or swiping a food on Today, and swiping between days. iOS only; Android skips this. Code: `FirstDayChecklist.swift`, `TodayTips.swift`.

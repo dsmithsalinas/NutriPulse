@@ -73,6 +73,7 @@ struct FootingApp: App {
 
     init() {
         DaylightChrome.install()
+        FootingTips.configure()
         if !AppStoreScreenshotMode.active { CrashReporter.install() }
         LocalStore.shared.configure(with: Self.modelContainer)
         if !AppStoreScreenshotMode.active {
