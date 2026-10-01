@@ -4650,3 +4650,78 @@ final class GLP1TrackingStoreTests: XCTestCase {
         XCTAssertNil(try decoder.decode(UserProfile.self, from: Data(old.utf8)).glp1Tracking)
     }
 }
+
+// iOS parity fixes found in the Android port: values that must not drift or go to the wrong place.
+final class DataCorrectnessTests: XCTestCase {
+    private func goals(weightKg: Double?, bodyFat: Double?, leanKg: Double?) -> BodyGoals {
+        BodyGoals(userId: UUID(), weightKgTarget: weightKg, bodyFatPctTarget: bodyFat, leanMassKgFloor: leanKg, updatedAt: nil)
+    }
+
+    func testUntouchedBodyGoalsKeepTheirStoredValuesExactly() {
+        let stored = goals(weightKg: 78.0, bodyFat: 28.25, leanKg: 55.0)
+        let opened = BodyGoalsFields(goals: stored, units: .imperial)
+        let values = opened.values(opened: opened, stored: stored, units: .imperial)
+        XCTAssertEqual(values.weightKg, 78.0)
+        XCTAssertEqual(values.bodyFatPct, 28.25)
+        XCTAssertEqual(values.leanKg, 55.0)
+    }
+
+    func testChangedBodyGoalIsParsedAndOthersStay() {
+        let stored = goals(weightKg: 78.0, bodyFat: 28.25, leanKg: nil)
+        let opened = BodyGoalsFields(goals: stored, units: .metric)
+        var typed = opened
+        typed.weight = "75"
+        typed.bodyFat = " \(opened.bodyFat) "  // whitespace alone isn't an edit
+        let values = typed.values(opened: opened, stored: stored, units: .metric)
+        XCTAssertEqual(values.weightKg, 75)
+        XCTAssertEqual(values.bodyFatPct, 28.25)
+        XCTAssertNil(values.leanKg)
+        XCTAssertEqual(typed.changed(from: opened).weight, true)
+        XCTAssertEqual(typed.changed(from: opened).bodyFat, false)
+    }
+
+    func testClearedBodyGoalIsRemoved() {
+        let stored = goals(weightKg: 78.0, bodyFat: nil, leanKg: nil)
+        let opened = BodyGoalsFields(goals: stored, units: .metric)
+        var typed = opened
+        typed.weight = ""
+        XCTAssertNil(typed.values(opened: opened, stored: stored, units: .metric).weightKg)
+    }
+
+    func testOnboardingDoseLabelsShowEveryDoseExactly() {
+        XCTAssertEqual(12.5.glp1DoseString, "12.5")
+        XCTAssertEqual(7.5.glp1DoseString, "7.5")
+        XCTAssertEqual(0.25.glp1DoseString, "0.25")
+        XCTAssertEqual(15.0.glp1DoseString, "15")
+    }
+
+    func testUsualWaterFallsBackToTheFirstPresetForTheUnits() {
+        XCTAssertEqual(WaterUnit.usualMl(stored: 0, units: .metric), 250)
+        XCTAssertEqual(WaterUnit.usualMl(stored: 0, units: .imperial), 8 * 29.5735, accuracy: 0.001)
+        XCTAssertEqual(WaterUnit.usualMl(stored: 500, units: .imperial), 500)
+    }
+
+    func testSearchSummaryPortion() {
+        XCTAssertEqual(FoodSearchMacros.portion("Per 3/4 cup - Calories: 120kcal | Protein: 16.00g"), "3/4 cup")
+        XCTAssertEqual(FoodSearchMacros.portion("Per 100g - Calories: 61kcal | Protein: 3.15g"), "100g")
+        XCTAssertNil(FoodSearchMacros.portion("A food with no macro summary"))
+    }
+
+    func testQuickAddLogsTheServingTheRowDescribes() {
+        func serving(_ id: String, _ desc: String, protein: Double) -> FoodServing {
+            FoodServing(id: id, description: desc, grams: 100, calories: 100, proteinG: protein, carbsG: 0, fatG: 0, fiberG: 0)
+        }
+        let servings = [serving("1", "1 cup", protein: 24), serving("2", "100 g", protein: 10), serving("3", "3/4 cup", protein: 18)]
+        XCTAssertEqual(FoodSearchMacros.serving(matching: "Per 100g - Calories: 61kcal | Protein: 10.00g", in: servings)?.id, "2")
+        XCTAssertEqual(FoodSearchMacros.serving(matching: "Per 3/4 Cup - Calories: 61kcal | Protein: 18.00g", in: servings)?.id, "3")
+        XCTAssertNil(FoodSearchMacros.serving(matching: "Per 1 bar - Calories: 200kcal | Protein: 20.00g", in: servings))
+    }
+
+    func testPulseOffIsRecognisedOnlyFromTheServersCode() {
+        let off = Data(#"{"error":"Pulse is turned off. You can turn it back on in Profile.","code":"pulse_off"}"#.utf8)
+        XCTAssertTrue(EdgeFunctionError.isPulseOff(FunctionsError.httpError(code: 403, data: off)))
+        XCTAssertFalse(EdgeFunctionError.isPulseOff(FunctionsError.httpError(code: 429, data: off)))
+        XCTAssertFalse(EdgeFunctionError.isPulseOff(FunctionsError.httpError(code: 403, data: Data(#"{"error":"Forbidden"}"#.utf8))))
+        XCTAssertFalse(EdgeFunctionError.isPulseOff(URLError(.notConnectedToInternet)))
+    }
+}

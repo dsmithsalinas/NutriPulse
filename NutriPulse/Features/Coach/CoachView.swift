@@ -87,6 +87,10 @@ struct CoachView: View {
             guard isActive, prompt != nil else { return }
             Task { await consumePendingPrompt() }
         }
+        .onChange(of: vm.isLoading) { _, loading in
+            guard isActive, !loading else { return }
+            Task { await consumePendingPrompt() }
+        }
         .onChange(of: chatHistoryVersion) {
             inConversation = false
             Task { await vm.reload() }
@@ -139,9 +143,10 @@ struct CoachView: View {
     }
 
     // A prompt handed over from another surface (e.g. the Today nudge) starts its own topic:
-    // send it once, then clear it so it can't re-fire on the next tab switch.
+    // send it once, then clear it so it can't re-fire on the next tab switch. While a reply is
+    // still loading it stays pending; the end of that reply sends it.
     private func consumePendingPrompt() async {
-        guard let prompt = appState.pendingCoachPrompt else { return }
+        guard !vm.isLoading, let prompt = appState.pendingCoachPrompt else { return }
         appState.pendingCoachPrompt = nil
         inConversation = true
         await vm.startTopic(prompt)

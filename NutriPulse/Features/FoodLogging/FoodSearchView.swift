@@ -137,8 +137,9 @@ struct FoodSearchView: View {
                         },
                         onQuickLog: {
                             Task {
-                                await vm.quickLog(result, meal: headerMeal, on: date)
-                                onLogged(.search, true)
+                                if await vm.quickLog(result, meal: headerMeal, on: date) {
+                                    onLogged(.search, true)
+                                }
                             }
                         }
                     )
