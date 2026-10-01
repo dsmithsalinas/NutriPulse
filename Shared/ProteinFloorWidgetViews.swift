@@ -24,21 +24,26 @@ struct ProteinFloorWidgetView: View {
         snapshot.cleared ? "Floor cleared" : "\(snapshot.remaining)g to go"
     }
 
+    // Past the floor: the whole tile turns lime, matching the Today protein tile and the
+    // Android widget (owner decision: a cleared floor turns the whole tile lime).
+    private var ink: Color { snapshot.cleared ? Theme.Colors.limeInk : .white }
+    private var label: Color { snapshot.cleared ? Theme.Colors.limeLabel : Theme.Colors.heroLabel }
+
     // MARK: Home Screen
 
-    // Small: the Today protein tile on its own. The liquid fill is the background, drawn by
-    // `ProteinFloorWidgetBackground`.
+    // Small: the Today protein tile on its own. The fill (lime flood, or indigo liquid) is the
+    // background, drawn by `ProteinFloorWidgetBackground`.
     private var small: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("PROTEIN")
                     .font(Theme.Fonts.body(11, .bold, relativeTo: nil))
                     .tracking(1)
-                    .foregroundStyle(Theme.Colors.heroLabel)
+                    .foregroundStyle(label)
                 Spacer(minLength: 4)
                 Text("floor \(Int(snapshot.proteinGoal.rounded()))")
                     .font(Theme.Fonts.body(11, .semibold, relativeTo: nil))
-                    .foregroundStyle(Theme.Colors.heroLabel)
+                    .foregroundStyle(label)
             }
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline, spacing: 0) {
@@ -48,13 +53,13 @@ struct ProteinFloorWidgetView: View {
                 Text("g")
                     .font(Theme.Fonts.display(18, .extraBold, relativeTo: nil))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(ink)
             .minimumScaleFactor(0.6)
             .lineLimit(1)
             .widgetAccentable()
             Text(status)
                 .font(Theme.Fonts.body(13, .semibold, relativeTo: nil))
-                .foregroundStyle(snapshot.cleared ? Theme.Colors.lime : Theme.Colors.heroSubtext)
+                .foregroundStyle(snapshot.cleared ? Theme.Colors.limeLabel : Theme.Colors.heroSubtext)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Protein \(Int(snapshot.proteinToday.rounded())) of \(Int(snapshot.proteinGoal.rounded())) grams. \(status)")
@@ -155,14 +160,19 @@ struct ProteinFloorWidgetView: View {
 }
 
 /// The small widget's background: deep indigo with today's protein as liquid, the same as the
-/// Today tile (still, since widgets don't animate).
+/// Today tile (still, since widgets don't animate) — or, once the floor is cleared, solid lime
+/// for the rest of the day, matching the Today tile's own flood.
 struct ProteinFloorWidgetBackground: View {
     let snapshot: ProteinFloorSnapshot
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Theme.Colors.heroDeep
-            StillLiquid(level: snapshot.pct).fill(Theme.Colors.hero)
+        if snapshot.cleared {
+            Theme.Colors.lime
+        } else {
+            ZStack(alignment: .bottom) {
+                Theme.Colors.heroDeep
+                StillLiquid(level: snapshot.pct).fill(Theme.Colors.hero)
+            }
         }
     }
 }

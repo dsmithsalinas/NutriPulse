@@ -91,9 +91,33 @@ private struct FoodLogRowView: View {
     }
 
     private var servingText: String {
-        let qty = log.quantity == log.quantity.rounded() ? "\(Int(log.quantity))" : String(format: "%.1f", log.quantity)
-        let desc = log.foodItems?.servingDesc ?? "serving"
-        return "\(qty) × \(desc)"
+        MealRowFormatting.servingText(quantity: log.quantity, servingDesc: log.foodItems?.servingDesc)
+    }
+}
+
+/// How a logged food's amount reads on its Today row (Android TodayLogic.kt `foodServingText`,
+/// `LogSheetLogic.servingsLabel`/`formatQuantity`): just the serving description for a single
+/// serving ("1 cup"), "1.5 × 1 cup" for any other quantity, and a plain serving count
+/// ("2 servings") when the food has no serving description. A pure, static function so it's
+/// unit-testable without a view.
+enum MealRowFormatting {
+    static func servingText(quantity: Double, servingDesc: String?) -> String {
+        let trimmed = servingDesc?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let desc = trimmed, !desc.isEmpty else { return servingsLabel(quantity: quantity) }
+        return quantity == 1 ? desc : "\(formatQuantity(quantity)) × \(desc)"
+    }
+
+    static func servingsLabel(quantity: Double) -> String {
+        quantity == 1 ? "1 serving" : "\(formatQuantity(quantity)) servings"
+    }
+
+    /// 1 → "1", 1.5 → "1.5", 0.25 → "0.25": two decimal places with trailing zeros (and a
+    /// trailing point) trimmed off, same as Android's `formatQuantity`.
+    static func formatQuantity(_ quantity: Double) -> String {
+        var formatted = String(format: "%.2f", quantity)
+        while formatted.hasSuffix("0") { formatted.removeLast() }
+        if formatted.hasSuffix(".") { formatted.removeLast() }
+        return formatted
     }
 }
 

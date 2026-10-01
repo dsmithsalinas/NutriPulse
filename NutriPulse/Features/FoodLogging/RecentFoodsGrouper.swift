@@ -44,8 +44,10 @@ enum RecentFoodsGrouper {
            calendar.isDate(date, inSameDayAs: yesterday) {
             return "Yesterday"
         }
+        // English, like "Today" and "Yesterday" beside it (the app's copy is English-only), so
+        // a phone set to another language doesn't get "Yesterday" over "Montag".
         var english = calendar
         english.locale = Locale(identifier: "en_US")
-        return date.formatted(.dateTime.weekday(.wide))
+        return english.weekdaySymbols[english.component(.weekday, from: date) - 1]
     }
 }

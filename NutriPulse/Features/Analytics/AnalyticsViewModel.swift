@@ -108,6 +108,17 @@ final class AnalyticsViewModel {
         GLP1DoseChangeDetector.changes(in: glp1History)
     }
 
+    /// `doseChanges`/`glp1History` cover the user's whole GLP-1 history (needed to tell a dose
+    /// change from a first-ever dose); the weight chart only wants the ones inside the selected
+    /// range, or its x-axis stretches out to the oldest one. See `ChartRangeFilter`.
+    var doseChangesInRange: [DoseChangeMark] {
+        ChartRangeFilter.withinRange(doseChanges, days: selectedRange.rawValue, date: \.date)
+    }
+
+    var shotDaysInRange: [Date] {
+        ChartRangeFilter.withinRange(glp1History.map(\.injectedAt), days: selectedRange.rawValue, date: { $0 })
+    }
+
     var cycleInsights: [CycleDayInsight] {
         CycleAnalyticsEngine.build(
             summaries: summaries,

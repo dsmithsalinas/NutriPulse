@@ -222,8 +222,8 @@ struct AnalyticsView: View {
             } else {
                 WeightTrendChart(
                     logs: vm.weightLogs,
-                    doseChanges: vm.doseChanges,
-                    shotDays: vm.glp1History.map(\.injectedAt),
+                    doseChanges: vm.doseChangesInRange,
+                    shotDays: vm.shotDaysInRange,
                     units: units,
                     accessibilitySummary: takeaway
                 )
