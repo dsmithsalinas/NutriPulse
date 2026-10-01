@@ -222,8 +222,8 @@ struct AnalyticsView: View {
             } else {
                 WeightTrendChart(
                     logs: vm.weightLogs,
-                    doseChanges: vm.doseChanges,
-                    shotDays: vm.glp1History.map(\.injectedAt),
+                    doseChanges: vm.doseChangesInRange,
+                    shotDays: vm.shotDaysInRange,
                     units: units,
                     accessibilitySummary: takeaway
                 )
@@ -469,7 +469,9 @@ private struct CaloriesChartContent: View {
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day, count: xAxisStride)) {
-                    AxisValueLabel(format: .dateTime.month(.twoDigits).day(.twoDigits))
+                    // "Sep 6", like the weight and body charts; colliding labels are dropped
+                    // rather than the last one truncated to "…".
+                    AxisValueLabel(format: .dateTime.month(.abbreviated).day(), collisionResolution: .greedy)
                         .foregroundStyle(Theme.Colors.textFaint)
                     AxisGridLine().foregroundStyle(Theme.Colors.hairline)
                 }
@@ -576,7 +578,7 @@ private struct MovementChartContent: View {
         }
         .chartXAxis {
             AxisMarks(values: .stride(by: .day, count: xAxisStride)) {
-                AxisValueLabel(format: .dateTime.month(.twoDigits).day(.twoDigits))
+                AxisValueLabel(format: .dateTime.month(.abbreviated).day(), collisionResolution: .greedy)
                     .foregroundStyle(Theme.Colors.textFaint)
             }
         }

@@ -34,3 +34,23 @@ enum WaterUnit: String {
         }
     }
 }
+
+extension WaterUnit {
+    /// Where Today's water tile keeps the one-tap amount, in ml. 0 until the user picks a size.
+    static let usualMlKey = "waterUsualMl"
+
+    init(units: UnitSystem) { self = units == .imperial ? .oz : .ml }
+
+    /// The one-tap amount: the user's pick, else the first preset for their units (250 ml or 8 oz).
+    static func usualMl(stored: Double, units: UnitSystem) -> Double {
+        stored > 0 ? stored : (WaterUnit(units: units).quickAdds.first?.ml ?? 250)
+    }
+
+    /// The same, read straight from settings, for the widget, Home Screen and notification
+    /// actions that add water without Today on screen.
+    static var currentUsualMl: Double {
+        let defaults = UserDefaults.standard
+        let units = UnitSystem(rawValue: defaults.string(forKey: "unitSystem") ?? "") ?? .metric
+        return usualMl(stored: defaults.double(forKey: usualMlKey), units: units)
+    }
+}

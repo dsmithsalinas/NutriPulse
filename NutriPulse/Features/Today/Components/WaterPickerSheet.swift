@@ -85,7 +85,7 @@ struct WaterPickerSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(unit.displayAmount(intakeMl))
                     .font(Theme.Fonts.number(40, relativeTo: .largeTitle))
-                    .foregroundStyle(Theme.Colors.skyInk)
+                    .foregroundStyle(Theme.Colors.skyText)
                     .contentTransition(.numericText(value: intakeMl))
                 Text("of \(unit.displayAmount(goalMl)) today · \(remainingText)")
                     .font(Theme.Fonts.body(14, .semibold))
@@ -107,13 +107,14 @@ struct WaterPickerSheet: View {
                 Image(systemName: preset.symbol)
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(Theme.Colors.skyAction)
+                // The usual size sits on the fixed light-sky fill; the others on an adaptive tile.
                 Text(preset.label)
                     .font(Theme.Fonts.body(17, .bold))
-                    .foregroundStyle(Theme.Colors.skyInk)
+                    .foregroundStyle(isUsual ? Theme.Colors.skyInk : Theme.Colors.skyText)
                     .monospacedDigit()
                 Text(preset.name)
                     .font(Theme.Fonts.body(12, .semibold))
-                    .foregroundStyle(Theme.Colors.skyLabel)
+                    .foregroundStyle(isUsual ? Theme.Colors.skyLabel : Theme.Colors.skySubtext)
             }
             .frame(maxWidth: .infinity, minHeight: 104)
             .background(isUsual ? Theme.Colors.sky : Theme.Colors.surfaceCard,
@@ -141,35 +142,62 @@ struct WaterPickerSheet: View {
         .accessibilityLabel("Add \(preset.label), \(preset.name)\(isUsual ? ", your usual" : "")")
     }
 
+    // On a narrow phone at large text the single row ran out of room and broke words mid-way
+    // ("Ad / d", "Custo / m"). ViewThatFits keeps the one-line row when it fits and otherwise
+    // puts "Custom" on its own line above the controls; no label is ever allowed to wrap.
     private var customRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                customLabel
+                Spacer(minLength: 4)
+                customControls
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                customLabel
+                customControls
+            }
+            .padding(.vertical, 10)
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 6)
+        .frame(minHeight: 56)
+        .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var customLabel: some View {
+        Text("Custom")
+            .font(Theme.Fonts.body(15, .bold))
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    private var customControls: some View {
         HStack(spacing: 8) {
-            Text("Custom")
-                .font(Theme.Fonts.body(15, .bold))
-                .foregroundStyle(Theme.Colors.textPrimary)
-            Spacer(minLength: 4)
             stepButton("minus", label: "Less") { customAmount = max(customAmount - step, step) }
             Text(unit.display(customAmount))
                 .font(Theme.Fonts.body(16, .bold))
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize()
                 .frame(minWidth: 64)
             stepButton("plus", label: "More") { customAmount = min(customAmount + step, 2000) }
+            Spacer(minLength: 0)
             Button { add(customAmount) } label: {
                 Text("Add")
                     .font(Theme.Fonts.body(15, .bold))
                     .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .fixedSize()
                     .padding(.horizontal, 16)
-                    .frame(height: 44)
+                    .frame(minHeight: 44)
                     .background(Theme.Colors.skyAction, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(.pressable)
             .disabled(isWorking)
             .accessibilityLabel("Add \(unit.display(customAmount))")
         }
-        .padding(.leading, 16)
-        .padding(.trailing, 6)
-        .frame(minHeight: 56)
-        .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private func stepButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {

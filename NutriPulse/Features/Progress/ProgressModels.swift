@@ -276,6 +276,36 @@ enum ProgressTrendBuilder {
     }
 }
 
+/// Y-axis bounds for the Progress sparklines. The weight sparkline (unlike the protein one,
+/// which anchors its floor at 60% of the peak to tame noisy day-to-day swings — see
+/// `Sparkline.defaultBounds` in ProgressView) scales to the data's own min...max: weight moves
+/// slowly and a real week-over-week change is exactly what the tile is for. Android's
+/// `ProgressTiles.sparklineBounds` uses the same 60%-of-peak anchor for its one shared
+/// sparkline, which is the behavior being fixed here — padding plus a floor under the span is
+/// closer to what a weight chart should do, so this intentionally diverges from Android.
+enum SparklineScale {
+    /// `minimumSpan` keeps a near-flat week (a few hundred grams of noise) from being stretched
+    /// into a dramatic-looking cliff — e.g. ~1 kg, or the equivalent ~2 lb in display units.
+    static func weightBounds(_ values: [Double], minimumSpan: Double) -> (min: Double, max: Double) {
+        guard let dataMin = values.min(), let dataMax = values.max() else { return (0, 1) }
+        guard dataMax > dataMin else {
+            let half = max(minimumSpan, 0.0001) / 2
+            return (dataMin - half, dataMax + half)
+        }
+        let span = dataMax - dataMin
+        let padding = span * 0.15
+        var lo = dataMin - padding
+        var hi = dataMax + padding
+        let paddedSpan = hi - lo
+        if paddedSpan < minimumSpan {
+            let extra = (minimumSpan - paddedSpan) / 2
+            lo -= extra
+            hi += extra
+        }
+        return (lo, hi)
+    }
+}
+
 /// The "Try this" tile's suggestion — a single, data-derived nudge (never a canned line),
 /// mirroring the logic `SummaryReviewCard`'s "one thing to try" already uses.
 enum ProgressTryThisBuilder {

@@ -692,6 +692,7 @@ private struct GoalTrophyTile: View {
 /// goal it can't be edited or deleted here, since it isn't a stored goal at all.
 private struct ProteinFloorCard: View {
     let summary: ProteinFloorGoal.Summary
+    @Environment(AppState.self) private var appState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -743,9 +744,23 @@ private struct ProteinFloorCard: View {
                 MeterBar(progress: summary.todayProgress, color: Theme.Colors.primary, delay: 0.4)
             }
 
-            Text("Change your floor in Profile › Daily targets.")
-                .font(Theme.Fonts.body(12))
-                .foregroundStyle(Theme.Colors.textFaint)
+            // Opens Profile's Daily targets (Android: the same footer line, pressable, with the
+            // destination bolded in primaryText).
+            Button {
+                appState.pendingProfileDailyTargetsFocus = true
+            } label: {
+                (Text("Change your floor in ")
+                    .foregroundStyle(Theme.Colors.textFaint)
+                 + Text("Profile › Daily targets")
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .fontWeight(.bold)
+                 + Text(".")
+                    .foregroundStyle(Theme.Colors.textFaint))
+                    .font(Theme.Fonts.body(12))
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Change your floor in Profile, Daily targets")
         }
         .padding(18)
         .tile()
@@ -875,17 +890,20 @@ private struct GoalHeroCard: View {
                         .tracking(Theme.Typography.eyebrowTracking)
                         .textCase(.uppercase)
                         .foregroundStyle(Theme.Colors.textSecondary)
+                    // The user's own words: wrap as far as needed rather than truncate.
                     Text(state.bundle.version.title)
                         .font(Theme.Fonts.display(22, .bold, relativeTo: .title2))
                         .foregroundStyle(Theme.Colors.textPrimary)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 Text(statusPill.label)
                     .font(Theme.Fonts.body(13, .bold))
                     .foregroundStyle(statusPill.text)
+                    .lineLimit(1)
+                    .fixedSize()
                     .padding(.horizontal, 10)
-                    .frame(height: 30)
+                    .frame(minHeight: 30)
                     .background(statusPill.fill, in: Capsule())
             }
 

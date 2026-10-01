@@ -45,6 +45,10 @@ final class AppState {
     var pendingQuickAction: FootingQuickAction? = nil
     var pendingStrongWeekReminder = false
     var pendingSmartNotificationRoute: SmartNotificationRoute? = nil
+    // GoalsView's protein floor card links to Profile's daily targets (Android: GoalsNav.openProfile
+    // / ProfileModel.focusTargets). MainTabView switches to the Profile tab on this and consumes it
+    // right away, same shape as the other pending hand-offs above.
+    var pendingProfileDailyTargetsFocus = false
 
     func askPulse(_ prompt: String) {
         pendingCoachPrompt = prompt

@@ -150,7 +150,8 @@ struct CreateGoalView: View {
             VStack(alignment: .leading, spacing: 10) {
                 TileEyebrow("Suggested goal")
                 HStack {
-                    TextField("Name your goal", text: draftBinding(\.title))
+                    TextField("Name your goal", text: draftBinding(\.title), axis: .vertical)
+                        .lineLimit(1...3)
                         .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
                         .foregroundStyle(Theme.Colors.textPrimary)
                     Image(systemName: "pencil")
@@ -352,7 +353,7 @@ struct CreateGoalView: View {
                     Text(source.detail)
                         .font(Theme.Fonts.body(12))
                         .foregroundStyle(Theme.Colors.textSecondary)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")

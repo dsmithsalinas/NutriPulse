@@ -92,6 +92,13 @@ struct MainTabView: View {
         .onChange(of: appState.pendingCoachPrompt) { _, prompt in
             if prompt != nil { selectedTab = .pulse }
         }
+        // "Change your floor in Profile › Daily targets." (GoalsView) — jump to Profile. Consumed
+        // right away so the next tap (false → true again) can retrigger it.
+        .onChange(of: appState.pendingProfileDailyTargetsFocus) { _, pending in
+            guard pending else { return }
+            appState.pendingProfileDailyTargetsFocus = false
+            selectedTab = .profile
+        }
         // Landing on the Pulse tab is itself a hand-off: show the consent sheet the first time,
         // same as asking Pulse something from elsewhere.
         .onChange(of: selectedTab) { _, tab in
@@ -102,8 +109,13 @@ struct MainTabView: View {
         .onChange(of: pulseStore.pulseEnabled) { _, enabled in
             if !enabled, selectedTab == .pulse { selectedTab = .today }
         }
+        // The consent sheet waits for the settings to load: the cached copy can be stale (a new
+        // device, or consent given on another one), and "Not now" turns Pulse off.
+        .onChange(of: pulseStore.isLoaded) { reconcileConsentSheet() }
+        .onChange(of: pulseStore.aiConsentAt) { reconcileConsentSheet() }
+        .onChange(of: pulseStore.pulseEnabled) { reconcileConsentSheet() }
         .sheet(isPresented: Binding(
-            get: { appState.showPulseConsentSheet },
+            get: { appState.showPulseConsentSheet && pulseStore.isLoaded },
             set: { appState.showPulseConsentSheet = $0 }
         ), onDismiss: {
             // Closed without answering (the X, or a swipe): leave the setting alone so consent
@@ -155,6 +167,16 @@ struct MainTabView: View {
         }
     }
 
+    // Asked for while the settings were still loading, and the loaded settings say it's no
+    // longer due: consent was already given (send the waiting prompt on), or Pulse is off (drop it).
+    private func reconcileConsentSheet() {
+        guard appState.showPulseConsentSheet, pulseStore.isLoaded, !pulseStore.needsConsent else { return }
+        let prompt = appState.pendingConsentPrompt
+        appState.pendingConsentPrompt = nil
+        appState.showPulseConsentSheet = false
+        if let prompt { appState.pendingCoachPrompt = prompt }
+    }
+
     private func setTabBarCompact(_ compact: Bool) {
         guard compact != tabBarCompact else { return }
         withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)) {
@@ -175,8 +197,10 @@ struct MainTabView: View {
         selectedTab = .today
         switch action {
         case .addWater:
+            // The user's usual amount, always on today (not whichever day Today is showing).
+            todayVM.goToToday()
             Task {
-                await todayVM.addWater(250)
+                await todayVM.addWater(WaterUnit.currentUsualMl)
                 await todayVM.loadData()
             }
         case .talkToLog:
@@ -195,8 +219,10 @@ struct MainTabView: View {
         selectedTab = .today
         switch route.action {
         case .addWater:
+            // The user's usual amount, always on today (not whichever day Today is showing).
+            todayVM.goToToday()
             Task {
-                await todayVM.addWater(250)
+                await todayVM.addWater(WaterUnit.currentUsualMl)
                 await todayVM.loadData()
             }
         case .closeProtein:

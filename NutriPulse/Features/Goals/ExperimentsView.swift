@@ -171,7 +171,7 @@ struct ExperimentsView: View {
             TileEyebrow("Suggested experiment", color: Theme.Colors.violetLabel)
             Text(suggestion.why)
                 .font(Theme.Fonts.body(14))
-                .foregroundStyle(Theme.Colors.textPrimary)
+                .foregroundStyle(Theme.Colors.violetInk)
             Button("Try this") { suggestionPrefill = suggestion }
                 .buttonStyle(.brandPrimary)
                 .disabled(activeGoals.isEmpty)

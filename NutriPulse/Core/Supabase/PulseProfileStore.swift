@@ -144,6 +144,14 @@ final class PulseProfileStore {
         NotificationCenter.default.post(name: .pulseProfileChanged, object: nil)
     }
 
+    /// coach-chat refused because Pulse is off on the server: match it here at once (the tab
+    /// backs out, nothing else sends); the change notice reloads the rest from the server.
+    func serverReportedPulseOff() {
+        pulseEnabled = false
+        cacheSettings()
+        NotificationCenter.default.post(name: .pulseProfileChanged, object: nil)
+    }
+
     private func saveSetting(_ column: String, _ value: Bool) async throws {
         // Optimistic: the switch moves at once; a failed save puts it back.
         let before = (pulseEnabled, pulseOnToday)

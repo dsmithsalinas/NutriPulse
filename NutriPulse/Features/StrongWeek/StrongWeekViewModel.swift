@@ -149,6 +149,7 @@ final class StrongWeekViewModel {
         } catch {
             self.error = EdgeFunctionError.message(from: error,
                 fallback: "Your week couldn't be updated. Any saved context is kept. Try again, or reopen to load the latest version.")
+            if EdgeFunctionError.isPulseOff(error) { PulseProfileStore.shared.serverReportedPulseOff() }
         }
     }
 }
