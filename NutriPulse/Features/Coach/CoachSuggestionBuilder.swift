@@ -111,21 +111,17 @@ struct CoachSuggestionBuilder {
         ("Workouts & recovery", "Help me eat around my workouts and recovery"),
     ]
 
+    // Meal.forHour, so Pulse suggests the same meal the logger would pick.
     private static func mealName(hour: Int) -> String {
-        switch hour {
-        case ..<11: return "breakfast"
-        case 11..<15: return "lunch"
-        case 15..<17: return "snack"
-        default: return "dinner"
-        }
+        Meal.forHour(hour).displayName.lowercased()
     }
 
     private static func mealPrompt(hour: Int) -> String {
-        switch hour {
-        case ..<11: return "Give me an easy protein breakfast"
-        case 11..<15: return "Give me a protein-forward lunch"
-        case 15..<17: return "Give me a protein snack idea"
-        default: return "Give me a dinner idea"
+        switch Meal.forHour(hour) {
+        case .breakfast: return "Give me an easy protein breakfast"
+        case .lunch: return "Give me a protein-forward lunch"
+        case .dinner: return "Give me a dinner idea"
+        default: return "Give me a protein snack idea"
         }
     }
 
@@ -150,15 +146,7 @@ struct CoachSuggestionBuilder {
         hour: Int,
         excluding excluded: String? = nil
     ) -> [String] {
-        let mealSuggestion: String
-        switch hour {
-        case ..<11:
-            mealSuggestion = "Give me an easy protein breakfast"
-        case 11..<15:
-            mealSuggestion = "Give me a protein-forward lunch"
-        default:
-            mealSuggestion = "Give me a dinner idea"
-        }
+        let mealSuggestion = mealPrompt(hour: hour)
 
         let proteinGap = proteinGoalG.map { $0 - totalProteinG }
         let isBehindOnProtein = proteinGap.map { $0 > 15 } ?? false

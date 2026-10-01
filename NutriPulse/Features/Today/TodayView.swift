@@ -47,6 +47,11 @@ struct TodayView: View {
         PulseGate.isActive(pulseEnabled: PulseProfileStore.shared.pulseEnabled, aiConsentAt: PulseProfileStore.shared.aiConsentAt)
     }
 
+    // The signed-in account, for keying the floor-cleared celebration's "already played today"
+    // record. Nil (signed out) just means the celebration never persists — it can still play
+    // in memory for the rest of this session.
+    private var currentAccountId: String? { appState.session?.user.id.uuidString }
+
     // Health permissions live in the Health app (Sharing → Apps), not in this app's
     // Settings page, so openSettingsURLString would drop the user somewhere with no
     // Health controls at all. Fall back to it only if the Health app can't be opened.
@@ -57,9 +62,16 @@ struct TodayView: View {
               !showRecoveryLogger, vm.isToday else { return }
         proteinCelebrationPending = false
         proteinCelebrationInFlight = true
+        let accountId = currentAccountId
+        let date = vm.selectedDate
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             proteinCelebrationInFlight = false
             proteinCelebrationTrigger += 1
+            // Only remembered once the moment actually starts playing — a latch that never
+            // got to play (interrupted before this point) shouldn't be marked as spent.
+            if let accountId {
+                FloorClearedCelebrationStore.markCelebrated(userId: accountId, on: date)
+            }
             // The generic ring-close haptic already covers the all-rings case, so only buzz
             // here when protein hit on its own.
             if !vm.justClosedAllRings {
@@ -344,6 +356,15 @@ struct TodayView: View {
             }
             .onChange(of: vm.justHitProteinGoal) { _, justHit in
                 guard vm.isToday, justHit else { return }
+                // A fresh view model (new launch, or swiping back to today from another day)
+                // recomputes this edge from scratch, so it can fire again for a floor that was
+                // already cleared — and already celebrated — earlier today. The persisted record
+                // is the only thing that remembers across that reset (iOS used to keep the latch
+                // in memory only, so it could replay).
+                if let accountId = currentAccountId,
+                   FloorClearedCelebrationStore.hasCelebrated(userId: accountId, on: vm.selectedDate) {
+                    return
+                }
                 // Don't fire here — logging food is what pushes protein over the line, and the
                 // reload lands while the logging sheet still covers the ring. Latch it and let
                 // the handler below play it once Today is actually on screen.
@@ -635,6 +656,23 @@ private struct EmptyDayView: View {
                 ? "Tap Log below to add your first meal — talk it, search, or scan."
                 : "Add what you ate with the Log button below."
         )
+    }
+}
+
+/// Persists the floor-cleared celebration's "already played today" record, so it plays once per
+/// calendar day per signed-in account (Android: FloorClearedMoment.celebrated/release in
+/// TodayLogic.kt). Keyed by account so a shared device never carries one account's celebration
+/// into another's, storing the ISO date it last played on — a pure, UserDefaults-backed type so
+/// it's unit-testable without standing up a view model.
+enum FloorClearedCelebrationStore {
+    private static func key(userId: String) -> String { "floorClearedCelebrated_\(userId)" }
+
+    static func hasCelebrated(userId: String, on date: Date, defaults: UserDefaults = .standard) -> Bool {
+        defaults.string(forKey: key(userId: userId)) == date.isoDateString
+    }
+
+    static func markCelebrated(userId: String, on date: Date, defaults: UserDefaults = .standard) {
+        defaults.set(date.isoDateString, forKey: key(userId: userId))
     }
 }
 

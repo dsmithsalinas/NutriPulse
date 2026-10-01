@@ -43,8 +43,11 @@ enum Meal: String, Codable, CaseIterable, Hashable {
     }
 
     // Sensible default based on time of day — pre-selects the right meal in the logger
-    static var current: Meal {
-        let hour = Calendar.current.component(.hour, from: .now)
+    static var current: Meal { forHour(Calendar.current.component(.hour, from: .now)) }
+
+    /// The one hour → meal rule, used everywhere the time of day picks a meal (the logger's
+    /// default, Pulse's meal suggestions). Overnight is a snack, not breakfast or dinner.
+    static func forHour(_ hour: Int) -> Meal {
         switch hour {
         case 5..<11:  return .breakfast
         case 11..<15: return .lunch

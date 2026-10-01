@@ -692,6 +692,7 @@ private struct GoalTrophyTile: View {
 /// goal it can't be edited or deleted here, since it isn't a stored goal at all.
 private struct ProteinFloorCard: View {
     let summary: ProteinFloorGoal.Summary
+    @Environment(AppState.self) private var appState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -743,9 +744,23 @@ private struct ProteinFloorCard: View {
                 MeterBar(progress: summary.todayProgress, color: Theme.Colors.primary, delay: 0.4)
             }
 
-            Text("Change your floor in Profile › Daily targets.")
-                .font(Theme.Fonts.body(12))
-                .foregroundStyle(Theme.Colors.textFaint)
+            // Opens Profile's Daily targets (Android: the same footer line, pressable, with the
+            // destination bolded in primaryText).
+            Button {
+                appState.pendingProfileDailyTargetsFocus = true
+            } label: {
+                (Text("Change your floor in ")
+                    .foregroundStyle(Theme.Colors.textFaint)
+                 + Text("Profile › Daily targets")
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .fontWeight(.bold)
+                 + Text(".")
+                    .foregroundStyle(Theme.Colors.textFaint))
+                    .font(Theme.Fonts.body(12))
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Change your floor in Profile, Daily targets")
         }
         .padding(18)
         .tile()

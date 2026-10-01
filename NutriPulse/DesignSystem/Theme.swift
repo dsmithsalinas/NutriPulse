@@ -38,7 +38,9 @@ enum Theme {
         static let surfaceInset = Color(light: 0xF1F5F9, dark: 0x1F2937)
         static let hairline     = Color(light: 0xE2E8F0, dark: 0x273244)
         static let ringTrack    = Color(light: 0xF1F5F9, dark: 0x1F2937)
-        static let textFaint    = Color(light: 0x64748B, dark: 0x7C8AA0)
+        /// Captions and footers. #55637A is 5.4:1 on the ground (#64748B was 4.2:1, under AA's
+        /// 4.5); #8391A7 is at least 4.59:1 on every dark surface, inset tiles included.
+        static let textFaint    = Color(light: 0x55637A, dark: 0x8391A7)
         /// Destructive actions and errors: sign out, delete, swipe-to-delete, validation. #B91C1C
         /// on white is ~5.9:1, AA for body text.
         static let danger       = Color(light: 0xB91C1C, dark: 0xF87171)

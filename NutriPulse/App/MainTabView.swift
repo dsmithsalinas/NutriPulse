@@ -92,6 +92,13 @@ struct MainTabView: View {
         .onChange(of: appState.pendingCoachPrompt) { _, prompt in
             if prompt != nil { selectedTab = .pulse }
         }
+        // "Change your floor in Profile › Daily targets." (GoalsView) — jump to Profile. Consumed
+        // right away so the next tap (false → true again) can retrigger it.
+        .onChange(of: appState.pendingProfileDailyTargetsFocus) { _, pending in
+            guard pending else { return }
+            appState.pendingProfileDailyTargetsFocus = false
+            selectedTab = .profile
+        }
         // Landing on the Pulse tab is itself a hand-off: show the consent sheet the first time,
         // same as asking Pulse something from elsewhere.
         .onChange(of: selectedTab) { _, tab in
