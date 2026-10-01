@@ -161,6 +161,61 @@ enum ExperimentInterventionDays {
     }
 }
 
+/// Which days an automatic outcome is read for, and how its readings become one number a day.
+enum ExperimentOutcomeWindow {
+    /// The experiment's window: its first day (baseline or intervention start) through its end
+    /// date, never past today. Running totals (steps, protein, water, workouts, energy) leave
+    /// today out, since a half-finished day would read low; readings that are complete once
+    /// taken (last night's sleep, a weigh-in, resting heart rate, HRV) keep it. At most a year,
+    /// like goals, to keep HealthKit queries bounded.
+    static func dates(
+        start: String, end: String?, source: GoalSourceMetric,
+        today: Date, calendar: Calendar = .current
+    ) -> [Date] {
+        guard let first = parse(start, calendar: calendar) else { return [] }
+        let todayStart = calendar.startOfDay(for: today)
+        let lastAllowed = isRunningTotal(source)
+            ? calendar.date(byAdding: .day, value: -1, to: todayStart)!
+            : todayStart
+        let last = min(end.flatMap { parse($0, calendar: calendar) } ?? lastAllowed, lastAllowed)
+        let boundedFirst = max(first, calendar.date(byAdding: .day, value: -365, to: last)!)
+        guard boundedFirst <= last else { return [] }
+        var result: [Date] = []
+        var cursor = boundedFirst
+        while cursor <= last {
+            result.append(cursor)
+            cursor = calendar.date(byAdding: .day, value: 1, to: cursor)!
+        }
+        return result
+    }
+
+    /// A metric that accumulates through the day, so today's value isn't final yet.
+    static func isRunningTotal(_ source: GoalSourceMetric) -> Bool {
+        switch source {
+        case .steps, .workouts, .workoutMinutes, .protein, .water, .activeEnergy: true
+        case .sleepDuration, .weight, .restingHeartRate, .hrv: false
+        }
+    }
+
+    /// One value per day ("yyyy-MM-dd"). Several readings on one day (weigh-ins) keep the latest.
+    static func byDate(_ values: [GoalDailyValue], calendar: Calendar = .current) -> [String: Double] {
+        var result: [String: (date: Date, value: Double)] = [:]
+        for value in values {
+            guard let number = value.number ?? value.displayValue else { continue }
+            let key = value.date.isoDateString(in: calendar.timeZone)
+            if let existing = result[key], existing.date > value.date { continue }
+            result[key] = (value.date, number)
+        }
+        return result.mapValues(\.value)
+    }
+
+    private static func parse(_ value: String, calendar: Calendar) -> Date? {
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    }
+}
+
 // MARK: - Starter experiments from the user's own data
 
 /// A suggested experiment, derived from a real pattern in the user's own history — never a

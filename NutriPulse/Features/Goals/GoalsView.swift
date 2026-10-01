@@ -447,7 +447,7 @@ private struct ExperimentTile: View {
 
                 Text(readableYet
                      ? "Enough days measured to start reading this experiment."
-                     : "Too early to read — \(data.goalState.progress.measuredCount) \(data.goalState.progress.measuredCount == 1 ? "night" : "nights") measured so far.")
+                     : "Too early to read — \(data.goalState.progress.measuredCount) \(data.goalState.progress.measuredCount == 1 ? "day" : "days") measured so far.")
                     .font(Theme.Fonts.body(13))
                     .foregroundStyle(Theme.Colors.violetLabel)
             }

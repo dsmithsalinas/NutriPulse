@@ -11,6 +11,8 @@ struct ExperimentDetailView: View {
 
     @State private var goalBundle: PersonalGoalBundle?
     @State private var comparisonDays: [ExperimentDayObservation] = []
+    // The outcome by day, so a typed-in rating can show today's answer.
+    @State private var outcomeByDate: [String: Double] = [:]
     @State private var isLoading = true
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -109,6 +111,10 @@ struct ExperimentDetailView: View {
                 .disabled(isSaving)
             }
 
+            if outcomeMetric?.sourceType == .manualRating {
+                ratingCheckIn
+            }
+
             if let tally = interventionTally {
                 Text("Done on \(tally.done) of \(tally.total) days you've checked in so far.")
                     .font(Theme.Fonts.body(13))
@@ -118,6 +124,33 @@ struct ExperimentDetailView: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.Colors.violet, in: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
+    }
+
+    // A typed-in outcome (e.g. morning energy) is recorded here, with the day's check-in: one
+    // tap on 1–5. Tapping again the same day replaces the answer.
+    private var ratingCheckIn: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(outcomeMetric?.name ?? "Your outcome") today, out of 5")
+                .font(Theme.Fonts.body(14))
+                .foregroundStyle(Theme.Colors.violetInk)
+            HStack(spacing: 8) {
+                ForEach(1...5, id: \.self) { rating in
+                    let selected = todayRating == rating
+                    Button("\(rating)") { rate(rating) }
+                        .buttonStyle(DetailCheckInButtonStyle(
+                            fill: selected ? Theme.Colors.violetLabel : .white,
+                            foreground: selected ? .white : Theme.Colors.violetInk
+                        ))
+                        .accessibilityLabel("\(rating) out of 5")
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            .disabled(isSaving)
+        }
+    }
+
+    private var todayRating: Int? {
+        outcomeByDate[Date.now.isoDateString].map { Int($0.rounded()) }
     }
 
     private var dayLabel: String {
@@ -209,19 +242,15 @@ struct ExperimentDetailView: View {
         goalBundle = bundle
 
         guard let outcome = experiment.primaryOutcomeMeasurement,
-              let observations = try? await experimentRepository.fetchOutcomeObservations(measurementId: outcome.measurementId)
+              let outcomes = await GoalMetricService().experimentOutcomes(
+                for: experiment, outcome: outcome, repository: experimentRepository
+              )
         else {
+            outcomeByDate = [:]
             comparisonDays = []
             return
         }
-
-        let outcomeByDate = Dictionary(
-            observations.compactMap { observation -> (String, Double)? in
-                guard let number = observation.number else { return nil }
-                return (observation.localDate, number)
-            },
-            uniquingKeysWith: { first, _ in first }
-        )
+        outcomeByDate = outcomes
 
         let interventionByDate: [String: Bool]
         if let bundle, let measurementId = bundle.primaryMeasurement?.id {
@@ -233,7 +262,7 @@ struct ExperimentDetailView: View {
         }
 
         comparisonDays = ExperimentComparisonEngine.days(
-            outcomeByDate: outcomeByDate, interventionByDate: interventionByDate
+            outcomeByDate: outcomes, interventionByDate: interventionByDate
         )
     }
 
@@ -244,6 +273,24 @@ struct ExperimentDetailView: View {
         }
         guard let completed = try? await goalRepository.fetchCompletedGoals() else { return nil }
         return completed.first(where: { $0.id == experiment.interventionGoalId })
+    }
+
+    private func rate(_ rating: Int) {
+        guard let outcome = experiment.primaryOutcomeMeasurement, !isSaving else { return }
+        isSaving = true
+        Task {
+            do {
+                try await experimentRepository.recordOutcome(
+                    Double(rating), experimentId: experiment.id,
+                    measurementId: outcome.measurementId, localDate: Date.now.isoDateString
+                )
+                await load()
+                await onUpdated()
+            } catch {
+                errorMessage = "Your rating couldn’t be saved yet."
+            }
+            isSaving = false
+        }
     }
 
     private func checkIn(_ value: Bool) {
