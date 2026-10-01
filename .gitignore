@@ -21,3 +21,8 @@ dist/
 
 # Generated from footing-brand-guidelines.txt — not tracked
 marketing/footing-brand-guidelines.pdf
+
+# Launch videos: rendered output is over GitHub's 100 MB file limit; keep the source, not the MP4
+marketing/launch-video-*/*.mp4
+marketing/launch-video-*/source/frames/
+marketing/launch-video-*/source/stills/

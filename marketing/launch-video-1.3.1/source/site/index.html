@@ -1,0 +1,567 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Footing 1.3.1</title>
+<style>
+@font-face { font-family: "Bricolage"; src: url(fonts/BricolageGrotesque-ExtraBold.ttf); font-weight: 800; }
+@font-face { font-family: "Bricolage"; src: url(fonts/BricolageGrotesque-Bold.ttf); font-weight: 700; }
+@font-face { font-family: "Figtree"; src: url(fonts/Figtree-Regular.ttf); font-weight: 400; }
+@font-face { font-family: "Figtree"; src: url(fonts/Figtree-Medium.ttf); font-weight: 500; }
+@font-face { font-family: "Figtree"; src: url(fonts/Figtree-SemiBold.ttf); font-weight: 600; }
+@font-face { font-family: "Figtree"; src: url(fonts/Figtree-Bold.ttf); font-weight: 700; }
+:root {
+  --ground: #EEF1F6; --card: #FFFFFF; --ink: #0F172A; --muted: #475569; --faint: #55637A;
+  --hero: #4F46E5; --heroDeep: #1E1B4B; --heroLabel: #C7D2FE;
+  --lime: #D9F99D; --limeInk: #1A2E05; --limeLabel: #365314; --limeLine: #4D7C0F;
+  --violet: #EDE9FE; --violetLabel: #5B21B6; --sky: #E0F2FE; --skyAction: #0284C7;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); }
+#stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--ground);
+  font-family: "Figtree", system-ui, sans-serif; color: var(--ink); }
+.abs { position: absolute; left: 0; top: 0; transform-origin: 50% 50%; will-change: transform, opacity; }
+.hidden { opacity: 0; }
+
+/* Ambient */
+.blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .55; }
+
+/* Pulse mark */
+.mark svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+/* Type */
+.eyebrow { display: inline-flex; align-items: center; gap: 12px; padding: 10px 18px 10px 14px; border-radius: 999px;
+  background: var(--card); color: var(--hero); font: 700 22px/1 "Figtree"; letter-spacing: .14em; text-transform: uppercase;
+  box-shadow: 0 6px 24px rgba(30,27,75,.08); }
+.eyebrow .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--hero); }
+.headline { font: 800 84px/0.98 "Bricolage"; letter-spacing: -0.025em; color: var(--ink); width: 760px; }
+.headline .ln { display: block; overflow: hidden; padding-bottom: .08em; margin-bottom: -.08em; }
+.headline .wd { display: inline-block; will-change: transform; }
+.body { font: 500 31px/1.35 "Figtree"; color: var(--muted); width: 660px; }
+
+/* Pulse speaking */
+.say { display: flex; align-items: flex-end; gap: 16px; }
+.say .av { width: 64px; height: 64px; border-radius: 20px; background: var(--hero); padding: 14px; flex: none;
+  box-shadow: 0 10px 24px rgba(79,70,229,.30); }
+.say .bub { position: relative; background: var(--card); border-radius: 30px 30px 30px 10px; padding: 20px 28px;
+  font: 600 31px/1.3 "Figtree"; color: var(--ink); box-shadow: 0 14px 40px rgba(15,23,42,.10); max-width: 760px; }
+.say .bub .w { display: inline-block; opacity: 0; }
+.say .dots { position: absolute; left: 26px; top: 50%; margin-top: -8px; display: flex; gap: 8px; }
+.say .dots i { width: 14px; height: 14px; border-radius: 50%; background: #A5B4FC; display: block; }
+
+/* Phone */
+.phone { width: 456px; height: 963px; border-radius: 70px; background: #0F172A; padding: 12px;
+  box-shadow: 0 50px 90px rgba(30,27,75,.22), 0 12px 24px rgba(30,27,75,.10); }
+.screen { position: relative; width: 432px; height: 939px; border-radius: 58px; overflow: hidden; background: var(--ground); }
+.screen img.scr { position: absolute; left: 0; top: 0; width: 432px; height: 939px; }
+.island { position: absolute; left: 50%; top: 14px; width: 118px; height: 34px; margin-left: -59px; border-radius: 20px; background: #000; z-index: 101; }
+
+.crop { display: block; }
+.lifted { box-shadow: 0 30px 60px rgba(30,27,75,.20), 0 8px 18px rgba(30,27,75,.10); }
+
+.pill { white-space: nowrap; display: inline-flex; align-items: center; gap: 12px; padding: 14px 24px; border-radius: 999px;
+  font: 700 30px/1 "Figtree"; }
+.chip { display: inline-block; padding: 16px 26px; border-radius: 22px; background: var(--card); font: 600 30px/1 "Figtree";
+  color: var(--ink); box-shadow: 0 12px 30px rgba(15,23,42,.10); white-space: nowrap; }
+
+#flood { width: 1920px; height: 1400px; }
+#flood .fill { position: absolute; left: 0; top: 60px; width: 1920px; height: 1280px; background: var(--lime); }
+#flood svg { position: absolute; left: 0; width: 3840px; height: 64px; }
+.bubble { width: 30px; height: 30px; border-radius: 50%; background: var(--lime); border: 3px solid var(--limeLine); }
+.confetti { width: 18px; height: 18px; border-radius: 50%; }
+
+.big { font: 800 300px/1 "Bricolage"; letter-spacing: -0.04em; color: var(--limeInk); white-space: nowrap; }
+.big small { font-size: 120px; letter-spacing: 0; }
+.wordmark { font: 800 230px/1 "Bricolage"; letter-spacing: -0.035em; color: var(--ink); white-space: nowrap; }
+.wordmark span { display: inline-block; }
+.fine { font: 500 22px/1.3 "Figtree"; color: var(--faint); }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Footing 1.3.1 — motion piece. Everything is a Web Animation created up front;
+// seek(t) freezes the whole frame at time t, so a renderer can step frame by frame.
+// ─────────────────────────────────────────────────────────────────────────────
+const W = 1920, H = 1080;
+const stage = document.getElementById('stage');
+const K = 432 / 1206;                 // phone screen scale (screenshot px → video px)
+const SCR_W = 1206, SCR_H = 2622;
+
+// Easing. Springs are sampled into CSS linear() so WAAPI can run them.
+function spring(zeta) {
+  const w = Math.log(400) / zeta, wd = w * Math.sqrt(1 - zeta * zeta), pts = [];
+  for (let i = 0; i <= 100; i++) {
+    const t = i / 100;
+    const x = 1 - Math.exp(-zeta * w * t) * (Math.cos(wd * t) + zeta / Math.sqrt(1 - zeta * zeta) * Math.sin(wd * t));
+    pts.push(+x.toFixed(4));
+  }
+  pts[100] = 1;
+  return `linear(${pts.join(', ')})`;
+}
+const E = {
+  pop: spring(0.38), bounce: spring(0.5), soft: spring(0.72),
+  out: 'cubic-bezier(0.16, 1, 0.3, 1)', in: 'cubic-bezier(0.7, 0, 0.84, 0)',
+  inOut: 'cubic-bezier(0.65, 0, 0.35, 1)', lin: 'linear',
+};
+
+// Tweening with remembered state, so each move starts where the last one ended.
+const ST = new Map();
+const base = { x: 0, y: 0, s: 1, sx: 1, sy: 1, r: 0, o: 1 };
+function css(p) {
+  return { transform: `translate(${p.x}px, ${p.y}px) rotate(${p.r}deg) scale(${p.s * p.sx}, ${p.s * p.sy})`, opacity: p.o };
+}
+function init(el, p = {}) {
+  const s = { ...base, ...p }; ST.set(el, s);
+  const c = css(s); el.style.transform = c.transform; el.style.opacity = c.opacity; return el;
+}
+function tw(el, t, d, to, ease = 'out') {
+  const from = ST.get(el) || { ...base }; const next = { ...from, ...to };
+  el.animate([css(from), css(next)], { delay: t * 1000, duration: Math.max(d, 0.001) * 1000, fill: 'forwards', easing: E[ease] || ease });
+  ST.set(el, next); return el;
+}
+// Keyframe animation on any properties (not transform-state tracked).
+function kf(el, t, d, frames, ease = 'out', extra = {}) {
+  return el.animate(frames, { delay: t * 1000, duration: d * 1000, fill: 'forwards', easing: E[ease] || ease, ...extra });
+}
+const onSeek = [];
+
+function mk(tag, cls, html, parent = stage) {
+  const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html;
+  parent.appendChild(e); return e;
+}
+function place(el, left, top) { el.style.left = left + 'px'; el.style.top = top + 'px'; return el; }
+
+// Pulse mark: track ring, 250° arc from 12 o'clock, dot at the arc's end (Shared/PulseMark.swift).
+function markSVG(color = '#fff') {
+  const C = 2 * Math.PI * 43, L = C * 0.694;
+  return `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="43" fill="none" stroke="${color}" stroke-opacity=".28" stroke-width="14" class="trk"/>
+  <circle cx="50" cy="50" r="43" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round" transform="rotate(-90 50 50)"
+    stroke-dasharray="${L} 400" stroke-dashoffset="0" class="arc"/>
+  <circle cx="9.59" cy="64.71" r="11.9" fill="${color}" class="dt" style="transform-origin:9.59px 64.71px"/></svg>`;
+}
+const ARC_LEN = 2 * Math.PI * 43 * 0.694;
+
+// Seeded randomness so every render is identical.
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+// ── Building blocks ─────────────────────────────────────────────────────────
+
+function headline(lines, left, top, size) {
+  const h = mk('div', 'headline abs'); place(h, left, top); if (size) h.style.fontSize = size + 'px';
+  const words = [];
+  lines.forEach(line => {
+    const ln = mk('span', 'ln', null, h);
+    line.split(' ').forEach((w, i) => { const s = mk('span', 'wd', w, ln); words.push(s); if (i < line.split(' ').length - 1) ln.appendChild(document.createTextNode(' ')); });
+  });
+  init(h); words.forEach(w => init(w, { y: 130 }));
+  return { el: h, words };
+}
+function showHeadline(hl, t) { hl.words.forEach((w, i) => tw(w, t + i * 0.055, 0.85, { y: 0 }, 'out')); }
+function hideBlock(el, t, dx = -140) { tw(el, t, 0.45, { x: dx, o: 0 }, 'in'); }
+
+function eyebrow(text, left, top, color) {
+  const e = mk('div', 'eyebrow abs', `<span class="dot"></span>${text}`); place(e, left, top);
+  if (color) { e.style.color = color; e.querySelector('.dot').style.background = color; }
+  init(e, { o: 0, s: 0.6, y: 20 }); return e;
+}
+function showPop(el, t, d = 0.8) { tw(el, t, 0.01, { o: 1 }, 'lin'); tw(el, t, d, { s: 1, y: 0, x: 0, r: 0 }, 'pop'); }
+
+function bodyText(text, left, top, w) {
+  const b = mk('div', 'body abs', text); place(b, left, top); if (w) b.style.width = w + 'px'; init(b, { o: 0, y: 30 }); return b;
+}
+function showFade(el, t, d = 0.7) { tw(el, t, d, { o: 1, y: 0 }, 'out'); }
+
+// Pulse "speaking": the avatar pops, three dots type, the bubble opens to the words.
+function say(text, left, top, t, opts = {}) {
+  const box = mk('div', 'say abs'); place(box, left, top);
+  const av = mk('div', 'av mark', markSVG('#fff'), box);
+  const bub = mk('div', 'bub', null, box);
+  if (opts.maxW) bub.style.maxWidth = opts.maxW + 'px';
+  if (opts.size) bub.style.fontSize = opts.size + 'px';
+  const words = text.split(' ').map((w, i, a) => { const s = mk('span', 'w', w, bub); if (i < a.length - 1) bub.appendChild(document.createTextNode(' ')); return s; });
+  const dots = mk('div', 'dots', '<i></i><i></i><i></i>', bub);
+  init(box, { o: 0, s: 0.5, y: 30 });
+  box.style.transformOrigin = '0% 100%';
+  const typing = opts.typing ?? 0.7;
+  const bw = bub.offsetWidth;
+  // Bubble opens from a dots-sized pill to full width.
+  bub.style.clipPath = `inset(0 ${bw - 96}px 0 0 round 30px 30px 30px 10px)`;
+  tw(box, t, 0.01, { o: 1 }, 'lin'); tw(box, t, 0.8, { s: 1, y: 0 }, 'pop');
+  [...dots.children].forEach((d, i) => kf(d, t + 0.15 + i * 0.12, 0.42, [
+    { transform: 'translateY(0)' }, { transform: 'translateY(-9px)', offset: .45 }, { transform: 'translateY(0)' }],
+    'inOut', { iterations: Math.max(1, Math.round((typing - 0.15) / 0.42)) }));
+  kf(dots, t + typing, 0.15, [{ opacity: 1 }, { opacity: 0 }], 'lin');
+  kf(bub, t + typing, 0.55, [{ clipPath: `inset(0 ${bw - 96}px 0 0 round 30px 30px 30px 10px)` }, { clipPath: 'inset(0 0px 0 0 round 30px 30px 30px 10px)' }], 'out');
+  words.forEach((w, i) => { init(w, { o: 0, y: 16 }); tw(w, t + typing + 0.08 + i * 0.045, 0.6, { o: 1, y: 0 }, 'bounce'); });
+  // A little nod from the avatar as it starts to talk.
+  kf(av, t + typing, 0.5, [{ transform: 'scale(1)' }, { transform: 'scale(1.12) rotate(-8deg)', offset: .4 }, { transform: 'scale(1)' }], 'out');
+  return box;
+}
+
+// ── Phone ───────────────────────────────────────────────────────────────────
+const phoneWrap = mk('div', 'abs'); place(phoneWrap, 960 - 228, 540 - 481.5);
+const phone = mk('div', 'phone', null, phoneWrap);
+const screen = mk('div', 'screen', null, phone);
+mk('div', 'island', null, screen);
+const phoneOv = mk('div', 'abs', null, screen); phoneOv.style.zIndex = 100;
+init(phoneWrap, { y: 1200, o: 1 });
+const screens = {};
+function addScreen(name) { const i = mk('img', 'scr', null, screen); i.src = `img/${name}.jpg`; screens[name] = i; init(i, { y: 939 }); return i; }
+['today', 'floor-cleared', 'log-talk', 'shot-day'].forEach(addScreen);
+let currentScreen = null;
+function showScreen(name, t) {
+  const img = screens[name]; img.style.zIndex = (++zc);
+  if (!currentScreen) { tw(img, t, 0.01, { y: 0 }, 'lin'); }
+  else {
+    tw(img, t, 0.7, { y: 0 }, 'out');
+    const prev = screens[currentScreen]; tw(prev, t, 0.7, { y: -160, o: 0.4 }, 'out'); tw(prev, t + 0.7, 0.01, { y: 939, o: 1 }, 'lin');
+  }
+  currentScreen = name;
+}
+let zc = 1;
+// Where a screenshot box sits on the video frame, for the phone's current offset (scale 1).
+function onPhone(box) {
+  const p = ST.get(phoneWrap);
+  const cx = 960 + p.x, cy = 540 + p.y;
+  return { left: cx + (box[0] - SCR_W / 2) * K, top: cy + (box[1] - SCR_H / 2) * K, w: (box[2] - box[0]) * K, h: (box[3] - box[1]) * K };
+}
+// A UI piece that lifts out of the phone: starts exactly over its spot, then springs to a pose.
+function lift(name, t, to, radiusPt = 26, d = 1.0) {
+  const c = CROPS[name]; const pos = onPhone(c.box);
+  const el = mk('img', 'crop abs'); el.src = `img/${name}.png`;
+  el.style.width = pos.w + 'px'; el.style.height = pos.h + 'px'; el.style.borderRadius = (radiusPt * 3 * K) + 'px';
+  place(el, pos.left, pos.top); layerTop.appendChild(el);
+  init(el, { o: 0 });
+  tw(el, t, 0.01, { o: 1 }, 'lin');
+  tw(el, t + 0.01, d, to, 'pop');
+  kf(el, t, d * 0.6, [{ boxShadow: '0 0 0 rgba(30,27,75,0)' }, { boxShadow: '0 40px 70px rgba(30,27,75,.22), 0 10px 20px rgba(30,27,75,.10)' }], 'out');
+  return el;
+}
+
+// ── Layers ──────────────────────────────────────────────────────────────────
+let CROPS = {};
+let layerTop;
+
+async function build() {
+  CROPS = await (await fetch('img/crops.json')).json();
+  layerTop = mk('div', 'abs'); layerTop.style.zIndex = 50;
+
+  // Ambient: soft colour drifting behind everything, the whole time.
+  [['#D9F99D', 520, 140, 120, 520], ['#C7D2FE', 640, 1500, 640, 460], ['#E0F2FE', 560, 900, 980, -380],
+   ['#EDE9FE', 480, 260, 860, 300]].forEach(([c, s, x, y, dx], i) => {
+    const b = mk('div', 'blob abs'); b.style.background = c; b.style.width = b.style.height = s + 'px';
+    place(b, x, y); stage.insertBefore(b, stage.firstChild);
+    kf(b, 0, 9 + i * 2, [{ transform: 'translate(0,0) scale(1)' }, { transform: `translate(${dx}px, ${-dx / 3}px) scale(1.15)` }], 'inOut', { iterations: 8, direction: 'alternate' });
+  });
+  stage.appendChild(phoneWrap); phoneWrap.style.zIndex = 20;
+
+  // ═══ S0 · Pulse says hello (0 – 4.4) ═══════════════════════════════════════
+  const hello = mk('div', 'mark abs', markSVG('#4F46E5')); hello.style.width = hello.style.height = '220px';
+  place(hello, 960 - 110, 540 - 110); init(hello, { s: 1 }); hello.style.zIndex = 30;
+  const hTrk = hello.querySelector('.trk'), hArc = hello.querySelector('.arc'), hDot = hello.querySelector('.dt');
+  hTrk.style.opacity = 0; hArc.style.strokeDashoffset = ARC_LEN; hDot.style.transform = 'scale(0)';
+  kf(hTrk, 0.15, 0.5, [{ opacity: 0 }, { opacity: 1 }], 'out');
+  kf(hArc, 0.3, 1.0, [{ strokeDashoffset: ARC_LEN }, { strokeDashoffset: 0 }], 'out');
+  kf(hDot, 1.05, 0.7, [{ transform: 'scale(0)' }, { transform: 'scale(1)' }], 'pop');
+  tw(hello, 1.05, 0.25, { sx: 1.08, sy: 0.92 }, 'out'); tw(hello, 1.3, 0.6, { sx: 1, sy: 1 }, 'pop');
+  tw(hello, 1.7, 0.9, { x: -420, s: 0.62 }, 'bounce');
+  const s0a = say("Hi, I'm Pulse.", 760, 400, 2.0, { size: 46, typing: 0.55 });
+  const s0b = say("Here's what's new in Footing.", 760, 530, 2.95, { size: 46, typing: 0.5 });
+  [s0a, s0b].forEach((b, i) => tw(b, 4.0 + i * 0.07, 0.45, { y: -120, o: 0 }, 'in'));
+  // The mark rolls into place as the wordmark's logo.
+  tw(hello, 3.95, 0.9, { x: -560, y: -10, s: 0.82, r: -360 }, 'bounce');
+
+  // ═══ S1 · Title (4.4 – 8.2) ════════════════════════════════════════════════
+  const wm = mk('div', 'wordmark abs'); place(wm, 640, 420); wm.style.zIndex = 31;
+  const letters = 'Footing'.split('').map(ch => mk('span', null, ch, wm));
+  letters.forEach((l, i) => { init(l, { y: -720, r: (i % 2 ? 12 : -12) }); tw(l, 4.2 + i * 0.06, 0.95, { y: 0, r: 0 }, 'bounce'); });
+  // Each letter squashes as it lands.
+  letters.forEach((l, i) => {
+    tw(l, 4.55 + i * 0.06, 0.12, { sx: 1.12, sy: 0.86 }, 'out'); tw(l, 4.67 + i * 0.06, 0.5, { sx: 1, sy: 1 }, 'pop');
+  });
+  const ver = mk('div', 'pill abs', '1.3.1'); ver.style.background = 'var(--lime)'; ver.style.color = 'var(--limeInk)';
+  ver.style.fontSize = '54px'; ver.style.padding = '18px 34px'; place(ver, 1500, 330); init(ver, { s: 0, r: -30 }); ver.style.zIndex = 32;
+  tw(ver, 5.05, 0.9, { s: 1, r: -8 }, 'pop');
+  const sub = bodyText('Protein-first tracking, built for life on GLP-1.', 660, 690, 900); sub.style.fontSize = '40px'; sub.style.zIndex = 31;
+  showFade(sub, 5.4);
+  // Pulse mark gives a little hop beside the name.
+  tw(hello, 5.9, 0.18, { y: -60, sx: 0.94, sy: 1.08 }, 'out'); tw(hello, 6.08, 0.5, { y: -10, sx: 1, sy: 1 }, 'bounce');
+  letters.forEach((l, i) => tw(l, 7.55 + i * 0.035, 0.5, { y: -900, r: (i % 2 ? 20 : -20) }, 'in'));
+  tw(ver, 7.6, 0.5, { x: 700, r: 30 }, 'in'); tw(sub, 7.6, 0.4, { o: 0, y: 40 }, 'in');
+  tw(hello, 7.65, 0.55, { x: -1300, r: -720, s: 0.5 }, 'in');
+
+  // ═══ S2 · Today (8.2 – 14.6) ═══════════════════════════════════════════════
+  tw(phoneWrap, 8.0, 1.0, { x: 400, y: 0 }, 'bounce');
+  showScreen('today', 8.0);
+  const e2 = eyebrow('Today', 150, 300); showPop(e2, 8.35);
+  const h2 = headline(['Your whole day,', 'at a glance.'], 150, 370); showHeadline(h2, 8.45);
+  const pr = lift('today-protein', 9.6, { x: -170, y: 30, s: 1.5, r: -6 });
+  const cal = lift('today-calories', 9.85, { x: 150, y: -190, s: 1.4, r: 5 });
+  // The protein tile breathes while it hangs there.
+  kf(pr, 10.6, 1.6, [{ translate: '0 0' }, { translate: '0 -14px' }], 'inOut', { iterations: 2, direction: 'alternate' });
+  const s2 = say('45g to go. One protein-forward dinner covers it.', 150, 640, 10.5, { maxW: 640 });
+  // Off they go.
+  tw(pr, 13.7, 0.55, { x: -1400, y: -200, r: -30, o: 0 }, 'in');
+  tw(cal, 13.75, 0.55, { x: 1200, y: -500, r: 30 }, 'in');
+  [e2, h2.el, s2].forEach((el, i) => hideBlock(el, 13.85 + i * 0.06));
+
+  // ═══ S3 · Floor cleared (14.6 – 21.4) ═════════════════════════════════════
+  const flood = mk('div', 'abs'); flood.id = 'flood'; place(flood, 0, 0); flood.style.zIndex = 60;
+  mk('div', 'fill', null, flood);
+  const wavePath = (y0, up) => { let d = `M0 ${y0}`; for (let x = 0; x <= 3840; x += 240) d += ` Q ${x + 120} ${up ? 0 : 64}, ${x + 240} ${y0}`; return d + (up ? ` V64 H0 Z` : ` V0 H0 Z`); };
+  const wTop = mk('div', 'abs', `<svg viewBox="0 0 3840 64" preserveAspectRatio="none"><path d="${wavePath(32, true)}" fill="#D9F99D"/></svg>`, flood);
+  wTop.style.width = '3840px'; wTop.style.height = '64px'; place(wTop, 0, 0);
+  const wBot = mk('div', 'abs', `<svg viewBox="0 0 3840 64" preserveAspectRatio="none"><path d="${wavePath(32, false)}" fill="#D9F99D"/></svg>`, flood);
+  wBot.style.width = '3840px'; wBot.style.height = '64px'; place(wBot, 0, 1338);
+  kf(wTop, 14.2, 1.2, [{ transform: 'translateX(0)' }, { transform: 'translateX(-480px)' }], 'lin', { iterations: 6 });
+  kf(wBot, 14.2, 1.2, [{ transform: 'translateX(-480px)' }, { transform: 'translateX(0)' }], 'lin', { iterations: 6 });
+  init(flood, { y: 1150 });
+  tw(flood, 14.45, 1.05, { y: -150 }, 'inOut');
+
+  const big = mk('div', 'big abs', '<span id="cnt">85</span><small>g</small>'); place(big, 560, 300); big.style.zIndex = 62;
+  init(big, { o: 0, y: 80, s: 0.9 });
+  tw(big, 15.0, 0.6, { o: 1, y: 0, s: 1 }, 'out');
+  const cnt = big.querySelector('#cnt');
+  onSeek.push(t => {
+    const p = Math.min(1, Math.max(0, (t - 15.1) / 1.0)); const e = 1 - Math.pow(1 - p, 3);
+    cnt.textContent = Math.round(85 + (136 - 85) * e);
+  });
+  tw(big, 16.1, 0.12, { s: 1.12 }, 'out'); tw(big, 16.22, 0.7, { s: 1 }, 'pop');
+  const fc = mk('div', 'pill abs', 'Floor cleared'); fc.style.background = 'var(--limeInk)'; fc.style.color = 'var(--lime)';
+  fc.style.fontSize = '42px'; fc.style.padding = '18px 32px'; place(fc, 1260, 270); fc.style.zIndex = 63; init(fc, { s: 0, r: -20 });
+  tw(fc, 16.25, 0.85, { s: 1, r: 6 }, 'pop');
+  // Bubbles rise off the count and pop.
+  for (let i = 0; i < 18; i++) {
+    const b = mk('div', 'bubble abs'); const sz = 18 + rnd() * 34; b.style.width = b.style.height = sz + 'px'; b.style.zIndex = 61;
+    place(b, 540 + rnd() * 860, 760 + rnd() * 80);
+    const st = 15.9 + rnd() * 0.9, rise = 380 + rnd() * 380;
+    init(b, { o: 0, s: 0.3 });
+    tw(b, st, 0.01, { o: 1 }, 'lin'); tw(b, st, 0.9, { y: -rise, s: 1, x: (rnd() - 0.5) * 120 }, 'out');
+    tw(b, st + 0.85, 0.22, { s: 1.7, o: 0 }, 'out');
+  }
+  const s3 = say("That's your muscle protected today.", 600, 700, 16.7, { size: 40 }); s3.style.zIndex = 64;
+  showScreen('floor-cleared', 16.0);
+  // Lime clears off the top, the phone underneath has turned lime too.
+  tw(flood, 18.55, 0.95, { y: -1500 }, 'inOut');
+  [big, fc, s3].forEach((el, i) => tw(el, 18.45 + i * 0.05, 0.6, { y: -900 }, 'in'));
+  const e3 = eyebrow('Floor cleared', 150, 300, '#4D7C0F'); showPop(e3, 19.15);
+  const h3 = headline(['Clear your floor.', 'Today turns lime.'], 150, 370, 80); showHeadline(h3, 19.2);
+  const fp = lift('floor-protein', 19.55, { x: -170, y: 40, s: 1.5, r: -5 });
+  tw(fp, 20.9, 0.5, { x: -1400, r: -25, o: 0 }, 'in');
+  [e3, h3.el].forEach((el, i) => hideBlock(el, 20.95 + i * 0.06));
+
+  // ═══ S4 · Talk to Log (21.4 – 27.0) ═══════════════════════════════════════
+  tw(phoneWrap, 21.2, 0.95, { x: -420 }, 'bounce');
+  tw(phoneWrap, 21.2, 0.3, { r: -4 }, 'out'); tw(phoneWrap, 21.5, 0.8, { r: 0 }, 'pop');
+  showScreen('log-talk', 21.35);
+  const e4 = eyebrow('Talk to Log', 1020, 260); showPop(e4, 21.75);
+  const h4 = headline(["Say it like you'd", 'tell a friend.'], 1020, 330, 88); showHeadline(h4, 21.85);
+  // Mic rings ripple out of the phone's mic.
+  const micBox = [603 - 150, 1105 - 150, 603 + 150, 1105 + 150];
+  const micPos = onPhone(micBox);
+  for (let i = 0; i < 4; i++) {
+    const r = mk('div', 'abs'); r.style.width = r.style.height = micPos.w + 'px'; r.style.borderRadius = '50%';
+    r.style.border = '4px solid #818CF8'; place(r, micPos.left, micPos.top); r.style.zIndex = 40; layerTop.appendChild(r);
+    init(r, { o: 0, s: 0.6 });
+    kf(r, 22.4 + i * 0.35, 1.2, [{ opacity: 0.9, transform: 'scale(.6)' }, { opacity: 0, transform: 'scale(2.6)' }], 'out');
+  }
+  // Words come out of the mic as food chips and stack on the right.
+  const foods = ['2 eggs', 'toast with butter', 'black coffee'];
+  const chips = foods.map((f, i) => {
+    const c = mk('div', 'chip abs', f); layerTop.appendChild(c);
+    place(c, 1020, 600 + i * 92);
+    const dx = micPos.left + micPos.w / 2 - 1020 - 120, dy = micPos.top + micPos.h / 2 - (600 + i * 92) - 30;
+    init(c, { x: dx, y: dy, s: 0.2, o: 0, r: -20 });
+    tw(c, 22.9 + i * 0.32, 0.01, { o: 1 }, 'lin');
+    tw(c, 22.9 + i * 0.32, 1.0, { x: 0, y: 0, s: 1, r: (i - 1) * 2 }, 'pop');
+    return c;
+  });
+  const check = mk('div', 'pill abs', '✓ 3 foods logged'); check.style.background = 'var(--lime)'; check.style.color = 'var(--limeInk)';
+  place(check, 1020, 880); layerTop.appendChild(check); init(check, { s: 0, o: 1 });
+  chips.forEach((c, i) => tw(c, 24.3 + i * 0.08, 0.6, { x: -560 - i * 20, y: 120 - i * 92, s: 0.3, o: 0, r: -30 }, 'in'));
+  tw(check, 24.85, 0.8, { s: 1 }, 'pop');
+  const s4 = say('About 16g of protein toward your floor.', 1020, 760, 25.2, { size: 30 });
+  tw(check, 26.5, 0.4, { y: 400, o: 0 }, 'in');
+  [e4, h4.el, s4].forEach((el, i) => hideBlock(el, 26.45 + i * 0.05, 160));
+
+  // ═══ S5 · Shot day (27.0 – 32.2) ══════════════════════════════════════════
+  showScreen('shot-day', 26.85);
+  const e5 = eyebrow('Shot day', 1020, 300, '#4D7C0F'); showPop(e5, 27.3);
+  const h5 = headline(['Shot day,', 'handled.'], 1020, 370); showHeadline(h5, 27.4);
+  // Zoom in on the hold button.
+  const BTN = [600, 1356];
+  const S5 = 1.75, bx = (BTN[0] - SCR_W / 2) * K, by = (BTN[1] - SCR_H / 2) * K;
+  const zoomTo = { x: 520 - 960 - bx * S5, y: 560 - 540 - by * S5, s: S5 };
+  tw(phoneWrap, 27.9, 1.0, zoomTo, 'out');
+  // Hold ring fills over 1.5s, like the real button.
+  const ring = mk('div', 'abs', `<svg viewBox="0 0 200 200" style="width:100%;height:100%;overflow:visible"><circle cx="100" cy="100" r="92" fill="none" stroke="#4D7C0F" stroke-opacity=".25" stroke-width="10"/><circle class="rg" cx="100" cy="100" r="92" fill="none" stroke="#1A2E05" stroke-width="10" stroke-linecap="round" transform="rotate(-90 100 100)" stroke-dasharray="578 600" stroke-dashoffset="578"/></svg>`, phoneOv);
+  const rs = 640 * K; ring.style.width = ring.style.height = rs + 'px'; place(ring, BTN[0] * K - rs / 2, BTN[1] * K - rs / 2); init(ring, { o: 0 });
+  tw(ring, 28.7, 0.25, { o: 1 }, 'out');
+  kf(ring.querySelector('.rg'), 28.8, 1.5, [{ strokeDashoffset: 578 }, { strokeDashoffset: 0 }], 'lin');
+  // The button is pressed in while it's held.
+  const press = mk('div', 'abs'); const pb = 520 * K; press.style.width = press.style.height = pb + 'px'; press.style.borderRadius = '50%';
+  press.style.background = '#1A2E05'; place(press, BTN[0] * K - pb / 2, BTN[1] * K - pb / 2); phoneOv.appendChild(press); init(press, { o: 0 });
+  const tick = mk('div', 'abs', `<svg viewBox="0 0 100 100" style="width:100%;height:100%"><path d="M28 52 L44 68 L74 36" fill="none" stroke="#D9F99D" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="80" stroke-dashoffset="80" class="tk"/></svg>`, press);
+  tick.style.width = tick.style.height = pb + 'px';
+  tw(press, 28.75, 0.2, { o: 1, s: 0.94 }, 'out');
+  tw(press, 30.3, 0.15, { s: 1.06 }, 'out'); tw(press, 30.45, 0.6, { s: 1 }, 'pop');
+  kf(tick.querySelector('.tk'), 30.35, 0.45, [{ strokeDashoffset: 80 }, { strokeDashoffset: 0 }], 'out');
+  // Confetti burst in Footing colours.
+  const cols = ['#D9F99D', '#4F46E5', '#C7D2FE', '#1A2E05', '#E0F2FE', '#A3E635'];
+  for (let i = 0; i < 26; i++) {
+    const c = mk('div', 'confetti abs'); c.style.background = cols[i % cols.length]; c.style.zIndex = 70;
+    if (i % 3 === 0) c.style.borderRadius = '4px';
+    place(c, 520 - 9, 560 - 9); stage.appendChild(c);
+    const a = (i / 26) * Math.PI * 2 + rnd() * 0.3, dist = 240 + rnd() * 260;
+    init(c, { o: 0, s: 0 });
+    kf(c, 30.35, 1.3, [
+      { transform: 'translate(0,0) scale(0)', opacity: 1 },
+      { transform: `translate(${Math.cos(a) * dist * 0.8}px, ${Math.sin(a) * dist * 0.8}px) scale(1.2) rotate(${rnd() * 180}deg)`, opacity: 1, offset: 0.35 },
+      { transform: `translate(${Math.cos(a) * dist}px, ${Math.sin(a) * dist + 140}px) scale(.5) rotate(${rnd() * 360}deg)`, opacity: 0 }], 'out');
+  }
+  const dose = mk('div', 'pill abs', '✓ Zepbound · 5 mg logged'); dose.style.background = 'var(--limeInk)'; dose.style.color = 'var(--lime)';
+  place(dose, 1020, 600); init(dose, { s: 0 }); tw(dose, 30.6, 0.8, { s: 1 }, 'pop');
+  const s5 = say("I'll plan the week around it.", 1020, 720, 30.95, { size: 34 });
+  tw(phoneWrap, 31.75, 0.6, { y: 1500, r: 12, s: 1.2 }, 'in');
+  [e5, h5.el, dose, s5].forEach((el, i) => hideBlock(el, 31.8 + i * 0.05, 160));
+
+  // ═══ S6 · Pulse, a coach that remembers (32.2 – 39.4) ═════════════════════
+  const e6 = eyebrow('Pulse', 150, 300); showPop(e6, 32.45);
+  const h6 = headline(['A coach that', 'remembers.'], 150, 370); showHeadline(h6, 32.55);
+  const b6 = bodyText('Tell it once. Every suggestion after that knows.', 150, 600, 620); showFade(b6, 33.1);
+  const CH = 0.62; // chat crops scale
+  const chatImg = (name, left, top, sc = CH) => {
+    const c = CROPS[name]; const el = mk('img', 'crop abs lifted'); el.src = `img/${name}.png`;
+    el.style.width = c.size[0] * sc + 'px'; el.style.height = c.size[1] * sc + 'px'; place(el, left, top);
+    el.style.borderRadius = (22 * 3 * sc) + 'px'; layerTop.appendChild(el); return el;
+  };
+  const cu = chatImg('chat-user', 1760 - CROPS['chat-user'].size[0] * CH, 250); cu.style.borderRadius = '40px 40px 12px 40px';
+  init(cu, { x: 500, o: 0, r: 8 }); tw(cu, 33.3, 0.01, { o: 1 }, 'lin'); tw(cu, 33.3, 0.9, { x: 0, r: 0 }, 'pop');
+  const typing = mk('div', 'abs', `<div class="say"><div class="av mark">${markSVG('#fff')}</div><div class="bub" style="width:110px;height:66px"><div class="dots" style="left:24px"><i></i><i></i><i></i></div></div></div>`);
+  layerTop.appendChild(typing); place(typing, 830, 410); init(typing, { o: 0, s: 0.5 }); typing.style.transformOrigin = '0 100%';
+  tw(typing, 34.05, 0.01, { o: 1 }, 'lin'); tw(typing, 34.05, 0.6, { s: 1 }, 'pop');
+  [...typing.querySelectorAll('.dots i')].forEach((d, i) => kf(d, 34.15 + i * 0.12, 0.42, [{ transform: 'translateY(0)' }, { transform: 'translateY(-9px)', offset: .45 }, { transform: 'translateY(0)' }], 'inOut', { iterations: 2 }));
+  tw(typing, 34.85, 0.2, { o: 0, s: 0.8 }, 'in');
+  const cp = chatImg('chat-pulse', 830, 400, 0.78); cp.style.boxShadow = 'none'; cp.style.borderRadius = '0';
+  init(cp, { x: -300, o: 0, r: -6 }); tw(cp, 34.95, 0.01, { o: 1 }, 'lin'); tw(cp, 34.95, 0.9, { x: 0, r: 0 }, 'pop');
+  const cs = chatImg('chat-save', 830, 580, 0.78); cs.style.boxShadow = 'none'; cs.style.borderRadius = '0';
+  init(cs, { y: 60, o: 0 }); tw(cs, 35.6, 0.7, { y: 0, o: 1 }, 'pop');
+  // Then the confirmation pops.
+  const sv = mk('div', 'pill abs', '✓ Saved to what Pulse knows'); sv.style.background = 'var(--lime)'; sv.style.color = 'var(--limeInk)';
+  sv.style.fontSize = '28px'; place(sv, 830, 780); layerTop.appendChild(sv); init(sv, { s: 0 }); tw(sv, 36.3, 0.8, { s: 1 }, 'pop');
+  const cw = chatImg('chat-wins', 830, 870, 0.62); init(cw, { y: 300, o: 0 }); tw(cw, 36.75, 0.9, { y: 0, o: 1 }, 'pop');
+  cw.style.borderRadius = '30px';
+  // Everything flows off to the left.
+  [cu, cp, cs, sv, cw].forEach((el, i) => tw(el, 38.75 + i * 0.05, 0.55, { x: -1700, r: -10, o: 0 }, 'in'));
+  [e6, h6.el, b6].forEach((el, i) => hideBlock(el, 38.8 + i * 0.05));
+
+  // ═══ S7 · Patterns (39.4 – 44.8) ══════════════════════════════════════════
+  const e7 = eyebrow('Progress', 150, 300); showPop(e7, 39.6);
+  const h7 = headline(['See the pattern', 'behind your week.'], 150, 370); showHeadline(h7, 39.7);
+  const ac = CROPS['analytics-card']; const AS = 0.58;
+  const card = mk('div', 'abs lifted'); card.style.width = ac.size[0] * AS + 'px'; card.style.height = ac.size[1] * AS + 'px';
+  card.style.borderRadius = '40px'; card.style.overflow = 'hidden'; card.style.background = '#fff';
+  place(card, 1180, 120); layerTop.appendChild(card);
+  const ci = mk('img', null, null, card); ci.src = 'img/analytics-card.png'; ci.style.width = '100%'; ci.style.display = 'block';
+  // A white cover over the chart that wipes away left to right, so the line draws itself.
+  const cover = mk('div', 'abs', null, card); cover.style.background = '#fff';
+  cover.style.width = (1040 * AS) + 'px'; cover.style.height = (640 * AS) + 'px'; place(cover, 20 * AS, 600 * AS);
+  cover.style.transformOrigin = '100% 50%';
+  init(card, { y: 900, r: 8, o: 0 }); tw(card, 39.75, 0.01, { o: 1 }, 'lin'); tw(card, 39.75, 1.0, { y: 0, r: 2 }, 'pop');
+  kf(cover, 40.7, 1.4, [{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], 'inOut');
+  const s7 = say('Your protein dips on day 2 of your shot cycle. Plan that day first.', 150, 620, 41.6, { maxW: 820 });
+  const exp = mk('div', 'pill abs', '⚗︎  Experiments now show results'); exp.style.background = 'var(--violet)'; exp.style.color = 'var(--violetLabel)';
+  exp.style.fontSize = '28px'; place(exp, 230, 800); layerTop.appendChild(exp); init(exp, { s: 0, r: -10 }); tw(exp, 42.9, 0.85, { s: 1, r: -2 }, 'pop');
+  tw(card, 44.2, 0.55, { y: -1300, r: -10, o: 0 }, 'in'); tw(exp, 44.25, 0.45, { x: -900, o: 0 }, 'in');
+  [e7, h7.el, s7].forEach((el, i) => hideBlock(el, 44.25 + i * 0.05));
+
+  // ═══ S8 · Widgets (44.8 – 49.4) ═══════════════════════════════════════════
+  const e8 = eyebrow('Widgets', 150, 300); showPop(e8, 45.0);
+  const h8 = headline(['Your floor, on your', 'Home Screen.'], 150, 370, 84); showHeadline(h8, 45.1);
+  const b8 = bodyText('It turns lime the moment you clear it.', 150, 590, 600); showFade(b8, 45.7);
+  const wImg = (name, left, top, sc, rad = 60) => { const c = CROPS[name]; const el = mk('img', 'crop abs lifted'); el.src = `img/${name}.png`;
+    el.style.width = c.size[0] * sc + 'px'; el.style.height = c.size[1] * sc + 'px'; el.style.borderRadius = rad * sc + 'px'; place(el, left, top); layerTop.appendChild(el); return el; };
+  const wi = wImg('widget-indigo', 1020, 120, 0.62); const wl = wImg('widget-lime', 1020, 120, 0.62); wl.style.zIndex = 2;
+  const wm2 = wImg('widget-medium', 1380, 120, 0.42, 70);
+  const wlk = wImg('widget-lock', 1060, 520, 0.62, 70);
+  init(wi, { x: -900, y: -300, r: -40, o: 0 }); tw(wi, 45.2, 0.01, { o: 1 }, 'lin'); tw(wi, 45.2, 1.0, { x: 0, y: 0, r: -4 }, 'pop');
+  init(wl, { x: 0, y: 0, r: -4, o: 0 }); wl.style.clipPath = 'inset(100% 0 0 0 round 37px)';
+  init(wm2, { x: 700, r: 30, o: 0 }); tw(wm2, 45.45, 0.01, { o: 1 }, 'lin'); tw(wm2, 45.45, 1.0, { x: 0, r: 4 }, 'pop');
+  init(wlk, { y: 700, r: -10, o: 0 }); tw(wlk, 45.7, 0.01, { o: 1 }, 'lin'); tw(wlk, 45.7, 1.0, { y: 0, r: -2 }, 'pop');
+  // The small widget floods lime, the same flood as Today.
+  tw(wl, 46.75, 0.01, { o: 1 }, 'lin');
+  kf(wl, 46.75, 0.75, [{ clipPath: 'inset(100% 0 0 0 round 37px)' }, { clipPath: 'inset(0% 0 0 0 round 37px)' }], 'inOut');
+  tw(wi, 47.55, 0.01, { o: 0 }, 'lin'); tw(wl, 47.5, 0.14, { s: 1.08 }, 'out'); tw(wl, 47.64, 0.6, { s: 1 }, 'pop');
+  [wi, wl, wm2, wlk].forEach((el, i) => tw(el, 48.8 + i * 0.05, 0.55, { y: -1300, r: 15, o: 0 }, 'in'));
+  [e8, h8.el, b8].forEach((el, i) => hideBlock(el, 48.85 + i * 0.05));
+
+  // ═══ S9 · Your first day (49.4 – 54.8) ════════════════════════════════════
+  const e9 = eyebrow('New · Your first day', 150, 300); showPop(e9, 49.6);
+  const h9 = headline(['New here?', 'Four small wins', 'to start.'], 150, 370); showHeadline(h9, 49.7);
+  const fd = CROPS['first-day-card']; const FS = 0.7;
+  const fcard = mk('div', 'abs lifted'); fcard.style.width = fd.size[0] * FS + 'px'; fcard.style.height = fd.size[1] * FS + 'px';
+  fcard.style.borderRadius = '44px'; fcard.style.overflow = 'hidden'; place(fcard, 1050, 165); layerTop.appendChild(fcard);
+  const fimg = mk('img', null, null, fcard); fimg.src = 'img/first-day-card.png'; fimg.style.width = '100%'; fimg.style.display = 'block';
+  init(fcard, { s: 0.3, r: -12, o: 0 }); tw(fcard, 49.85, 0.01, { o: 1 }, 'lin'); tw(fcard, 49.85, 1.0, { s: 1, r: -2 }, 'pop');
+  // Tick the remaining three steps, one after another.
+  const rows = [[90, 317], [90, 687], [90, 902]];
+  rows.forEach(([cx, cy], i) => {
+    const t = 51.0 + i * 0.5;
+    const c = mk('div', 'abs', `<svg viewBox="0 0 100 100" style="width:100%;height:100%"><circle cx="50" cy="50" r="50" fill="#D9F99D"/><path d="M30 52 L44 66 L71 37" fill="none" stroke="#1A2E05" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="70" stroke-dashoffset="70" class="tk"/></svg>`, fcard);
+    const d = 96 * FS; c.style.width = c.style.height = d + 'px'; place(c, cx * FS - d / 2, cy * FS - d / 2);
+    init(c, { s: 0 }); tw(c, t, 0.7, { s: 1 }, 'pop');
+    kf(c.querySelector('.tk'), t + 0.12, 0.35, [{ strokeDashoffset: 70 }, { strokeDashoffset: 0 }], 'out');
+    // A little sparkle off each tick.
+    for (let k = 0; k < 6; k++) {
+      const sp = mk('div', 'confetti abs'); sp.style.width = sp.style.height = '12px'; sp.style.background = k % 2 ? '#4F46E5' : '#A3E635';
+      place(sp, cx * FS - 6, cy * FS - 6); fcard.appendChild(sp); init(sp, { o: 0 });
+      const a = (k / 6) * Math.PI * 2, dist = 70;
+      kf(sp, t + 0.1, 0.6, [{ transform: 'translate(0,0) scale(0)', opacity: 1 }, { transform: `translate(${Math.cos(a) * dist}px, ${Math.sin(a) * dist}px) scale(1)`, opacity: 0 }], 'out');
+    }
+  });
+  kf(fcard, 52.6, 0.4, [{ transform: 'rotate(-2deg) scale(1)' }, { transform: 'rotate(-2deg) scale(1.05)', offset: .4 }, { transform: 'rotate(-2deg) scale(1)' }], 'out');
+  const s9 = say("That's the daily loop. I'll keep an eye on your floor from here.", 150, 720, 52.75, { maxW: 820, size: 30 });
+  tw(fcard, 54.3, 0.55, { x: 1200, r: 20, o: 0 }, 'in');
+  [e9, h9.el, s9].forEach((el, i) => hideBlock(el, 54.3 + i * 0.05));
+
+  // ═══ S10 · Outro (54.8 – 61) ══════════════════════════════════════════════
+  const om = mk('div', 'mark abs', markSVG('#4F46E5')); om.style.width = om.style.height = '200px'; place(om, 860, 230); om.style.zIndex = 70;
+  init(om, { y: 900, s: 0.6 });
+  tw(om, 54.95, 0.9, { y: 0, s: 1 }, 'bounce');
+  tw(om, 55.75, 0.14, { sx: 1.15, sy: 0.85 }, 'out'); tw(om, 55.89, 0.6, { sx: 1, sy: 1 }, 'pop');
+  // One slow turn of the whole mark while Pulse talks.
+  kf(om.querySelector('svg'), 56.0, 2.4, [{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], 'inOut');
+  const s10 = say("I'm in your corner.", 760, 470, 56.1, { size: 52, typing: 0.5 });
+  const wm3 = mk('div', 'wordmark abs', 'Footing'); wm3.style.fontSize = '150px'; place(wm3, 690, 620); wm3.style.zIndex = 70;
+  init(wm3, { o: 0, y: 60 }); tw(wm3, 57.3, 0.8, { o: 1, y: 0 }, 'out');
+  const v3 = mk('div', 'pill abs', '1.3.1'); v3.style.background = 'var(--lime)'; v3.style.color = 'var(--limeInk)';
+  v3.style.fontSize = '40px'; place(v3, 1250, 640); init(v3, { s: 0, r: -20 }); v3.style.zIndex = 71; tw(v3, 57.7, 0.85, { s: 1, r: -6 }, 'pop');
+  const store = mk('div', 'body abs', 'Update on the App Store'); store.style.color = 'var(--ink)'; store.style.fontWeight = '700';
+  store.style.textAlign = 'center'; store.style.width = '700px'; place(store, 610, 820); init(store, { o: 0, y: 20 }); tw(store, 58.1, 0.7, { o: 1, y: 0 }, 'out');
+  const fine = mk('div', 'fine abs', 'Pulse is a wellness coach, not a medical professional.'); fine.style.width = '900px'; fine.style.textAlign = 'center';
+  place(fine, 510, 990); init(fine, { o: 0 }); tw(fine, 58.4, 0.8, { o: 1 }, 'out');
+  // A gentle breath on the mark to the end.
+  kf(om, 59.0, 1.0, [{ scale: '1' }, { scale: '1.06' }], 'inOut', { iterations: 2, direction: 'alternate' });
+
+  document.fonts.ready.then(() => { window.READY = true; });
+}
+
+function seek(t) {
+  const ms = t * 1000;
+  for (const a of document.getAnimations()) { a.pause(); a.currentTime = ms; }
+  onSeek.forEach(f => f(t));
+}
+window.seek = seek;
+window.DURATION = 61;
+
+Promise.all([...document.images].map(i => i.decode().catch(() => {}))).then(() => document.fonts.load('800 92px Bricolage'))
+  .then(() => document.fonts.load('600 30px Figtree')).then(() => document.fonts.load('700 30px Figtree'))
+  .then(build).then(async () => {
+    await Promise.all([...document.images].map(i => i.decode().catch(() => {})));
+    seek(0); window.READY = true;
+  });
+</script>
+</body>
+</html>
