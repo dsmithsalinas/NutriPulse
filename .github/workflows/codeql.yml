@@ -52,6 +52,21 @@ jobs:
           xcodebuild -resolvePackageDependencies \
             -project Footing.xcodeproj -scheme Footing \
             -derivedDataPath "$RUNNER_TEMP/codeql-derived"
+      - name: Preflight Swift compiler and clean build products
+        if: matrix.language == 'swift'
+        run: |
+          xcodebuild build \
+            -project Footing.xcodeproj -scheme Footing \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/codeql-derived" \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
+          # A clean is essential: every source must compile again under CodeQL.
+          xcodebuild clean \
+            -project Footing.xcodeproj -scheme Footing \
+            -configuration Debug -sdk iphonesimulator \
+            -derivedDataPath "$RUNNER_TEMP/codeql-derived" \
+            CODE_SIGNING_ALLOWED=NO
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
