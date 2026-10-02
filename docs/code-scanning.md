@@ -32,3 +32,5 @@ CodeQL extraction, query execution, and GitHub upload have not run. The hosted m
 ## Hosted validation follow-up
 
 The first PR scan passed JavaScript/TypeScript and Python analysis/upload with zero results. Swift failed under hosted Xcode 26.6 because the large `TodayView.body` expression exceeded the compiler's type-checking limit (the local Xcode 27 build passed). The canvas and presentation chains are now separate computed view properties, preserving modifier order and behavior while bounding each type-checking expression. The unsigned local simulator build passes after that refactor. Package resolution now runs before CodeQL initialization; compilation remains traced.
+
+A second hosted run exposed the same type-checking limit in the remaining lifecycle chain, at its first-day observer background. Tasks, interactions, and notification handlers now have separate computed view expressions, and the protein-goal handler is a typed method. Modifier order and handler bodies are preserved; the local unsigned build passes after the complete split.

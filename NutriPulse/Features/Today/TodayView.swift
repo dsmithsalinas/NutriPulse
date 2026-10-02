@@ -441,138 +441,154 @@ struct TodayView: View {
         }
     }
 
-    var body: some View {
-        NavigationStack {
-            todayPresentations
-            .task(id: vm.selectedDate) {
-                #if DEBUG
-                if AppStoreScreenshotMode.active || DebugLaunch.tour {
-                    strongWeek.isLoading = false
-                    strongWeek.current = AppStoreScreenshotPreview.week
-                    return
-                }
-                #endif
-                // The drift check inside loadData needs the user's stats.
-                vm.profile = appState.profile
-                await vm.loadData()
-                if vm.isToday { await strongWeek.load() }
-                openWeeklyReminderIfNeeded()
-            }
+    private var todayTasks: some View {
+        todayPresentations
+        .task(id: vm.selectedDate) {
             #if DEBUG
-            // --floor-cleared-preview (with --tour for data): tops protein up past the floor two
-            // seconds in and plays the moment through the real latch, to review the animation.
-            .task {
-                guard ProcessInfo.processInfo.arguments.contains("--floor-cleared-preview"),
-                      let goal = vm.dailyGoal?.proteinG, vm.totalProteinG < goal,
-                      let sample = vm.foodLogs.first else { return }
-                try? await Task.sleep(for: .seconds(2))
-                vm.foodLogs.append(FoodLog(
-                    id: UUID(), userId: sample.userId, loggedAt: .now, logDate: sample.logDate, meal: .snack,
-                    foodItemId: UUID(), quantity: 1, caloriesSnapshot: 180,
-                    proteinGSnapshot: goal - vm.totalProteinG + 6, carbsGSnapshot: 8, fatGSnapshot: 4,
-                    fiberGSnapshot: 0, foodItems: .init(name: "Protein shake", brand: nil, servingDesc: "1 bottle")
-                ))
-                proteinCelebrationPending = true
-                playProteinCelebrationIfVisible()
+            if AppStoreScreenshotMode.active || DebugLaunch.tour {
+                strongWeek.isLoading = false
+                strongWeek.current = AppStoreScreenshotPreview.week
+                return
             }
             #endif
-            .onChange(of: vm.justClosedAllRings) { _, justClosed in
-                guard vm.isToday, justClosed else { return }
-                ringCelebrationTrigger += 1
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            // The drift check inside loadData needs the user's stats.
+            vm.profile = appState.profile
+            await vm.loadData()
+            if vm.isToday { await strongWeek.load() }
+            openWeeklyReminderIfNeeded()
+        }
+        #if DEBUG
+        // --floor-cleared-preview (with --tour for data): tops protein up past the floor two
+        // seconds in and plays the moment through the real latch, to review the animation.
+        .task {
+            guard ProcessInfo.processInfo.arguments.contains("--floor-cleared-preview"),
+                  let goal = vm.dailyGoal?.proteinG, vm.totalProteinG < goal,
+                  let sample = vm.foodLogs.first else { return }
+            try? await Task.sleep(for: .seconds(2))
+            vm.foodLogs.append(FoodLog(
+                id: UUID(), userId: sample.userId, loggedAt: .now, logDate: sample.logDate, meal: .snack,
+                foodItemId: UUID(), quantity: 1, caloriesSnapshot: 180,
+                proteinGSnapshot: goal - vm.totalProteinG + 6, carbsGSnapshot: 8, fatGSnapshot: 4,
+                fiberGSnapshot: 0, foodItems: .init(name: "Protein shake", brand: nil, servingDesc: "1 bottle")
+            ))
+            proteinCelebrationPending = true
+            playProteinCelebrationIfVisible()
+        }
+        #endif
+        .onChange(of: vm.justClosedAllRings) { _, justClosed in
+            guard vm.isToday, justClosed else { return }
+            ringCelebrationTrigger += 1
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+    }
+
+    private func handleProteinGoalChange(_ justHit: Bool) {
+        guard vm.isToday, justHit else { return }
+        // A fresh view model (new launch, or swiping back to today from another day)
+        // recomputes this edge from scratch, so it can fire again for a floor that was
+        // already cleared — and already celebrated — earlier today. The persisted record
+        // is the only thing that remembers across that reset (iOS used to keep the latch
+        // in memory only, so it could replay).
+        if let accountId = currentAccountId,
+           FloorClearedCelebrationStore.hasCelebrated(userId: accountId, on: vm.selectedDate) {
+            return
+        }
+        // Don't fire here — logging food is what pushes protein over the line, and the
+        // reload lands while the logging sheet still covers the ring. Latch it and let
+        // the handler below play it once Today is actually on screen.
+        proteinCelebrationPending = true
+        playProteinCelebrationIfVisible()
+    }
+
+    private var todayInteractions: some View {
+        todayTasks
+        // First-day checklist and tips: their observers live on a hidden view of their own
+        // (firstDayObserver) to keep this modifier chain short enough to type-check.
+        .background { firstDayObserver }
+        .onChange(of: vm.justHitProteinGoal) { _, justHit in
+            handleProteinGoalChange(justHit)
+        }
+        .onChange(of: isFrontmost) { _, frontmost in
+            if frontmost { Task { await strongWeek.load() } }
+            playProteinCelebrationIfVisible()
+        }
+        .onChange(of: showRecoveryLogger) { _, _ in
+            playProteinCelebrationIfVisible()
+        }
+        .onChange(of: appState.pendingStrongWeekReminder) { _, pending in
+            if pending { openWeeklyReminderIfNeeded() }
+        }
+        .onChange(of: appState.pendingQuickAction) { _, action in
+            guard action == .logDose else { return }
+            appState.pendingQuickAction = nil
+            showRitual = true
+        }
+        .onChange(of: appState.pendingSmartNotificationRoute) { _, route in
+            guard let route else { return }
+            switch route.action {
+            case .closeProtein:
+                appState.pendingSmartNotificationRoute = nil
+                showProteinRescue = true
+            case .reviewMeal:
+                appState.pendingSmartNotificationRoute = nil
+                repeatedMealRoute = route
+            case .viewPreparation:
+                // The preparation card is already in Today's ranked Pulse slot.
+                appState.pendingSmartNotificationRoute = nil
+            case .addWater, .repeatMeal:
+                break
             }
-            // First-day checklist and tips: their observers live on a hidden view of their own
-            // (firstDayObserver) to keep this modifier chain short enough to type-check.
-            .background { firstDayObserver }
-            .onChange(of: vm.justHitProteinGoal) { _, justHit in
-                guard vm.isToday, justHit else { return }
-                // A fresh view model (new launch, or swiping back to today from another day)
-                // recomputes this edge from scratch, so it can fire again for a floor that was
-                // already cleared — and already celebrated — earlier today. The persisted record
-                // is the only thing that remembers across that reset (iOS used to keep the latch
-                // in memory only, so it could replay).
-                if let accountId = currentAccountId,
-                   FloorClearedCelebrationStore.hasCelebrated(userId: accountId, on: vm.selectedDate) {
-                    return
-                }
-                // Don't fire here — logging food is what pushes protein over the line, and the
-                // reload lands while the logging sheet still covers the ring. Latch it and let
-                // the handler below play it once Today is actually on screen.
-                proteinCelebrationPending = true
-                playProteinCelebrationIfVisible()
-            }
-            .onChange(of: isFrontmost) { _, frontmost in
-                if frontmost { Task { await strongWeek.load() } }
-                playProteinCelebrationIfVisible()
-            }
-            .onChange(of: showRecoveryLogger) { _, _ in
-                playProteinCelebrationIfVisible()
-            }
-            .onChange(of: appState.pendingStrongWeekReminder) { _, pending in
-                if pending { openWeeklyReminderIfNeeded() }
-            }
-            .onChange(of: appState.pendingQuickAction) { _, action in
-                guard action == .logDose else { return }
-                appState.pendingQuickAction = nil
-                showRitual = true
-            }
-            .onChange(of: appState.pendingSmartNotificationRoute) { _, route in
-                guard let route else { return }
-                switch route.action {
-                case .closeProtein:
-                    appState.pendingSmartNotificationRoute = nil
-                    showProteinRescue = true
-                case .reviewMeal:
-                    appState.pendingSmartNotificationRoute = nil
-                    repeatedMealRoute = route
-                case .viewPreparation:
-                    // The preparation card is already in Today's ranked Pulse slot.
-                    appState.pendingSmartNotificationRoute = nil
-                case .addWater, .repeatMeal:
-                    break
-                }
-            }
-            .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
-                // `lastSyncAt` advances only after a full pull (foreground/reconnect), not
-                // after pushing a local mutation. Water already updates optimistically;
-                // reloading here after every quick-add replaced the whole page with a
-                // spinner and made each selection look like a full refresh.
-                Task { await vm.loadData() }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active {
-                    // The day may have rolled over while the app was suspended.
-                    // Snapping first mutates vm.selectedDate, which re-fires the
-                    // .task(id:) above and reloads the correct day's data.
-                    vm.snapToTodayIfDayChanged()
-                    Task { await vm.loadHealthData() }
-                }
-            }
-            // Fires at midnight (and on timezone changes) while the app is foregrounded.
-            .onReceive(NotificationCenter.default.publisher(
-                for: UIApplication.significantTimeChangeNotification
-            )) { _ in
+        }
+        .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
+            // `lastSyncAt` advances only after a full pull (foreground/reconnect), not
+            // after pushing a local mutation. Water already updates optimistically;
+            // reloading here after every quick-add replaced the whole page with a
+            // spinner and made each selection look like a full refresh.
+            Task { await vm.loadData() }
+        }
+    }
+
+    private var todayNotifications: some View {
+        todayInteractions
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                // The day may have rolled over while the app was suspended.
+                // Snapping first mutates vm.selectedDate, which re-fires the
+                // .task(id:) above and reloads the correct day's data.
                 vm.snapToTodayIfDayChanged()
+                Task { await vm.loadHealthData() }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .foodAccessChanged)) { _ in
-                strongWeek.foodPreferencesChanged()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .strongWeekChanged)) { _ in
-                Task { await vm.loadData() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
-                strongWeek.changedSinceGeneration = true
-                Task { await vm.loadData() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .smartCoachingSettingsChanged)) { _ in
-                Task { await vm.refreshSmartNotifications() }
-            }
-            // Pulse toggled off cancels any pending smart notification immediately (see
-            // NotificationManager); toggled back on, re-evaluate now rather than waiting for
-            // the next natural trigger (a workout finishing, etc.).
-            .onReceive(NotificationCenter.default.publisher(for: .pulseProfileChanged)) { _ in
-                Task { await vm.refreshSmartNotifications() }
-            }
+        }
+        // Fires at midnight (and on timezone changes) while the app is foregrounded.
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIApplication.significantTimeChangeNotification
+        )) { _ in
+            vm.snapToTodayIfDayChanged()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .foodAccessChanged)) { _ in
+            strongWeek.foodPreferencesChanged()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .strongWeekChanged)) { _ in
+            Task { await vm.loadData() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
+            strongWeek.changedSinceGeneration = true
+            Task { await vm.loadData() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .smartCoachingSettingsChanged)) { _ in
+            Task { await vm.refreshSmartNotifications() }
+        }
+        // Pulse toggled off cancels any pending smart notification immediately (see
+        // NotificationManager); toggled back on, re-evaluate now rather than waiting for
+        // the next natural trigger (a workout finishing, etc.).
+        .onReceive(NotificationCenter.default.publisher(for: .pulseProfileChanged)) { _ in
+            Task { await vm.refreshSmartNotifications() }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            todayNotifications
         }
     }
 
