@@ -48,6 +48,10 @@ jobs:
           # Static analysis never launches the app or needs production credentials.
           cp Configurations/Secrets.xcconfig.template Configurations/Secrets.xcconfig
           xcodegen generate
+          # Resolve packages before tracing; the subsequent build is still fully scanned.
+          xcodebuild -resolvePackageDependencies \
+            -project Footing.xcodeproj -scheme Footing \
+            -derivedDataPath "$RUNNER_TEMP/codeql-derived"
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:

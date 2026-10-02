@@ -28,3 +28,7 @@ Do not manually clear the existing finding, mark the feed unsupported, or treat 
 - Git whitespace validation: passed. Only the workflow and this document are new; generated project/build configuration remains ignored.
 
 CodeQL extraction, query execution, and GitHub upload have not run. The hosted macOS runner's Xcode/CodeQL compatibility remains to be verified on activation; local build success does not prove scanning or connector recovery.
+
+## Hosted validation follow-up
+
+The first PR scan passed JavaScript/TypeScript and Python analysis/upload with zero results. Swift failed under hosted Xcode 26.6 because the large `TodayView.body` expression exceeded the compiler's type-checking limit (the local Xcode 27 build passed). The canvas and presentation chains are now separate computed view properties, preserving modifier order and behavior while bounding each type-checking expression. The unsigned local simulator build passes after that refactor. Package resolution now runs before CodeQL initialization; compilation remains traced.
