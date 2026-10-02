@@ -223,346 +223,372 @@ struct TodayView: View {
         }
     }
 
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Theme.Spacing.tileGap) {
-                    header
+    // Separate the canvas and presentation modifiers so older Swift compilers
+    // can type-check each expression independently without changing view behavior.
+    private var todayCanvas: some View {
+        ScrollView {
+            VStack(spacing: Theme.Spacing.tileGap) {
+                header
 
-                    // No account in the tour, so every sync "fails"; that banner is noise there.
-                    if let status = SyncEngine.shared.statusMessage, !DebugLaunch.tour {
-                        SyncStatusBanner(status: status) {
-                            Task { await SyncEngine.shared.syncNow() }
-                        }
+                // No account in the tour, so every sync "fails"; that banner is noise there.
+                if let status = SyncEngine.shared.statusMessage, !DebugLaunch.tour {
+                    SyncStatusBanner(status: status) {
+                        Task { await SyncEngine.shared.syncNow() }
                     }
+                }
 
-                    if vm.isLoading {
-                        ProgressView()
-                            .frame(maxWidth: .infinity, minHeight: 200)
+                if vm.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: 200)
+                } else {
+                    // Pulse gets one adaptive slot. A single, ranked next step keeps Today
+                    // calm even when dose, recovery, pacing, and target signals coexist.
+                    pulsePriorityCard
+                        .popIn(order: 1)
+
+                    firstDayCard
+
+                    tileGrid
+
+                    if vm.foodLogs.isEmpty {
+                        EmptyDayView(isToday: vm.isToday)
+                            .popIn(order: 7)
                     } else {
-                        // Pulse gets one adaptive slot. A single, ranked next step keeps Today
-                        // calm even when dose, recovery, pacing, and target signals coexist.
-                        pulsePriorityCard
-                            .popIn(order: 1)
+                        // Meal sections in fixed display order (breakfast → snack)
+                        mealSections
+                    }
 
-                        firstDayCard
-
-                        tileGrid
-
-                        if vm.foodLogs.isEmpty {
-                            EmptyDayView(isToday: vm.isToday)
-                                .popIn(order: 7)
-                        } else {
-                            // Meal sections in fixed display order (breakfast → snack)
-                            mealSections
-                        }
-
-                        if vm.isToday, !vm.availableYesterdayMeals.isEmpty {
-                            RepeatYesterdayCard(
-                                meals: vm.availableYesterdayMeals
-                                    .map { (meal: $0.key, itemCount: $0.value.count) }
-                                    .sorted { $0.meal.sortOrder < $1.meal.sortOrder },
-                                busyMeal: vm.repeatingMeal,
-                                onRepeat: { meal in Task { await vm.repeatYesterday(meal) } }
-                            )
-                        }
-
-                        if vm.isToday {
-                            StrongWeekCard(vm: strongWeek) {
-                                showStrongWeek = true
-                                Task { await strongWeek.load() }
-                            }
-                        }
-
-                        if HealthKitManager.shared.isAvailable {
-                            HealthStatsCard(
-                                context: vm.recoveryContext,
-                                shotCycleCheckIn: vm.todayShotCycleCheckIn,
-                                shotCycleDay: vm.currentShotCycleDay,
-                                activeCalories: vm.activeCalories,
-                                restingHR:      vm.restingHeartRate,
-                                hrv:            vm.hrv,
-                                sleepHours:     vm.sleepHours,
-                                hasRequestedAuthorization: HealthKitManager.shared.hasRequestedAuthorization,
-                                onConnect:       { Task { await vm.requestHealthAuthorization() } },
-                                onOpenHealthApp: openHealthApp
-                            )
-                        }
-
-                        BodyCompositionCard(
-                            data: vm.bodyComp,
-                            waistCm: vm.latestWaistCm,
-                            units: units,
-                            onOpen: { showBodyHub = true },
-                            onAddTapped: { showBodyCompSheet = true }
+                    if vm.isToday, !vm.availableYesterdayMeals.isEmpty {
+                        RepeatYesterdayCard(
+                            meals: vm.availableYesterdayMeals
+                                .map { (meal: $0.key, itemCount: $0.value.count) }
+                                .sorted { $0.meal.sortOrder < $1.meal.sortOrder },
+                            busyMeal: vm.repeatingMeal,
+                            onRepeat: { meal in Task { await vm.repeatYesterday(meal) } }
                         )
+                    }
 
-                        if let error = vm.errorMessage {
-                            Text(error)
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.danger)
-                                .padding()
+                    if vm.isToday {
+                        StrongWeekCard(vm: strongWeek) {
+                            showStrongWeek = true
+                            Task { await strongWeek.load() }
                         }
+                    }
+
+                    if HealthKitManager.shared.isAvailable {
+                        HealthStatsCard(
+                            context: vm.recoveryContext,
+                            shotCycleCheckIn: vm.todayShotCycleCheckIn,
+                            shotCycleDay: vm.currentShotCycleDay,
+                            activeCalories: vm.activeCalories,
+                            restingHR:      vm.restingHeartRate,
+                            hrv:            vm.hrv,
+                            sleepHours:     vm.sleepHours,
+                            hasRequestedAuthorization: HealthKitManager.shared.hasRequestedAuthorization,
+                            onConnect:       { Task { await vm.requestHealthAuthorization() } },
+                            onOpenHealthApp: openHealthApp
+                        )
+                    }
+
+                    BodyCompositionCard(
+                        data: vm.bodyComp,
+                        waistCm: vm.latestWaistCm,
+                        units: units,
+                        onOpen: { showBodyHub = true },
+                        onAddTapped: { showBodyCompSheet = true }
+                    )
+
+                    if let error = vm.errorMessage {
+                        Text(error)
+                            .font(Theme.Typography.caption)
+                            .foregroundStyle(Theme.Colors.danger)
+                            .padding()
                     }
                 }
-                .padding(.horizontal, Theme.Spacing.page)
-                .padding(.bottom, Theme.Spacing.xl)
             }
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            // No navigation bar, so cover the status bar or scrolled tiles slide under the clock.
-            .overlay(alignment: .top) {
-                Color.clear
-                    .frame(height: 0)
-                    .background(Theme.Colors.ground)
-            }
-            .scrollContentBackground(.hidden)
-            .toolbar(.hidden, for: .navigationBar)
-            // Swipe the canvas to change days — right = previous, left = next (blocked at
-            // today). Runs alongside vertical scroll; only a clearly horizontal swipe counts.
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 24)
-                    .onEnded { value in
-                        guard abs(value.translation.width) > abs(value.translation.height),
-                              abs(value.translation.width) > 60 else { return }
-                        if value.translation.width > 0 {
-                            vm.goToPreviousDay()
-                        } else {
-                            vm.goToNextDay()
-                        }
+            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.bottom, Theme.Spacing.xl)
+        }
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        // No navigation bar, so cover the status bar or scrolled tiles slide under the clock.
+        .overlay(alignment: .top) {
+            Color.clear
+                .frame(height: 0)
+                .background(Theme.Colors.ground)
+        }
+        .scrollContentBackground(.hidden)
+        .toolbar(.hidden, for: .navigationBar)
+        // Swipe the canvas to change days — right = previous, left = next (blocked at
+        // today). Runs alongside vertical scroll; only a clearly horizontal swipe counts.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height),
+                          abs(value.translation.width) > 60 else { return }
+                    if value.translation.width > 0 {
+                        vm.goToPreviousDay()
+                    } else {
+                        vm.goToNextDay()
                     }
+                }
+        )
+    }
+
+    private var todayPresentations: some View {
+        todayCanvas
+        .navigationDestination(isPresented: $showBodyHub) {
+            BodyHubView(todayVM: vm, heightCm: appState.profile?.heightCm)
+        }
+        .sheet(isPresented: $showWaterPicker) {
+            WaterPickerSheet(
+                intakeMl: vm.waterIntakeMl,
+                goalMl: vm.waterGoalMl,
+                unit: waterUnit,
+                usualMl: Binding(get: { usualWaterMl }, set: { storedUsualWaterMl = $0 }),
+                onAdd: { ml in await vm.addWater(ml) },
+                onUndo: { id, ml in await vm.undoWater(id: id, ml: ml) }
             )
-            .navigationDestination(isPresented: $showBodyHub) {
-                BodyHubView(todayVM: vm, heightCm: appState.profile?.heightCm)
-            }
-            .sheet(isPresented: $showWaterPicker) {
-                WaterPickerSheet(
-                    intakeMl: vm.waterIntakeMl,
-                    goalMl: vm.waterGoalMl,
-                    unit: waterUnit,
-                    usualMl: Binding(get: { usualWaterMl }, set: { storedUsualWaterMl = $0 }),
-                    onAdd: { ml in await vm.addWater(ml) },
-                    onUndo: { id, ml in await vm.undoWater(id: id, ml: ml) }
-                )
-            }
-            .sheet(isPresented: $showMovement) {
-                MovementSheet(vm: vm)
-                    .presentationDetents([.medium, .large])
-            }
-            .sheet(isPresented: $showDatePicker) {
-                DatePickerSheet(selected: vm.selectedDate) { picked in
-                    vm.goTo(date: picked)
-                }
-                .presentationDetents([.medium])
-            }
-            .fullScreenCover(isPresented: $showRitual) {
-                InjectionRitualView(latest: vm.latestGLP1) { saved in
-                    vm.registerLoggedInjection(saved)
-                }
-            }
-            .sheet(isPresented: $showBodyCompSheet) {
-                BodyCompositionSheet(
-                    current: vm.bodyComp,
-                    heightCm: appState.profile?.heightCm
-                ) { weightKg, bodyFatPct, bmi, lbmKg, measurementsCm, writeToHK in
-                    await vm.saveBodyComposition(
-                        weightKg: weightKg,
-                        bodyFatPct: bodyFatPct,
-                        bmi: bmi,
-                        lbmKg: lbmKg,
-                        measurementsCm: measurementsCm,
-                        writeToHK: writeToHK
-                    )
-                }
-            }
-            .sheet(isPresented: $showProteinRescue, onDismiss: {
-                playProteinCelebrationIfVisible()
-            }) {
-                ProteinRescueSheet(
-                    date: vm.selectedDate,
-                    proteinGap: vm.recoveryOpportunity?.proteinGap
-                        ?? max(Int(((vm.dailyGoal?.proteinG ?? 0) - vm.totalProteinG).rounded()), 0),
-                    calorieRoom: max(Int(((vm.dailyGoal?.calories ?? 0) - vm.totalCalories).rounded()), 0),
-                    onLogged: { Task { await vm.loadData() } },
-                    onBuildMyOwn: {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            showRecoveryLogger = true
-                        }
-                    }
-                )
+        }
+        .sheet(isPresented: $showMovement) {
+            MovementSheet(vm: vm)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showDatePicker) {
+            DatePickerSheet(selected: vm.selectedDate) { picked in
+                vm.goTo(date: picked)
             }
-            .sheet(isPresented: $showRecoveryLogger, onDismiss: {
-                Task { await vm.loadData() }
-            }) {
-                FoodLoggingView(selectedDate: vm.selectedDate)
+            .presentationDetents([.medium])
+        }
+        .fullScreenCover(isPresented: $showRitual) {
+            InjectionRitualView(latest: vm.latestGLP1) { saved in
+                vm.registerLoggedInjection(saved)
             }
-            .sheet(isPresented: $showShotCycleCheckIn) {
-                if let cycleDay = vm.currentShotCycleDay {
-                    ShotCycleCheckInSheet(
-                        cycleDay: cycleDay,
-                        existing: vm.todayShotCycleCheckIn,
-                        onSave: { draft in await vm.saveShotCycleCheckIn(draft) }
-                    )
-                    .presentationDetents([.large])
-                }
-            }
-            .alert("Couldn’t save check-in", isPresented: Binding(
-                get: { vm.shotCycleCheckInError != nil },
-                set: { if !$0 { vm.shotCycleCheckInError = nil } }
-            )) {
-                Button("OK", role: .cancel) { vm.shotCycleCheckInError = nil }
-            } message: {
-                Text(vm.shotCycleCheckInError ?? "Please try again.")
-            }
-            .sheet(item: $editingLog) { log in
-                EditFoodLogSheet(
-                    log: log,
-                    onSave: { meal, quantity in
-                        await vm.editLog(id: log.id, meal: meal, quantity: quantity)
-                    }
+        }
+        .sheet(isPresented: $showBodyCompSheet) {
+            BodyCompositionSheet(
+                current: vm.bodyComp,
+                heightCm: appState.profile?.heightCm
+            ) { weightKg, bodyFatPct, bmi, lbmKg, measurementsCm, writeToHK in
+                await vm.saveBodyComposition(
+                    weightKg: weightKg,
+                    bodyFatPct: bodyFatPct,
+                    bmi: bmi,
+                    lbmKg: lbmKg,
+                    measurementsCm: measurementsCm,
+                    writeToHK: writeToHK
                 )
             }
-            .sheet(isPresented: $showStrongWeek, onDismiss: { strongWeek.editing = false }) {
-                StrongWeekView(vm: strongWeek, profile: appState.profile)
-            }
-            .sheet(item: $repeatedMealRoute) { route in
-                if let sourceDate = route.sourceDate, let meal = route.meal {
-                    RepeatedMealConfirmationSheet(
-                        sourceDate: sourceDate,
-                        meal: meal,
-                        vm: vm
-                    )
+        }
+        .sheet(isPresented: $showProteinRescue, onDismiss: {
+            playProteinCelebrationIfVisible()
+        }) {
+            ProteinRescueSheet(
+                date: vm.selectedDate,
+                proteinGap: vm.recoveryOpportunity?.proteinGap
+                    ?? max(Int(((vm.dailyGoal?.proteinG ?? 0) - vm.totalProteinG).rounded()), 0),
+                calorieRoom: max(Int(((vm.dailyGoal?.calories ?? 0) - vm.totalCalories).rounded()), 0),
+                onLogged: { Task { await vm.loadData() } },
+                onBuildMyOwn: {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        showRecoveryLogger = true
+                    }
                 }
+            )
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showRecoveryLogger, onDismiss: {
+            Task { await vm.loadData() }
+        }) {
+            FoodLoggingView(selectedDate: vm.selectedDate)
+        }
+        .sheet(isPresented: $showShotCycleCheckIn) {
+            if let cycleDay = vm.currentShotCycleDay {
+                ShotCycleCheckInSheet(
+                    cycleDay: cycleDay,
+                    existing: vm.todayShotCycleCheckIn,
+                    onSave: { draft in await vm.saveShotCycleCheckIn(draft) }
+                )
+                .presentationDetents([.large])
             }
-            .task(id: vm.selectedDate) {
-                #if DEBUG
-                if AppStoreScreenshotMode.active || DebugLaunch.tour {
-                    strongWeek.isLoading = false
-                    strongWeek.current = AppStoreScreenshotPreview.week
-                    return
+        }
+        .alert("Couldn’t save check-in", isPresented: Binding(
+            get: { vm.shotCycleCheckInError != nil },
+            set: { if !$0 { vm.shotCycleCheckInError = nil } }
+        )) {
+            Button("OK", role: .cancel) { vm.shotCycleCheckInError = nil }
+        } message: {
+            Text(vm.shotCycleCheckInError ?? "Please try again.")
+        }
+        .sheet(item: $editingLog) { log in
+            EditFoodLogSheet(
+                log: log,
+                onSave: { meal, quantity in
+                    await vm.editLog(id: log.id, meal: meal, quantity: quantity)
                 }
-                #endif
-                // The drift check inside loadData needs the user's stats.
-                vm.profile = appState.profile
-                await vm.loadData()
-                if vm.isToday { await strongWeek.load() }
-                openWeeklyReminderIfNeeded()
+            )
+        }
+        .sheet(isPresented: $showStrongWeek, onDismiss: { strongWeek.editing = false }) {
+            StrongWeekView(vm: strongWeek, profile: appState.profile)
+        }
+        .sheet(item: $repeatedMealRoute) { route in
+            if let sourceDate = route.sourceDate, let meal = route.meal {
+                RepeatedMealConfirmationSheet(
+                    sourceDate: sourceDate,
+                    meal: meal,
+                    vm: vm
+                )
             }
+        }
+    }
+
+    private var todayTasks: some View {
+        todayPresentations
+        .task(id: vm.selectedDate) {
             #if DEBUG
-            // --floor-cleared-preview (with --tour for data): tops protein up past the floor two
-            // seconds in and plays the moment through the real latch, to review the animation.
-            .task {
-                guard ProcessInfo.processInfo.arguments.contains("--floor-cleared-preview"),
-                      let goal = vm.dailyGoal?.proteinG, vm.totalProteinG < goal,
-                      let sample = vm.foodLogs.first else { return }
-                try? await Task.sleep(for: .seconds(2))
-                vm.foodLogs.append(FoodLog(
-                    id: UUID(), userId: sample.userId, loggedAt: .now, logDate: sample.logDate, meal: .snack,
-                    foodItemId: UUID(), quantity: 1, caloriesSnapshot: 180,
-                    proteinGSnapshot: goal - vm.totalProteinG + 6, carbsGSnapshot: 8, fatGSnapshot: 4,
-                    fiberGSnapshot: 0, foodItems: .init(name: "Protein shake", brand: nil, servingDesc: "1 bottle")
-                ))
-                proteinCelebrationPending = true
-                playProteinCelebrationIfVisible()
+            if AppStoreScreenshotMode.active || DebugLaunch.tour {
+                strongWeek.isLoading = false
+                strongWeek.current = AppStoreScreenshotPreview.week
+                return
             }
             #endif
-            .onChange(of: vm.justClosedAllRings) { _, justClosed in
-                guard vm.isToday, justClosed else { return }
-                ringCelebrationTrigger += 1
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            // The drift check inside loadData needs the user's stats.
+            vm.profile = appState.profile
+            await vm.loadData()
+            if vm.isToday { await strongWeek.load() }
+            openWeeklyReminderIfNeeded()
+        }
+        #if DEBUG
+        // --floor-cleared-preview (with --tour for data): tops protein up past the floor two
+        // seconds in and plays the moment through the real latch, to review the animation.
+        .task {
+            guard ProcessInfo.processInfo.arguments.contains("--floor-cleared-preview"),
+                  let goal = vm.dailyGoal?.proteinG, vm.totalProteinG < goal,
+                  let sample = vm.foodLogs.first else { return }
+            try? await Task.sleep(for: .seconds(2))
+            vm.foodLogs.append(FoodLog(
+                id: UUID(), userId: sample.userId, loggedAt: .now, logDate: sample.logDate, meal: .snack,
+                foodItemId: UUID(), quantity: 1, caloriesSnapshot: 180,
+                proteinGSnapshot: goal - vm.totalProteinG + 6, carbsGSnapshot: 8, fatGSnapshot: 4,
+                fiberGSnapshot: 0, foodItems: .init(name: "Protein shake", brand: nil, servingDesc: "1 bottle")
+            ))
+            proteinCelebrationPending = true
+            playProteinCelebrationIfVisible()
+        }
+        #endif
+        .onChange(of: vm.justClosedAllRings) { _, justClosed in
+            guard vm.isToday, justClosed else { return }
+            ringCelebrationTrigger += 1
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+    }
+
+    private func handleProteinGoalChange(_ justHit: Bool) {
+        guard vm.isToday, justHit else { return }
+        // A fresh view model (new launch, or swiping back to today from another day)
+        // recomputes this edge from scratch, so it can fire again for a floor that was
+        // already cleared — and already celebrated — earlier today. The persisted record
+        // is the only thing that remembers across that reset (iOS used to keep the latch
+        // in memory only, so it could replay).
+        if let accountId = currentAccountId,
+           FloorClearedCelebrationStore.hasCelebrated(userId: accountId, on: vm.selectedDate) {
+            return
+        }
+        // Don't fire here — logging food is what pushes protein over the line, and the
+        // reload lands while the logging sheet still covers the ring. Latch it and let
+        // the handler below play it once Today is actually on screen.
+        proteinCelebrationPending = true
+        playProteinCelebrationIfVisible()
+    }
+
+    private var todayInteractions: some View {
+        todayTasks
+        // First-day checklist and tips: their observers live on a hidden view of their own
+        // (firstDayObserver) to keep this modifier chain short enough to type-check.
+        .background { firstDayObserver }
+        .onChange(of: vm.justHitProteinGoal) { _, justHit in
+            handleProteinGoalChange(justHit)
+        }
+        .onChange(of: isFrontmost) { _, frontmost in
+            if frontmost { Task { await strongWeek.load() } }
+            playProteinCelebrationIfVisible()
+        }
+        .onChange(of: showRecoveryLogger) { _, _ in
+            playProteinCelebrationIfVisible()
+        }
+        .onChange(of: appState.pendingStrongWeekReminder) { _, pending in
+            if pending { openWeeklyReminderIfNeeded() }
+        }
+        .onChange(of: appState.pendingQuickAction) { _, action in
+            guard action == .logDose else { return }
+            appState.pendingQuickAction = nil
+            showRitual = true
+        }
+        .onChange(of: appState.pendingSmartNotificationRoute) { _, route in
+            guard let route else { return }
+            switch route.action {
+            case .closeProtein:
+                appState.pendingSmartNotificationRoute = nil
+                showProteinRescue = true
+            case .reviewMeal:
+                appState.pendingSmartNotificationRoute = nil
+                repeatedMealRoute = route
+            case .viewPreparation:
+                // The preparation card is already in Today's ranked Pulse slot.
+                appState.pendingSmartNotificationRoute = nil
+            case .addWater, .repeatMeal:
+                break
             }
-            // First-day checklist and tips: their observers live on a hidden view of their own
-            // (firstDayObserver) to keep this modifier chain short enough to type-check.
-            .background { firstDayObserver }
-            .onChange(of: vm.justHitProteinGoal) { _, justHit in
-                guard vm.isToday, justHit else { return }
-                // A fresh view model (new launch, or swiping back to today from another day)
-                // recomputes this edge from scratch, so it can fire again for a floor that was
-                // already cleared — and already celebrated — earlier today. The persisted record
-                // is the only thing that remembers across that reset (iOS used to keep the latch
-                // in memory only, so it could replay).
-                if let accountId = currentAccountId,
-                   FloorClearedCelebrationStore.hasCelebrated(userId: accountId, on: vm.selectedDate) {
-                    return
-                }
-                // Don't fire here — logging food is what pushes protein over the line, and the
-                // reload lands while the logging sheet still covers the ring. Latch it and let
-                // the handler below play it once Today is actually on screen.
-                proteinCelebrationPending = true
-                playProteinCelebrationIfVisible()
-            }
-            .onChange(of: isFrontmost) { _, frontmost in
-                if frontmost { Task { await strongWeek.load() } }
-                playProteinCelebrationIfVisible()
-            }
-            .onChange(of: showRecoveryLogger) { _, _ in
-                playProteinCelebrationIfVisible()
-            }
-            .onChange(of: appState.pendingStrongWeekReminder) { _, pending in
-                if pending { openWeeklyReminderIfNeeded() }
-            }
-            .onChange(of: appState.pendingQuickAction) { _, action in
-                guard action == .logDose else { return }
-                appState.pendingQuickAction = nil
-                showRitual = true
-            }
-            .onChange(of: appState.pendingSmartNotificationRoute) { _, route in
-                guard let route else { return }
-                switch route.action {
-                case .closeProtein:
-                    appState.pendingSmartNotificationRoute = nil
-                    showProteinRescue = true
-                case .reviewMeal:
-                    appState.pendingSmartNotificationRoute = nil
-                    repeatedMealRoute = route
-                case .viewPreparation:
-                    // The preparation card is already in Today's ranked Pulse slot.
-                    appState.pendingSmartNotificationRoute = nil
-                case .addWater, .repeatMeal:
-                    break
-                }
-            }
-            .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
-                // `lastSyncAt` advances only after a full pull (foreground/reconnect), not
-                // after pushing a local mutation. Water already updates optimistically;
-                // reloading here after every quick-add replaced the whole page with a
-                // spinner and made each selection look like a full refresh.
-                Task { await vm.loadData() }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active {
-                    // The day may have rolled over while the app was suspended.
-                    // Snapping first mutates vm.selectedDate, which re-fires the
-                    // .task(id:) above and reloads the correct day's data.
-                    vm.snapToTodayIfDayChanged()
-                    Task { await vm.loadHealthData() }
-                }
-            }
-            // Fires at midnight (and on timezone changes) while the app is foregrounded.
-            .onReceive(NotificationCenter.default.publisher(
-                for: UIApplication.significantTimeChangeNotification
-            )) { _ in
+        }
+        .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
+            // `lastSyncAt` advances only after a full pull (foreground/reconnect), not
+            // after pushing a local mutation. Water already updates optimistically;
+            // reloading here after every quick-add replaced the whole page with a
+            // spinner and made each selection look like a full refresh.
+            Task { await vm.loadData() }
+        }
+    }
+
+    private var todayNotifications: some View {
+        todayInteractions
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                // The day may have rolled over while the app was suspended.
+                // Snapping first mutates vm.selectedDate, which re-fires the
+                // .task(id:) above and reloads the correct day's data.
                 vm.snapToTodayIfDayChanged()
+                Task { await vm.loadHealthData() }
             }
-            .onReceive(NotificationCenter.default.publisher(for: .foodAccessChanged)) { _ in
-                strongWeek.foodPreferencesChanged()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .strongWeekChanged)) { _ in
-                Task { await vm.loadData() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
-                strongWeek.changedSinceGeneration = true
-                Task { await vm.loadData() }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .smartCoachingSettingsChanged)) { _ in
-                Task { await vm.refreshSmartNotifications() }
-            }
-            // Pulse toggled off cancels any pending smart notification immediately (see
-            // NotificationManager); toggled back on, re-evaluate now rather than waiting for
-            // the next natural trigger (a workout finishing, etc.).
-            .onReceive(NotificationCenter.default.publisher(for: .pulseProfileChanged)) { _ in
-                Task { await vm.refreshSmartNotifications() }
-            }
+        }
+        // Fires at midnight (and on timezone changes) while the app is foregrounded.
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIApplication.significantTimeChangeNotification
+        )) { _ in
+            vm.snapToTodayIfDayChanged()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .foodAccessChanged)) { _ in
+            strongWeek.foodPreferencesChanged()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .strongWeekChanged)) { _ in
+            Task { await vm.loadData() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
+            strongWeek.changedSinceGeneration = true
+            Task { await vm.loadData() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .smartCoachingSettingsChanged)) { _ in
+            Task { await vm.refreshSmartNotifications() }
+        }
+        // Pulse toggled off cancels any pending smart notification immediately (see
+        // NotificationManager); toggled back on, re-evaluate now rather than waiting for
+        // the next natural trigger (a workout finishing, etc.).
+        .onReceive(NotificationCenter.default.publisher(for: .pulseProfileChanged)) { _ in
+            Task { await vm.refreshSmartNotifications() }
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            todayNotifications
         }
     }
 

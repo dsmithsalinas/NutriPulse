@@ -45,216 +45,236 @@ struct ProfileView: View {
     }
     #endif
 
+    private var profileCanvas: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                header
+                    .popIn(order: 0)
+
+                dailyTargetsTile
+                    .popIn(order: 1)
+
+                HStack(spacing: Theme.Spacing.tileGap) {
+                    glp1QuickTile
+                    healthQuickTile
+                }
+                .popIn(order: 2)
+
+                pulseTile
+                    .popIn(order: 3)
+
+                notificationsTile
+                    .popIn(order: 3)
+
+                glp1DetailsTile
+                    .popIn(order: 4)
+
+                healthKitDetailsTile
+                    .popIn(order: 4)
+
+                bodyStatsTile
+                    .popIn(order: 5)
+
+                measurementsTile
+                    .popIn(order: 5)
+
+                supportTile
+                    .popIn(order: 6)
+
+                #if DEBUG
+                debugTile
+                #endif
+
+                accountTile
+            }
+            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.top, Theme.Spacing.sm)
+            .padding(.bottom, Theme.Spacing.xl)
+        }
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        // No navigation bar, so cover the status bar or scrolled tiles slide under the clock
+        // (same as Pulse). A ShapeStyle background extends into the safe area.
+        .overlay(alignment: .top) {
+            Color.clear
+                .frame(height: 0)
+                .background(Theme.Colors.ground)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var profileLifecycle: some View {
+        profileCanvas
+        .task {
+            #if DEBUG
+            if skipInitialLoad { return }
+            #endif
+            await vm.loadData(profile: appState.profile)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
+            Task { await vm.loadData(profile: appState.profile) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                await vm.refreshRemindersState()
+                await vm.refreshSmartCoachingState()
+                await vm.refreshWeeklyReminderState()
+                await NotificationManager.shared.reconcileSmartNotificationHistory()
+            }
+        }
+    }
+
+    private var profileEditors: some View {
+        profileLifecycle
+        .sheet(isPresented: $vm.showEditProfile, onDismiss: {
+            Task { await appState.fetchProfile() }
+        }) {
+            EditProfileSheet(vm: vm)
+        }
+        .sheet(isPresented: $vm.showEditGoals) {
+            EditGoalsSheet(vm: vm)
+        }
+        .confirmationDialog(
+            "What's the aim right now?",
+            isPresented: $vm.showRecalcAimDialog,
+            titleVisibility: .visible
+        ) {
+            ForEach(WeightGoal.allCases) { aim in
+                Button(aim.displayName) { vm.prepareRecalc(for: aim) }
+            }
+        }
+        .alert(
+            "Use these targets?",
+            isPresented: Binding(
+                get: { vm.pendingTargetRecalc != nil },
+                set: { if !$0 { vm.pendingTargetRecalc = nil } }
+            ),
+            presenting: vm.pendingTargetRecalc
+        ) { pending in
+            Button("Keep current", role: .cancel) { vm.pendingTargetRecalc = nil }
+            Button("Update targets") {
+                Task { await vm.applyRecalc(pending) }
+            }
+        } message: { pending in
+            Text("\(pending.weightGoal.displayName): \(Int(pending.goals.calories)) kcal, \(Int(pending.goals.proteinG))g protein a day (currently \(Int(pending.currentCalories)) kcal).")
+        }
+        .sheet(isPresented: $vm.showLogInjection) {
+            LogInjectionSheet(vm: vm)
+        }
+        .sheet(isPresented: $showGLP1Tracker) {
+            GLP1TrackerView()
+        }
+        .sheet(isPresented: $showSmartNotificationExplainer) {
+            SmartNotificationExplainerSheet {
+                await vm.setSmartCoaching(true)
+            }
+        }
+    }
+
+    private var profileNotices: some View {
+        profileEditors
+        .alert("Notifications are off", isPresented: $vm.showWeeklyReminderDeniedAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            }
+            Button("Not now", role: .cancel) { }
+        } message: {
+            Text("Turn on notifications for Footing in Settings to receive Your strong week on Mondays at 8 AM.")
+        }
+        .alert("Notifications are off", isPresented: $vm.showReminderDeniedAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Not now", role: .cancel) { }
+        } message: {
+            Text("Turn on notifications for Footing in Settings to get shot-day reminders.")
+        }
+        .alert("Notifications are off", isPresented: $vm.showSmartNotificationDeniedAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Not now", role: .cancel) { }
+        } message: {
+            Text("Turn on notifications for Footing in Settings to receive timely coaching opportunities.")
+        }
+        .sheet(isPresented: $vm.showSendFeedback) {
+            SendFeedbackSheet(vm: vm)
+        }
+        .alert("Manage Apple Health access", isPresented: $showHealthPermissionsHelp) {
+            Button("Open Health") { openHealthApp() }
+            Button("Not now", role: .cancel) { }
+        } message: {
+            Text("Your permission choices are already saved on this iPhone. To change them, open Health → Summary → your profile picture → Apps and Services → Footing, then enable the categories you want to share.")
+        }
+        .alert("Error", isPresented: Binding(
+            get: { vm.errorMessage != nil },
+            set: { if !$0 { vm.errorMessage = nil } }
+        )) {
+            Button("OK") { vm.errorMessage = nil }
+        } message: {
+            Text(vm.errorMessage ?? "")
+        }
+    }
+
+    private var profileConfirmations: some View {
+        profileNotices
+        .confirmationDialog(
+            "Clear all Pulse chat history?",
+            isPresented: $showClearHistoryConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Clear History", role: .destructive) {
+                Task {
+                    try? await CoachRepository().clearHistory()
+                    chatHistoryVersion += 1
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This permanently deletes all messages with Pulse.")
+        }
+        .confirmationDialog(
+            "Pause or stop GLP-1 tracking?",
+            isPresented: $showGLP1PauseOptions,
+            titleVisibility: .visible
+        ) {
+            Button("Pause for now") { setGLP1Tracking(.paused) }
+            Button("I've stopped taking it") { setGLP1Tracking(.stopped) }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Footing will hide your shot card, shot cycle, check-ins and shot reminders, and Pulse won't bring up your shot. Your dose history stays, and you can resume any time.")
+        }
+        .confirmationDialog(
+            "Resume GLP-1 tracking?",
+            isPresented: $showGLP1ResumeConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Resume tracking") { setGLP1Tracking(.active) }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Your shot card, shot cycle and check-ins come back, and Pulse can use your dose schedule again. Log your next shot when you take it.")
+        }
+        .confirmationDialog(
+            "Delete your account?",
+            isPresented: $showDeleteAccountConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Account", role: .destructive) {
+                Task { await vm.deleteAccount() }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This permanently deletes your account and all your data — logs, goals, weight history, and chat history. This cannot be undone.")
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
-                    header
-                        .popIn(order: 0)
-
-                    dailyTargetsTile
-                        .popIn(order: 1)
-
-                    HStack(spacing: Theme.Spacing.tileGap) {
-                        glp1QuickTile
-                        healthQuickTile
-                    }
-                    .popIn(order: 2)
-
-                    pulseTile
-                        .popIn(order: 3)
-
-                    notificationsTile
-                        .popIn(order: 3)
-
-                    glp1DetailsTile
-                        .popIn(order: 4)
-
-                    healthKitDetailsTile
-                        .popIn(order: 4)
-
-                    bodyStatsTile
-                        .popIn(order: 5)
-
-                    measurementsTile
-                        .popIn(order: 5)
-
-                    supportTile
-                        .popIn(order: 6)
-
-                    #if DEBUG
-                    debugTile
-                    #endif
-
-                    accountTile
-                }
-                .padding(.horizontal, Theme.Spacing.page)
-                .padding(.top, Theme.Spacing.sm)
-                .padding(.bottom, Theme.Spacing.xl)
-            }
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            // No navigation bar, so cover the status bar or scrolled tiles slide under the clock
-            // (same as Pulse). A ShapeStyle background extends into the safe area.
-            .overlay(alignment: .top) {
-                Color.clear
-                    .frame(height: 0)
-                    .background(Theme.Colors.ground)
-            }
-            .toolbar(.hidden, for: .navigationBar)
-            .task {
-                #if DEBUG
-                if skipInitialLoad { return }
-                #endif
-                await vm.loadData(profile: appState.profile)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
-                Task { await vm.loadData(profile: appState.profile) }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                guard phase == .active else { return }
-                Task {
-                    await vm.refreshRemindersState()
-                    await vm.refreshSmartCoachingState()
-                    await vm.refreshWeeklyReminderState()
-                    await NotificationManager.shared.reconcileSmartNotificationHistory()
-                }
-            }
-            .sheet(isPresented: $vm.showEditProfile, onDismiss: {
-                Task { await appState.fetchProfile() }
-            }) {
-                EditProfileSheet(vm: vm)
-            }
-            .sheet(isPresented: $vm.showEditGoals) {
-                EditGoalsSheet(vm: vm)
-            }
-            .confirmationDialog(
-                "What's the aim right now?",
-                isPresented: $vm.showRecalcAimDialog,
-                titleVisibility: .visible
-            ) {
-                ForEach(WeightGoal.allCases) { aim in
-                    Button(aim.displayName) { vm.prepareRecalc(for: aim) }
-                }
-            }
-            .alert(
-                "Use these targets?",
-                isPresented: Binding(
-                    get: { vm.pendingTargetRecalc != nil },
-                    set: { if !$0 { vm.pendingTargetRecalc = nil } }
-                ),
-                presenting: vm.pendingTargetRecalc
-            ) { pending in
-                Button("Keep current", role: .cancel) { vm.pendingTargetRecalc = nil }
-                Button("Update targets") {
-                    Task { await vm.applyRecalc(pending) }
-                }
-            } message: { pending in
-                Text("\(pending.weightGoal.displayName): \(Int(pending.goals.calories)) kcal, \(Int(pending.goals.proteinG))g protein a day (currently \(Int(pending.currentCalories)) kcal).")
-            }
-            .sheet(isPresented: $vm.showLogInjection) {
-                LogInjectionSheet(vm: vm)
-            }
-            .sheet(isPresented: $showGLP1Tracker) {
-                GLP1TrackerView()
-            }
-            .sheet(isPresented: $showSmartNotificationExplainer) {
-                SmartNotificationExplainerSheet {
-                    await vm.setSmartCoaching(true)
-                }
-            }
-            .alert("Notifications are off", isPresented: $vm.showWeeklyReminderDeniedAlert) {
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
-                }
-                Button("Not now", role: .cancel) { }
-            } message: {
-                Text("Turn on notifications for Footing in Settings to receive Your strong week on Mondays at 8 AM.")
-            }
-            .alert("Notifications are off", isPresented: $vm.showReminderDeniedAlert) {
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
-                Button("Not now", role: .cancel) { }
-            } message: {
-                Text("Turn on notifications for Footing in Settings to get shot-day reminders.")
-            }
-            .alert("Notifications are off", isPresented: $vm.showSmartNotificationDeniedAlert) {
-                Button("Open Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
-                Button("Not now", role: .cancel) { }
-            } message: {
-                Text("Turn on notifications for Footing in Settings to receive timely coaching opportunities.")
-            }
-            .sheet(isPresented: $vm.showSendFeedback) {
-                SendFeedbackSheet(vm: vm)
-            }
-            .alert("Manage Apple Health access", isPresented: $showHealthPermissionsHelp) {
-                Button("Open Health") { openHealthApp() }
-                Button("Not now", role: .cancel) { }
-            } message: {
-                Text("Your permission choices are already saved on this iPhone. To change them, open Health → Summary → your profile picture → Apps and Services → Footing, then enable the categories you want to share.")
-            }
-            .alert("Error", isPresented: Binding(
-                get: { vm.errorMessage != nil },
-                set: { if !$0 { vm.errorMessage = nil } }
-            )) {
-                Button("OK") { vm.errorMessage = nil }
-            } message: {
-                Text(vm.errorMessage ?? "")
-            }
-            .confirmationDialog(
-                "Clear all Pulse chat history?",
-                isPresented: $showClearHistoryConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Clear History", role: .destructive) {
-                    Task {
-                        try? await CoachRepository().clearHistory()
-                        chatHistoryVersion += 1
-                    }
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This permanently deletes all messages with Pulse.")
-            }
-            .confirmationDialog(
-                "Pause or stop GLP-1 tracking?",
-                isPresented: $showGLP1PauseOptions,
-                titleVisibility: .visible
-            ) {
-                Button("Pause for now") { setGLP1Tracking(.paused) }
-                Button("I've stopped taking it") { setGLP1Tracking(.stopped) }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("Footing will hide your shot card, shot cycle, check-ins and shot reminders, and Pulse won't bring up your shot. Your dose history stays, and you can resume any time.")
-            }
-            .confirmationDialog(
-                "Resume GLP-1 tracking?",
-                isPresented: $showGLP1ResumeConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Resume tracking") { setGLP1Tracking(.active) }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("Your shot card, shot cycle and check-ins come back, and Pulse can use your dose schedule again. Log your next shot when you take it.")
-            }
-            .confirmationDialog(
-                "Delete your account?",
-                isPresented: $showDeleteAccountConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Delete Account", role: .destructive) {
-                    Task { await vm.deleteAccount() }
-                }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This permanently deletes your account and all your data — logs, goals, weight history, and chat history. This cannot be undone.")
-            }
+            profileConfirmations
         }
         .tint(Theme.Colors.primary)
     }

@@ -1,0 +1,89 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '31 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: swift
+            os: macos-latest
+            build-mode: manual
+          - language: javascript-typescript
+            os: ubuntu-latest
+            build-mode: none
+          - language: python
+            os: ubuntu-latest
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Prepare unsigned Swift build
+        if: matrix.language == 'swift'
+        run: |
+          brew install xcodegen
+          # Static analysis never launches the app or needs production credentials.
+          cp Configurations/Secrets.xcconfig.template Configurations/Secrets.xcconfig
+          xcodegen generate
+          # Resolve packages before tracing; the subsequent build is still fully scanned.
+          xcodebuild -resolvePackageDependencies \
+            -project Footing.xcodeproj -scheme Footing \
+            -derivedDataPath "$RUNNER_TEMP/codeql-derived"
+      - name: Preflight Swift compiler and clean build products
+        if: matrix.language == 'swift'
+        run: |
+          xcodebuild build \
+            -project Footing.xcodeproj -scheme Footing \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/codeql-derived" \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
+          # A clean is essential: every source must compile again under CodeQL.
+          xcodebuild clean \
+            -project Footing.xcodeproj -scheme Footing \
+            -configuration Debug -sdk iphonesimulator \
+            -derivedDataPath "$RUNNER_TEMP/codeql-derived" \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - name: Build Swift for analysis
+        if: matrix.language == 'swift'
+        run: |
+          xcodebuild build \
+            -project Footing.xcodeproj \
+            -scheme Footing \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/codeql-derived" \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
+      - name: Analyze and upload results
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'
