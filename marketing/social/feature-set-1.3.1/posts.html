@@ -1,0 +1,319 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Footing 1.3.1 social set</title>
+<style>
+@font-face { font-family: "Bricolage"; src: url(fonts/BricolageGrotesque-ExtraBold.ttf); font-weight: 800; }
+@font-face { font-family: "Bricolage"; src: url(fonts/BricolageGrotesque-Bold.ttf); font-weight: 700; }
+@font-face { font-family: "Figtree"; src: url(fonts/Figtree-Regular.ttf); font-weight: 400; }
+@font-face { font-family: "Figtree"; src: url(fonts/Figtree-Medium.ttf); font-weight: 500; }
+@font-face { font-family: "Figtree"; src: url(fonts/Figtree-SemiBold.ttf); font-weight: 600; }
+@font-face { font-family: "Figtree"; src: url(fonts/Figtree-Bold.ttf); font-weight: 700; }
+:root {
+  --ground: #EEF1F6; --card: #FFFFFF; --ink: #0F172A; --muted: #475569; --faint: #55637A;
+  --hero: #4F46E5; --heroDeep: #1E1B4B;
+  --lime: #D9F99D; --limeInk: #1A2E05; --limeLabel: #365314; --limeLine: #4D7C0F;
+  --violet: #EDE9FE; --violetLabel: #5B21B6; --sky: #E0F2FE;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #fff; }
+.post { position: relative; overflow: hidden; background: var(--ground); font-family: "Figtree", sans-serif; color: var(--ink); }
+.abs { position: absolute; }
+.blob { position: absolute; border-radius: 50%; filter: blur(90px); }
+
+/* Brand lockup */
+.brand { display: flex; align-items: center; gap: 14px; font: 800 44px/1 "Bricolage"; letter-spacing: -0.03em; }
+.brand .m { width: 44px; height: 44px; }
+.m svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+/* Type */
+.eyebrow { display: inline-flex; align-items: center; gap: 12px; padding: 11px 20px 11px 16px; border-radius: 999px;
+  background: var(--card); color: var(--hero); font: 700 22px/1 "Figtree"; letter-spacing: .14em; text-transform: uppercase;
+  box-shadow: 0 6px 24px rgba(30,27,75,.08); white-space: nowrap; }
+.eyebrow i { width: 12px; height: 12px; border-radius: 50%; background: currentColor; display: block; }
+.hl { font: 800 96px/0.97 "Bricolage"; letter-spacing: -0.03em; color: var(--ink); text-wrap: balance; }
+.sub { font: 500 32px/1.35 "Figtree"; color: var(--muted); }
+.fine { font: 500 18px/1.3 "Figtree"; color: var(--faint); }
+
+/* Pulse speaking */
+.say { display: flex; align-items: flex-end; gap: 14px; }
+.say .av { width: 60px; height: 60px; border-radius: 19px; background: var(--hero); padding: 13px; flex: none;
+  box-shadow: 0 10px 24px rgba(79,70,229,.30); }
+.say .bub { background: var(--card); border-radius: 30px 30px 30px 10px; padding: 20px 26px; font: 600 30px/1.3 "Figtree";
+  color: var(--ink); box-shadow: 0 16px 44px rgba(15,23,42,.13), 0 2px 6px rgba(15,23,42,.06); }
+
+.pill { display: inline-flex; align-items: center; gap: 12px; padding: 16px 26px; border-radius: 999px; font: 700 28px/1 "Figtree"; white-space: nowrap; }
+.cta { background: var(--ink); color: #fff; box-shadow: 0 14px 30px rgba(15,23,42,.22); }
+.cta b { font-weight: 700; } .cta span { opacity: .72; font-weight: 600; }
+.chip { display: inline-block; padding: 18px 28px; border-radius: 24px; background: var(--card); font: 600 32px/1 "Figtree";
+  box-shadow: 0 14px 34px rgba(15,23,42,.12); white-space: nowrap; }
+.lifted { box-shadow: 0 40px 70px rgba(30,27,75,.24), 0 10px 22px rgba(30,27,75,.12); }
+
+/* ── iPhone ─────────────────────────────────────────────────────────── */
+.iphone { position: absolute; }
+.iphone .frame { position: absolute; inset: 0;
+  background: linear-gradient(135deg, #f1f2f4 0%, #b9bdc4 14%, #eef0f3 30%, #9ea3ab 52%, #e6e8ec 72%, #a7acb4 88%, #dfe2e6 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.75), inset 0 3px 4px rgba(255,255,255,.8), inset 0 -3px 6px rgba(0,0,0,.22),
+    0 80px 120px -30px rgba(30,27,75,.38), 0 30px 46px -14px rgba(30,27,75,.26), 0 4px 10px rgba(30,27,75,.12); }
+.iphone .bezel { position: absolute; background: #08080a; box-shadow: inset 0 0 0 1.5px #2c2e34; }
+.iphone .display { position: absolute; overflow: hidden; background: #fff; }
+.iphone .display img { display: block; width: 100%; height: 100%; }
+.iphone .island { position: absolute; left: 50%; transform: translateX(-50%); background: #000; border-radius: 999px; }
+.iphone .glare { position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(118deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.06) 26%, rgba(255,255,255,0) 40%); }
+.iphone .btn { position: absolute; border-radius: 6px;
+  background: linear-gradient(90deg, #a2a7af, #eceef1 45%, #9aa0a8); box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const SW = 1206, SH = 2622;
+function mark(color = '#4F46E5') {
+  const C = 2 * Math.PI * 43, L = C * 0.694;
+  return `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="43" fill="none" stroke="${color}" stroke-opacity=".28" stroke-width="14"/>
+  <circle cx="50" cy="50" r="43" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="${L} 400"/>
+  <circle cx="9.59" cy="64.71" r="11.9" fill="${color}"/></svg>`;
+}
+// A realistic iPhone: natural-titanium frame, black bezel, rounded display, Dynamic Island, side buttons, glare.
+function iphone(screen, { x, y, w, rot = 0, z = 1, tilt = '' }) {
+  const H = w * SH / SW, b = w * 0.034, f = w * 0.024;
+  const dR = w * 0.137, bR = dR + b, fR = bR + f;
+  const OW = w + 2 * (b + f), OH = H + 2 * (b + f);
+  const btn = (side, top, h) => `<div class="btn" style="${side}:${-f * 0.9}px; top:${top * OH}px; width:${f * 1.4}px; height:${h * OH}px"></div>`;
+  return `<div class="iphone" style="left:${x}px; top:${y}px; width:${OW}px; height:${OH}px; z-index:${z}; transform:${tilt} rotate(${rot}deg); border-radius:${fR}px">
+    ${btn('left', 0.175, 0.045)}${btn('left', 0.245, 0.085)}${btn('left', 0.345, 0.085)}${btn('right', 0.27, 0.13)}
+    <div class="frame" style="border-radius:${fR}px"></div>
+    <div class="bezel" style="inset:${f}px; border-radius:${bR}px"></div>
+    <div class="display" style="left:${f + b}px; top:${f + b}px; width:${w}px; height:${H}px; border-radius:${dR}px">
+      <img src="img/${screen}.jpg">
+      <div class="island" style="top:${w * 0.037}px; width:${w * 0.311}px; height:${w * 0.087}px"></div>
+      <div class="glare"></div>
+    </div></div>`;
+}
+const brand = (x, y, color = 'var(--ink)', mk = '#4F46E5') =>
+  `<div class="brand abs" style="left:${x}px; top:${y}px; color:${color}"><div class="m">${mark(mk)}</div>Footing</div>`;
+const eyebrow = (t, x, y, color = 'var(--hero)') => `<div class="eyebrow abs" style="left:${x}px; top:${y}px; color:${color}"><i></i>${t}</div>`;
+const hl = (lines, x, y, size = 96, color = 'var(--ink)', w = 940) =>
+  `<div class="hl abs" style="left:${x}px; top:${y}px; font-size:${size}px; color:${color}; width:${w}px">${lines.join('<br>')}</div>`;
+const sub = (t, x, y, w, size = 32, color = 'var(--muted)') => `<div class="sub abs" style="left:${x}px; top:${y}px; width:${w}px; font-size:${size}px; color:${color}">${t}</div>`;
+const say = (t, x, y, maxW = 560, size = 30, z = 10) =>
+  `<div class="say abs" style="left:${x}px; top:${y}px; z-index:${z}"><div class="av m">${mark('#fff')}</div><div class="bub" style="max-width:${maxW}px; font-size:${size}px">${t}</div></div>`;
+const cta = (x, y, style = '') => `<div class="pill cta abs" style="left:${x}px; top:${y}px; z-index:20; ${style}"><b>Join the beta</b><span>tryfooting.app</span></div>`;
+const pill = (t, x, y, bg, fg, extra = '') => `<div class="pill abs" style="left:${x}px; top:${y}px; background:${bg}; color:${fg}; z-index:12; ${extra}">${t}</div>`;
+const crop = (name, w, h, x, y, { rot = 0, r = 30, z = 8, shadow = true } = {}) =>
+  `<img class="abs ${shadow ? 'lifted' : ''}" src="img/${name}.png" style="left:${x}px; top:${y}px; width:${w}px; height:${h}px; border-radius:${r}px; transform:rotate(${rot}deg); z-index:${z}">`;
+const blobs = (list) => list.map(([c, s, x, y, o = .6]) => `<div class="blob" style="background:${c}; width:${s}px; height:${s}px; left:${x}px; top:${y}px; opacity:${o}"></div>`).join('');
+const fine = (x, y, color = 'var(--faint)') => `<div class="fine abs" style="left:${x}px; top:${y}px; color:${color}; z-index:20">Pulse is a wellness coach, not a medical professional.</div>`;
+function dayGradient() {
+  const cols = ['#EEF1F6', '#E7F3FC', '#EEF1F6', '#EEF1F6', '#F0ECFD', '#D9F99D', '#E6E8FB', '#EEF1F6'];
+  const T = 8640, stops = [];
+  cols.forEach((c, i) => { stops.push(`${c} ${((i * 1080 + (i ? 150 : 0)) / T * 100).toFixed(2)}%`, `${c} ${(((i + 1) * 1080 - (i < 7 ? 150 : 0)) / T * 100).toFixed(2)}%`); });
+  return `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+const amb = blobs([['#D9F99D', 620, -160, -120], ['#C7D2FE', 700, 620, 760], ['#E0F2FE', 520, -120, 900, .7], ['#EDE9FE', 460, 700, -100, .7]]);
+// Crop sizes (screenshot px) for scaling floating UI.
+const CS = { 'today-protein': [525, 874], 'floor-protein': [524, 874], 'first-day-card': [1086, 1052], 'chat-user': [907, 181],
+  'chat-pulse': [724, 181], 'widget-indigo': [512, 522], 'widget-lime': [512, 522], 'widget-lock': [1092, 439], 'today-calories': [525, 522] };
+const sc = (n, s) => [CS[n][0] * s, CS[n][1] * s];
+const rings = (cx, cy, z = 2, color = '#818CF8') => [1, 2, 3].map(i =>
+  `<div class="abs" style="left:${cx - 60 * i - 40}px; top:${cy - 60 * i - 40}px; width:${120 * i + 80}px; height:${120 * i + 80}px; border-radius:50%; border:4px solid ${color}; opacity:${0.55 - i * 0.14}; z-index:${z}"></div>`).join('');
+const bubbles = (seed, n, box, color = 'var(--limeLine)') => { let s = seed; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  return Array.from({ length: n }, () => { const d = 16 + r() * 40; return `<div class="abs" style="left:${box[0] + r() * box[2]}px; top:${box[1] + r() * box[3]}px; width:${d}px; height:${d}px; border-radius:50%; border:3px solid ${color}; opacity:${0.35 + r() * 0.5}"></div>`; }).join(''); };
+
+const POSTS = {
+  // 1 · Brand line
+  'p01-coached': { w: 1080, h: 1350, html: () => amb
+    + brand(72, 72)
+    + hl(['Coached,', 'not scolded.'], 72, 180, 124)
+    + sub("Protein-first tracking for life on a GLP-1, with a coach that's read your whole day.", 72, 452, 470)
+    + iphone('today', { x: 630, y: 500, w: 410, rot: 6 })
+    + say('45g to go. One protein-forward dinner covers it.', 72, 760, 470)
+    + cta(72, 1176) + fine(72, 1268) },
+
+  // 2 · Today, protein floor
+  'p02-today': { w: 1080, h: 1350, html: () => amb
+    + brand(72, 72) + eyebrow('Today', 72, 176)
+    + hl(['Your protein floor,', 'at a glance.'], 72, 240, 92)
+    + iphone('today', { x: 600, y: 470, w: 400 })
+    + (() => { const [w, h] = sc('today-protein', 0.56); return crop('today-protein', w, h, 300, 560, { rot: -7, r: 34, z: 9 }); })()
+    + say('45g to go. One protein-forward dinner covers it.', 72, 1040, 420, 28, 12)
+    + cta(72, 1236) },
+
+  // 3 · Floor cleared, on lime
+  'p03-floor-cleared': { w: 1080, h: 1350, bg: 'var(--lime)', html: () =>
+    blobs([['#ECFCCB', 640, -200, -160, .9], ['#BEF264', 520, 680, 900, .55]])
+    + bubbles(11, 12, [640, 330, 380, 260]) + bubbles(5, 6, [700, 60, 300, 120])
+    + brand(72, 72, 'var(--limeInk)', '#1A2E05')
+    + `<div class="abs" style="left:64px; top:168px; font:800 270px/1 Bricolage; letter-spacing:-0.045em; color:var(--limeInk); z-index:5">136<span style="font-size:110px; letter-spacing:0">g</span></div>`
+    + pill('Floor cleared', 600, 230, 'var(--limeInk)', 'var(--lime)', 'transform:rotate(6deg); font-size:34px; padding:18px 30px')
+    + hl(['Clear your floor,', 'and Today turns lime.'], 72, 480, 68, 'var(--limeInk)', 900)
+    + iphone('floor-cleared', { x: 600, y: 650, w: 390, rot: -3 })
+    + say("You're there, with dinner still ahead.", 72, 760, 640, 28)
+    + cta(72, 1236, 'background:var(--limeInk); color:var(--lime)') },
+
+  // 4 · Talk to Log
+  'p04-talk-to-log': { w: 1080, h: 1350, html: () => amb
+    + brand(72, 72) + eyebrow('Talk to Log', 72, 176)
+    + hl(["Say it like you'd", 'tell a friend.'], 72, 240, 92)
+    + iphone('log-talk', { x: 590, y: 470, w: 410 })
+    + rings(590 + 410 * 0.058 + 603 / 1206 * 410, 470 + 410 * 0.058 + 1105 / 1206 * 410, 3)
+    + `<div class="chip abs" style="left:72px; top:520px; transform:rotate(-3deg); z-index:9">2 eggs</div>`
+    + `<div class="chip abs" style="left:110px; top:620px; transform:rotate(2deg); z-index:9">toast with butter</div>`
+    + `<div class="chip abs" style="left:84px; top:720px; transform:rotate(-1.5deg); z-index:9">black coffee</div>`
+    + pill('✓ 3 foods logged', 72, 840, 'var(--lime)', 'var(--limeInk)')
+    + say('About 16g of protein toward your floor.', 72, 960, 430, 28)
+    + cta(72, 1236) },
+
+  // 5 · Pulse remembers
+  'p05-pulse-remembers': { w: 1080, h: 1350, html: () => amb
+    + brand(72, 72) + eyebrow('Pulse', 72, 176)
+    + hl(['Tell it once.'], 72, 240, 112)
+    + sub('Pulse steers every suggestion after that.', 72, 370, 470)
+    + iphone('pulse-convo', { x: 610, y: 450, w: 400, rot: 4 })
+    + (() => { const [w, h] = sc('chat-user', 0.56); return crop('chat-user', w, h, 150, 560, { r: 46, z: 9 }).replace('border-radius:46px', 'border-radius:48px 48px 14px 48px'); })()
+    + (() => { const [w, h] = sc('chat-pulse', 0.62); return crop('chat-pulse', w, h, 60, 690, { r: 0, z: 9, shadow: false }); })()
+    + pill('✓ Saved to what Pulse knows', 72, 840, 'var(--lime)', 'var(--limeInk)', 'font-size:26px')
+    + cta(72, 1176) + fine(72, 1268) },
+
+  // 6 · Patterns
+  'p06-patterns': { w: 1080, h: 1350, html: () => amb
+    + brand(72, 72) + eyebrow('Progress', 72, 176)
+    + hl(['See the pattern', 'behind your week.'], 72, 240, 92)
+    + iphone('analytics', { x: 600, y: 470, w: 400, rot: -3 })
+    + say('Your protein dips on day 2 of your shot cycle. Plan that day first.', 72, 520, 440, 30)
+    + pill('Experiments now show results', 72, 800, 'var(--violet)', 'var(--violetLabel)', 'font-size:26px')
+    + cta(72, 1236) },
+
+  // 7 · Widgets
+  'p07-widgets': { w: 1080, h: 1350, html: () => amb
+    + brand(72, 72) + eyebrow('Widgets', 72, 176)
+    + hl(['Your floor, on your', 'Home Screen.'], 72, 240, 88)
+    + iphone('widgets', { x: 640, y: 470, w: 380 })
+    + (() => { const [w, h] = sc('widget-indigo', 0.56); return crop('widget-indigo', w, h, 72, 520, { rot: -6, r: 34, z: 9 }); })()
+    + (() => { const [w, h] = sc('widget-lime', 0.56); return crop('widget-lime', w, h, 290, 640, { rot: 5, r: 34, z: 10 }); })()
+    + sub('It turns lime the moment you clear it.', 72, 1010, 560, 32)
+    + cta(72, 1236) },
+
+  // 8 · Story: Shot day, on lime
+  's01-shot-day': { w: 1080, h: 1920, bg: 'var(--lime)', html: () =>
+    blobs([['#ECFCCB', 700, -200, -100, .9], ['#BEF264', 600, 600, 1300, .5]])
+    + brand(72, 260, 'var(--limeInk)', '#1A2E05')
+    + hl(['Shot day,', 'handled.'], 72, 360, 136, 'var(--limeInk)')
+    + say("Hold to log. I'll plan the week around it.", 72, 670, 720, 32, 12)
+    + cta(72, 800, 'background:var(--limeInk); color:var(--lime); font-size:32px; padding:20px 32px')
+    + iphone('shot-day', { x: 290, y: 940, w: 500, rot: 3 }) },
+
+  // 9 · Story: Your first day
+  's02-first-day': { w: 1080, h: 1920, html: () => amb + blobs([['#D9F99D', 600, 600, 1300, .5]])
+    + brand(72, 260) + eyebrow('New · Your first day', 72, 340)
+    + hl(['New here?', 'Start with four', 'small wins.'], 72, 400, 100)
+    + iphone('first-day', { x: 560, y: 760, w: 470, rot: 4 })
+    + (() => { const [w, h] = sc('first-day-card', 0.52); return crop('first-day-card', w, h, 60, 740, { rot: -3, r: 36, z: 9 }); })()
+    + say('Each one ticks off when you actually do it.', 72, 1320, 470, 30, 12)
+    + cta(72, 1460, 'font-size:32px; padding:20px 32px') },
+
+  // 10 · Link ad, 1.91:1
+  'l01-link-ad': { w: 1200, h: 628, html: () =>
+    blobs([['#D9F99D', 520, -160, -180], ['#C7D2FE', 560, 760, 300], ['#EDE9FE', 400, 520, -200, .7]])
+    + brand(56, 48)
+    + hl(['Coached,', 'not scolded.'], 56, 130, 92, 'var(--ink)', 600)
+    + sub('Protein-first tracking for life on a GLP-1.', 56, 340, 520, 28)
+    + cta(56, 470)
+    + iphone('pulse-start', { x: 930, y: 120, w: 240, rot: 8, z: 1 })
+    + iphone('today', { x: 700, y: 80, w: 250, rot: -5, z: 2 }) },
+
+  // 11 · Carousel: a day with Pulse. One 8-slide panorama, sliced at 1080 px, so the time rail
+  // and the light of the day run unbroken from slide to slide.
+  'c01-day-with-pulse': { w: 8640, h: 1350, slides: 8, bg: dayGradient(), html: () => {
+    const S = (i, inner) => `<div class="abs" style="left:${i * 1080}px; top:0; width:1080px; height:1350px">${inner}</div>`;
+    const time = (t) => `<div class="pill abs" style="left:72px; top:118px; background:var(--ink); color:#fff; font-size:28px; padding:14px 24px; z-index:6">${t}</div>`;
+    const rail = `<div class="abs" style="left:540px; top:149px; width:${7 * 1080}px; height:4px; border-radius:2px; background:rgba(15,23,42,.14)"></div>`
+      + [0, 1, 2, 3, 4, 5, 6, 7].map(i => `<div class="abs" style="left:${i * 1080 + (i === 0 || i === 7 ? 540 : 72) - 9}px; top:142px; width:18px; height:18px; border-radius:50%; background:${i === 5 ? '#4D7C0F' : 'var(--hero)'}"></div>`).join('')
+      + [1, 2, 3, 4, 5, 6].map(i => [0.35, 0.55, 0.75].map(f => `<div class="abs" style="left:${i * 1080 + 72 + f * 1080 - 4}px; top:147px; width:8px; height:8px; border-radius:50%; background:rgba(15,23,42,.22)"></div>`).join('')).join('');
+    const tag = (t, x, y) => pill(t, x, y, 'var(--lime)', 'var(--limeInk)');
+    const [phW, phH] = [400, 0];
+    return rail
+    + blobs([['#D9F99D', 620, -200, -160, .55], ['#C7D2FE', 640, 1500, 900, .45], ['#E0F2FE', 600, 2300, -200, .6],
+             ['#EDE9FE', 640, 4400, 800, .6], ['#ECFCCB', 760, 5500, -200, .9], ['#C7D2FE', 640, 6700, 700, .5], ['#D9F99D', 560, 7900, -160, .5]])
+
+    // Cover
+    + S(0, brand(72, 72)
+      + `<div class="abs m" style="left:72px; top:250px; width:132px; height:132px">${mark('#4F46E5')}</div>`
+      + hl(['A day', 'with Pulse.'], 72, 420, 128)
+      + sub("Shot cycle day 3, a 130g floor, and a coach that's paying attention.", 72, 700, 540)
+      + iphone('pulse-start', { x: 600, y: 720, w: 360, rot: 6 })
+      + `<div class="pill abs" style="left:72px; top:1196px; background:var(--card); color:var(--ink); box-shadow:0 12px 28px rgba(15,23,42,.10)">Swipe through one Thursday <span style="color:var(--hero)">→</span></div>`)
+
+    // 7:40 AM · Talk to Log
+    + S(1, time('7:40 AM')
+      + hl(['Breakfast,', 'said out loud.'], 72, 220, 92)
+      + iphone('log-talk-breakfast', { x: 600, y: 450, w: 400 })
+      + rings(600 + 400 * 0.058 + 603 / 1206 * 400, 450 + 400 * 0.058 + 1105 / 1206 * 400, 3)
+      + `<div class="chip abs" style="left:72px; top:520px; transform:rotate(-2deg); z-index:9">"Greek yogurt with berries"</div>`
+      + tag('✓ 30g logged', 72, 640)
+      + say('30g before 8. Good start.', 72, 770, 440))
+
+    // 9:00 AM · Day 3 check-in
+    + S(2, time('9:00 AM')
+      + hl(['A quick', 'day 3 check-in.'], 72, 220, 92)
+      + iphone('checkin', { x: 610, y: 450, w: 400, rot: 3 })
+      + (() => { const w = 1086 * 0.5, h = 332 * 0.5; return crop('checkin-appetite', w, h, 60, 520, { rot: -3, r: 30, z: 9 }); })()
+      + say("Appetite's a 3 today. I'll keep ideas small and dense.", 72, 740, 450)
+      + `<div class="fine abs" style="left:72px; top:950px; width:470px; font-size:22px">The check-in tracks how you feel. It never changes or recommends your dose.</div>`)
+
+    // 3:30 PM · Today
+    + S(3, time('3:30 PM')
+      + hl(['85g by', 'mid-afternoon.'], 72, 220, 92)
+      + iphone('today', { x: 600, y: 450, w: 400 })
+      + say('45g to go. One protein-forward dinner covers it.', 72, 460, 470)
+      + (() => { const [w, h] = sc('today-protein', 0.52); return crop('today-protein', w, h, 300, 640, { rot: -7, r: 32, z: 9 }); })())
+
+    // 6:10 PM · Ask Pulse
+    + S(4, time('6:10 PM')
+      + hl(['Not hungry?', 'Ask.'], 72, 220, 92)
+      + iphone('pulse-convo-up', { x: 610, y: 450, w: 400, rot: 3 })
+      + (() => { const w = 975 * 0.48, h = 145 * 0.48; return crop('chat-hungry', w, h, 100, 470, { r: 34, z: 9 }); })()
+      + (() => { const w = 952 * 0.5, h = 310 * 0.5; return crop('chat-small-dense', w, h, 56, 570, { r: 0, z: 9, shadow: false }); })()
+      + tag('✓ Protein shake added', 72, 780))
+
+    // 8:15 PM · Floor cleared (the lime slide)
+    + S(5, time('8:15 PM')
+      + bubbles(11, 12, [640, 330, 380, 230]) + bubbles(5, 5, [720, 70, 300, 90])
+      + `<div class="abs" style="left:64px; top:205px; font:800 250px/1 Bricolage; letter-spacing:-0.045em; color:var(--limeInk); z-index:5">136<span style="font-size:100px; letter-spacing:0">g</span></div>`
+      + pill('Floor cleared', 600, 250, 'var(--limeInk)', 'var(--lime)', 'transform:rotate(6deg); font-size:34px; padding:18px 30px')
+      + hl(['Today turns lime.'], 72, 480, 72, 'var(--limeInk)', 900)
+      + iphone('floor-cleared', { x: 600, y: 650, w: 390, rot: -3 })
+      + say("You're there.", 72, 700, 400, 34))
+
+    // 9:30 PM · Streak
+    + S(6, time('9:30 PM')
+      + hl(['Seven days', 'in a row.'], 72, 220, 92)
+      + iphone('goals-streak', { x: 610, y: 450, w: 400 })
+      + (() => { const w = 1086 * 0.45, h = 905 * 0.45; return crop('goal-streak-card', w, h, 60, 470, { rot: -3, r: 34, z: 9 }); })()
+      + say('Seven in a row. See you at breakfast.', 72, 950, 460))
+
+    // CTA
+    + S(7, brand(72, 72)
+      + `<div class="abs m" style="left:440px; top:250px; width:200px; height:200px">${mark('#4F46E5')}</div>`
+      + `<div class="hl abs" style="left:0; top:520px; width:1080px; text-align:center; font-size:120px">Coached,<br>not scolded.</div>`
+      + `<div class="sub abs" style="left:190px; top:800px; width:700px; text-align:center">A protein-first tracker for life on a GLP-1, with a coach that's read your whole day.</div>`
+      + cta(330, 990, 'font-size:32px; padding:20px 32px')
+      + `<div class="fine abs" style="left:0; top:1262px; width:1080px; text-align:center">Pulse is a wellness coach, not a medical professional. Screens show sample data.</div>`);
+  } },
+};
+
+const id = new URLSearchParams(location.search).get('p');
+const P = POSTS[id];
+const root = document.getElementById('root');
+root.innerHTML = `<div class="post" style="width:${P.w}px; height:${P.h}px; ${P.bg ? `background:${P.bg}` : ''}">${P.html()}</div>`;
+window.POST_IDS = Object.keys(POSTS);
+window.POST_SIZE = P.slides ? [P.w / P.slides, P.h] : [P.w, P.h]; window.POST_SLIDES = P.slides || 0;
+window.SLIDE = i => { document.querySelector('.post').style.transform = `translateX(${-i * P.w / P.slides}px)`; };
+Promise.all([...document.images].map(i => i.decode().catch(() => {})))
+  .then(() => Promise.all(['800 96px Bricolage', '700 30px Figtree', '600 30px Figtree', '500 30px Figtree'].map(f => document.fonts.load(f))))
+  .then(() => { window.READY = true; });
+</script>
+</body>
+</html>

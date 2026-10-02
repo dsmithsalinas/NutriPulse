@@ -341,7 +341,7 @@ async function build() {
     tw(b, st, 0.01, { o: 1 }, 'lin'); tw(b, st, 0.9, { y: -rise, s: 1, x: (rnd() - 0.5) * 120 }, 'out');
     tw(b, st + 0.85, 0.22, { s: 1.7, o: 0 }, 'out');
   }
-  const s3 = say("That's your muscle protected today.", 600, 700, 16.7, { size: 40 }); s3.style.zIndex = 64;
+  const s3 = say("You're there, with dinner still ahead.", 600, 700, 16.7, { size: 40 }); s3.style.zIndex = 64;
   showScreen('floor-cleared', 16.0);
   // Lime clears off the top, the phone underneath has turned lime too.
   tw(flood, 18.55, 0.95, { y: -1500 }, 'inOut');
@@ -421,7 +421,7 @@ async function build() {
       { transform: `translate(${Math.cos(a) * dist * 0.8}px, ${Math.sin(a) * dist * 0.8}px) scale(1.2) rotate(${rnd() * 180}deg)`, opacity: 1, offset: 0.35 },
       { transform: `translate(${Math.cos(a) * dist}px, ${Math.sin(a) * dist + 140}px) scale(.5) rotate(${rnd() * 360}deg)`, opacity: 0 }], 'out');
   }
-  const dose = mk('div', 'pill abs', '✓ Zepbound · 5 mg logged'); dose.style.background = 'var(--limeInk)'; dose.style.color = 'var(--lime)';
+  const dose = mk('div', 'pill abs', '✓ GLP-1 · 5 mg logged'); dose.style.background = 'var(--limeInk)'; dose.style.color = 'var(--lime)';
   place(dose, 1020, 600); init(dose, { s: 0 }); tw(dose, 30.6, 0.8, { s: 1 }, 'pop');
   const s5 = say("I'll plan the week around it.", 1020, 720, 30.95, { size: 34 });
   tw(phoneWrap, 31.75, 0.6, { y: 1500, r: 12, s: 1.2 }, 'in');
@@ -538,7 +538,7 @@ async function build() {
   init(wm3, { o: 0, y: 60 }); tw(wm3, 57.3, 0.8, { o: 1, y: 0 }, 'out');
   const v3 = mk('div', 'pill abs', '1.3.1'); v3.style.background = 'var(--lime)'; v3.style.color = 'var(--limeInk)';
   v3.style.fontSize = '40px'; place(v3, 1250, 640); init(v3, { s: 0, r: -20 }); v3.style.zIndex = 71; tw(v3, 57.7, 0.85, { s: 1, r: -6 }, 'pop');
-  const store = mk('div', 'body abs', 'Update on the App Store'); store.style.color = 'var(--ink)'; store.style.fontWeight = '700';
+  const store = mk('div', 'body abs', 'Join the beta at tryfooting.app'); store.style.color = 'var(--ink)'; store.style.fontWeight = '700';
   store.style.textAlign = 'center'; store.style.width = '700px'; place(store, 610, 820); init(store, { o: 0, y: 20 }); tw(store, 58.1, 0.7, { o: 1, y: 0 }, 'out');
   const fine = mk('div', 'fine abs', 'Pulse is a wellness coach, not a medical professional.'); fine.style.width = '900px'; fine.style.textAlign = 'center';
   place(fine, 510, 990); init(fine, { o: 0 }); tw(fine, 58.4, 0.8, { o: 1 }, 'out');
