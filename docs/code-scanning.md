@@ -8,7 +8,7 @@ Read-only GitHub checks confirmed the repository is public, its default branch i
 
 Public repositories are eligible for [GitHub code scanning](https://docs.github.com/en/code-security/reference/code-scanning/codeql/build-options-for-compiled-languages). This repository must not be classified as an unsupported private-repository capability.
 
-## Proposed fix
+## Fix
 
 `.github/workflows/codeql.yml` runs on main pushes, pull requests, manual dispatch, and weekly. Separate jobs analyze Swift, JavaScript/TypeScript, and Python. SQL, HTML/CSS, and shell are not additional CodeQL language targets.
 
@@ -16,7 +16,7 @@ Swift requires a macOS build. The workflow generates the ignored Xcode project f
 
 ## Activation and verification
 
-This change is prepared locally, not activated. After approval, publish and merge the workflow. Confirm all three analysis jobs complete and each category appears in GitHub's analysis inventory on main. Then allow a normal Product Health Agent run to query the alert feed with its production token. An HTTP 200 with zero alerts establishes a successful empty feed; a 403/404 still needs investigation. Any actual alerts remain actionable.
+Publication and activation were approved. PR #22 passed all three language jobs in run 37077354251, and GitHub recorded successful Swift, JavaScript/TypeScript, and Python analyses with zero results. After merge, confirm each category appears on main and run Product Health Agent with its production token. An HTTP 200 with zero alerts establishes a successful empty feed; a 403/404 still needs investigation. Any actual alerts remain actionable.
 
 Do not manually clear the existing finding, mark the feed unsupported, or treat a successful workflow alone as proof that monitoring access works. No application deployment, repository visibility change, plan change, or token-permission expansion is part of this fix. Existing Pages redirects are unchanged.
 
@@ -25,9 +25,9 @@ Do not manually clear the existing finding, mark the feed unsupported, or treat 
 - `actionlint .github/workflows/codeql.yml`: passed.
 - `xcodegen generate`: passed against the current main revision `74b0b8a`.
 - The workflow's unsigned arm64 simulator `xcodebuild build` command: passed with local Xcode 27.0, including Footing and FootingWidgets. Only template configuration was used.
-- Git whitespace validation: passed. Only the workflow and this document are new; generated project/build configuration remains ignored.
+- Git whitespace validation: passed. The workflow and this document are new; TodayView and ProfileView contain compiler-expression refactors described below. Generated project/build configuration remains ignored.
 
-CodeQL extraction, query execution, and GitHub upload have not run. The hosted macOS runner's Xcode/CodeQL compatibility remains to be verified on activation; local build success does not prove scanning or connector recovery.
+Hosted CodeQL extraction, query execution, and upload passed for all three languages in run 37077354251. The Swift job also passed a native Xcode 26.6 compiler preflight. Production connector recovery still requires verification after merge.
 
 ## Hosted validation follow-up
 
