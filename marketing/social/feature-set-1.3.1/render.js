@@ -3,18 +3,17 @@
 //   node render.js            -> all posts
 //   node render.js p01-coached -> one post
 const { chromium } = require(process.env.PLAYWRIGHT || '/Users/dustinsmith-salinas/Documents/GitHub/admyt/node_modules/playwright');
-const http = require('http'), fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
+const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
+
+const { createRenderServer } = require('../../render-server.cjs');
 
 const root = __dirname;
 const types = { '.html': 'text/html', '.png': 'image/png', '.jpg': 'image/jpeg', '.ttf': 'font/ttf' };
-const server = http.createServer((req, res) => {
-  const p = path.join(root, decodeURIComponent(req.url.split('?')[0]));
-  fs.readFile(p, (e, d) => { if (e) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': types[path.extname(p)] || 'application/octet-stream' }); res.end(d); });
-});
+const server = createRenderServer(root, types);
 
 (async () => {
-  await new Promise(r => server.listen(0, r));
-  const base = `http://localhost:${server.address().port}/posts.html`;
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}/posts.html`;
   const browser = await chromium.launch();
   const probe = await browser.newPage();
   await probe.goto(`${base}?p=p01-coached`);
