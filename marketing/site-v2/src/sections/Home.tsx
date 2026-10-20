@@ -34,7 +34,7 @@ export function Nav() {
     <header className="nav">
       <div className="wrap">
         <a className="brand" href="#top" aria-label="Footing, back to top">
-          <Mark /><span className="brand-word d">Footing</span>
+          <img className="brand-wordmark" src="/brand/footing-wordmark.svg" alt="Footing" width="850" height="370" />
         </a>
         <nav className="nav-links" aria-label="Main">
           <a href="#pulse">Pulse</a>
@@ -465,7 +465,7 @@ export function Footer() {
     <footer className="foot">
       <div className="wrap">
         <div className="foot-brand">
-          <span className="word d">Footing</span>
+          <img className="brand-wordmark" src="/brand/footing-wordmark-reversed.svg" alt="Footing" width="850" height="370" />
           <span className="tag">Coached, not scolded.</span>
           <p>Footing is a personal nutrition and wellness tracker, not a medical device. It doesn’t diagnose, treat, or give dosing guidance. Always talk to your doctor about medication and health decisions.</p>
         </div>

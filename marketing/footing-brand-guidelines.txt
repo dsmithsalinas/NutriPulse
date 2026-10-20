@@ -1,3 +1,6 @@
+CURRENT PRODUCT LOGO UPDATE
+Use marketing/brand/current/ and docs/approved-cove-brand.md for the owner-selected Cove living-dot wordmark (Inter Semibold 600) and lime-window app icon. These supersede the product logo assets described below. Pulse remains a separate faceless ring.
+
 ================================================================================
 FOOTING — BRAND GUIDELINES
 Single source of truth for Canva. Colors, type, logo, voice, and Pulse.

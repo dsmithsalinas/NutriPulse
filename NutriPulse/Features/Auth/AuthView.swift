@@ -2,9 +2,10 @@ import SwiftUI
 import AuthenticationServices
 
 // The first screen most people ever see (docs/daylight-redesign.md): the same ground, wordmark,
-// and Pulse mark as onboarding's splash, so sign-in reads as the front door of one connected
+// and approved Cove wordmark, so sign-in reads as the front door of one connected
 // experience rather than a bolted-on login form.
 struct AuthView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var vm = AuthViewModel()
     @State private var showForgotPassword = false
     @FocusState private var focusedField: Field?
@@ -16,13 +17,12 @@ struct AuthView: View {
             VStack(spacing: Theme.Spacing.lg) {
                 Spacer(minLength: 40)
 
-                OnboardingPulseAvatar(size: 84)
-                    .popIn(order: 0)
-
                 VStack(spacing: 4) {
-                    Text("Footing")
-                        .font(Theme.Fonts.display(34, .extraBold, relativeTo: .largeTitle))
-                        .foregroundStyle(Theme.Colors.textPrimary)
+                    Image(colorScheme == .dark ? "FootingWordmark-dark" : "FootingWordmark")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 230, height: 100)
+                        .accessibilityLabel("Footing")
                         .accessibilityAddTraits(.isHeader)
 
                     Text("Coached, not scolded.")

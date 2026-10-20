@@ -1,5 +1,18 @@
 # Footing — marketing
 
+## Current approved Footing logos
+
+The **living-dot wordmark (option 02)** and **lime-window Cove app icon (option 06)** are the current approved Footing product logos. Use these assets for all new marketing and product branding:
+
+- [Wordmark — SVG](brand/current/footing-wordmark.svg) · [transparent PNG](brand/current/footing-wordmark.png)
+- [Reversed wordmark for dark backgrounds — SVG](brand/current/footing-wordmark-reversed.svg) · [transparent PNG](brand/current/footing-wordmark-reversed.png)
+- [App icon — 1024px PNG](brand/current/footing-app-icon.png) · [editable SVG](brand/current/footing-app-icon.svg)
+- [Approved asset usage and specifications](brand/current/README.md)
+
+The wordmark uses **Inter Semibold 600**, with Cove replacing the dot of the i. These assets supersede the older Footing ring logo lockups in `orbit-exports/` and historical marketing examples below. Pulse retains its separate faceless ring as the coach identity.
+
+The website uses the approved copies in `site-v2/public/brand/`. Its header/footer, browser icons and social preview use this branding. The app icon and sign-in wordmark are prepared locally for the next app release; TestFlight distribution is handled separately.
+
 > **The live site is `site-v2/`, hosted on Cloudflare Workers at
 > [tryfooting.app](https://tryfooting.app).** See
 > [`site-v2/DEPLOY.md`](site-v2/DEPLOY.md) for hosting, the domain, and the cutover order.

@@ -118,7 +118,7 @@ h1, h2, h3 { margin: 0; }
 .nav .wrap { display: flex; align-items: center; justify-content: space-between; min-height: 84px; }
 .brand { display: flex; align-items: center; gap: 12px; color: var(--ink); }
 .brand:hover { color: var(--ink); }
-.brand-word { font-size: 24px; }
+.brand-wordmark { display: block; width: 138px; height: 60px; object-fit: contain; }
 .mark { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; background: var(--hero); flex-shrink: 0; }
 .nav-links { display: flex; align-items: center; gap: 32px; font-size: 16px; font-weight: 600; }
 .nav-links a:not(.btn) { color: var(--muted); }
@@ -340,7 +340,7 @@ h1, h2, h3 { margin: 0; }
   .cta-row .btn { flex: 1 1 100%; }
   .nav .wrap { min-height: 68px; }
   .mark { width: 34px; height: 34px; border-radius: 10px; }
-  .brand-word { font-size: 21px; }
+  .brand-wordmark { width: 124px; height: 54px; }
   .ptile { height: 300px; }
   .ptile-box { padding: 16px; }
   .ptile-num .n { font-size: 58px; }

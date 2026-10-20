@@ -141,3 +141,7 @@ article li::before { content: ''; flex-shrink: 0; width: 7px; height: 7px; margi
   article h2 { font-size: 24px; }
   .foot .wrap { flex-direction: column; gap: 24px; }
 }
+
+/* Current approved Cove living-dot product wordmark. */
+.brand-wordmark { display: block; width: 138px; height: 60px; object-fit: contain; }
+@media (max-width: 600px) { .brand-wordmark { width: 124px; height: 54px; } }
