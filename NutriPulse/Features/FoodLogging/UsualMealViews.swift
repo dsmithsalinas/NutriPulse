@@ -9,13 +9,24 @@ struct SaveUsualMealSheet: View {
     @State private var saving = false
     @State private var error: String?
     @State private var pending: UsualMeal?
+
+    init(foods: [FoodLog], existing: UsualMeal? = nil) {
+        self.foods = foods
+        self.existing = existing
+        _name = State(initialValue: existing?.name ?? UsualMeal.suggestedName(for: foods))
+    }
+
     var body: some View {
         ScrollView {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             SheetHeader(title: existing == nil ? "Save a usual meal" : "Rename usual meal", onClose: { dismiss() })
             Text("Give this combination a name so it’s easier to find next time.").font(Theme.Fonts.body(16))
-            TextField("My usual breakfast", text: $name).textFieldStyle(.roundedBorder)
+            Text("Meal name").font(Theme.Fonts.body(14, .semibold))
+            TextField("Name this meal", text: $name).textFieldStyle(.roundedBorder)
                 .font(Theme.Fonts.body(17)).accessibilityLabel("Meal name")
+            if let message = UsualMeal.nameValidationMessage(name) {
+                Text(message).font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
+            }
             if foods.count > 40 { Text("A usual meal can contain up to 40 entries.").foregroundStyle(Theme.Colors.danger) }
             ForEach(foods) { Text("\($0.displayName) · \($0.quantity.formatted()) servings").font(Theme.Fonts.body(14)) }
             Text("Review and adjust portions each time you log it.").font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
@@ -32,11 +43,11 @@ struct SaveUsualMealSheet: View {
                         dismiss()
                     } catch { self.error = "Couldn’t save this usual meal. Check your connection and try again." }
                 }
-            }.buttonStyle(.brandPrimary).disabled(saving || foods.isEmpty || foods.count > 40 || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || name.unicodeScalars.count > 80)
+            }.buttonStyle(.brandPrimary).disabled(saving || foods.isEmpty || foods.count > 40 || UsualMeal.nameValidationMessage(name) != nil)
             Spacer()
         }.padding(Theme.Spacing.page)
         }.background(Theme.Colors.ground)
-            .interactiveDismissDisabled(saving).onAppear { name = existing?.name ?? "" }
+            .interactiveDismissDisabled(saving)
     }
 }
 

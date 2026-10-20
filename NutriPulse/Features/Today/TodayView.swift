@@ -48,6 +48,7 @@ struct TodayView: View {
     // Which day the user dismissed the dose-day card (ISO date). Hides it for that day only;
     // it returns on the next dose day (or as an overdue prompt the following day).
     @AppStorage("doseCardDismissedDay") private var doseCardDismissedDay = ""
+    @AppStorage(SkippedShotCardDismissal.storageKey) private var skippedShotCardDismissals = ""
     private var units: UnitSystem { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
     // The water tile's one-tap amount, in ml. 0 until the user picks a size (see WaterUnit.usualMl).
     @AppStorage(WaterUnit.usualMlKey) private var storedUsualWaterMl: Double = 0
@@ -916,9 +917,22 @@ struct TodayView: View {
                     .padding(Theme.Spacing.md).card()
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
-        } else if vm.isToday, vm.doseScheduleLoaded, vm.doseSchedule.skippedThisWeek != nil {
+        } else if vm.isToday, vm.doseScheduleLoaded, let skip = vm.doseSchedule.skippedThisWeek,
+                  !SkippedShotCardDismissal.contains(skip, in: skippedShotCardDismissals) {
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                DoseSkipControl(schedule: vm.doseSchedule) { await vm.loadData() }
+                HStack(alignment: .top, spacing: Theme.Spacing.sm) {
+                    DoseSkipControl(schedule: vm.doseSchedule) { await vm.loadData() }
+                    Button {
+                        skippedShotCardDismissals = SkippedShotCardDismissal.recording(skip, in: skippedShotCardDismissals)
+                    } label: {
+                        Image(systemName: "xmark").font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss skipped shot card")
+                    .accessibilityHint("Keeps the saved skip and reminder settings. Undo remains available in shot history.")
+                }
                 Button("Log a shot instead") { showRitual = true }
                     .font(Theme.Fonts.body(14, .semibold))
                     .foregroundStyle(Theme.Colors.primaryText)
