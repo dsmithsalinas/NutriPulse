@@ -2,23 +2,22 @@
 //   node render.js stills 2.5 9.8 ...      -> stills/t-<time>.png
 //   node render.js frames <fps> [from] [to] -> frames/f-000000.jpg ...
 const { chromium } = require('/Users/dustinsmith-salinas/Documents/GitHub/admyt/node_modules/playwright');
-const http = require('http'), fs = require('fs'), path = require('path');
+const fs = require('fs'), path = require('path');
+
+const { createRenderServer } = require('../../render-server.cjs');
 
 const root = path.join(__dirname, 'site');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.ttf': 'font/ttf' };
-const server = http.createServer((req, res) => {
-  const p = path.join(root, decodeURIComponent(req.url.split('?')[0]) === '/' ? 'index.html' : decodeURIComponent(req.url.split('?')[0]));
-  fs.readFile(p, (e, d) => { if (e) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': types[path.extname(p)] || 'application/octet-stream' }); res.end(d); });
-});
+const server = createRenderServer(root, types, 'index.html');
 
 (async () => {
-  await new Promise(r => server.listen(0, r));
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   page.on('pageerror', e => console.error('PAGE ERROR', e.message));
   page.on('console', m => { if (m.type() === 'error') console.error('CONSOLE', m.text()); });
-  await page.goto(`http://localhost:${port}/`);
+  await page.goto(`http://127.0.0.1:${port}/`);
   await page.waitForFunction(() => window.READY === true, null, { timeout: 30000 });
   // Warm-up: the first screenshot after load can miss a paint.
   await page.evaluate(() => window.seek(0)); await page.screenshot();
