@@ -17,18 +17,15 @@ struct UnderEatingNudgeCard: View {
     // hides the CTA rather than show an action that would silently do nothing. See PulseGate.
     let onAsk: (() -> Void)?
 
-    // Daylight's Pulse strip: a white tile, the mark on a solid indigo square, and the hand-off
-    // into the coach as its own full-width row.
+    // Quiet check-in geometry accompanies the optional hand-off into Pulse.
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            PulseMark()
-                .foregroundStyle(.white)
-                .frame(width: 20, height: 20)
-                .frame(width: 40, height: 40)
-                .background(Theme.Colors.hero, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .accessibilityHidden(true)
+            PulseRing(state: .checkIn, size: 32)
 
             VStack(alignment: .leading, spacing: 3) {
+                Text("Pulse · Check-in")
+                    .font(Theme.Fonts.body(12, .semibold))
+                    .foregroundStyle(Theme.Colors.textSecondary)
                 Text(nudge.headline)
                     .font(Theme.Fonts.body(15, .bold))
                     .foregroundStyle(Theme.Colors.textPrimary)

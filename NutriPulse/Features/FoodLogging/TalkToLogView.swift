@@ -20,6 +20,25 @@ struct TalkToLogView: View {
     @FocusState private var isTyping: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    // Screenshot fixtures simulate capture without requesting microphone access.
+    private var captureActive: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--log-preview") &&
+            ProcessInfo.processInfo.arguments.contains("--ring-listening-preview") { return true }
+        #endif
+        return dictation.isListening
+    }
+
+    private var captureTranscript: String {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--log-preview") &&
+            ProcessInfo.processInfo.arguments.contains("--ring-listening-preview") {
+            return "Chicken, rice, and some broccoli…"
+        }
+        #endif
+        return dictation.transcript
+    }
+
     private static let examples = [
         "Same breakfast as yesterday", "Half a chicken wrap", "Protein shake after the gym"
     ]
@@ -38,7 +57,7 @@ struct TalkToLogView: View {
                     parsedContent
                 } else if vm.isParsing {
                     parsingTile
-                } else if dictation.isListening {
+                } else if captureActive {
                     listeningTile
                 } else {
                     idleContent
@@ -218,8 +237,8 @@ struct TalkToLogView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 HStack(spacing: 8) {
-                    RecordingDot()
-                    Text("LISTENING")
+                    PulseRing(state: .listening, size: 48, onDarkSurface: true)
+                    Text("Listening")
                         .font(Theme.Fonts.body(13, .bold))
                         .tracking(1)
                         .foregroundStyle(Theme.Colors.heroLabel)
@@ -229,12 +248,11 @@ struct TalkToLogView: View {
                     .font(Theme.Fonts.body(13))
                     .foregroundStyle(Theme.Colors.heroLabel)
             }
-            WaveformView()
-            Text(dictation.transcript.isEmpty ? "…" : dictation.transcript)
+            Text(captureTranscript.isEmpty ? "…" : captureTranscript)
                 .font(Theme.Fonts.display(18, .medium, relativeTo: .title3))
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel(dictation.transcript.isEmpty ? "Listening" : dictation.transcript)
+                .accessibilityLabel(captureTranscript.isEmpty ? "Listening" : captureTranscript)
         }
         .tile(Theme.Colors.heroDeep, shadow: false)
     }
@@ -243,7 +261,7 @@ struct TalkToLogView: View {
 
     private var parsingTile: some View {
         VStack(spacing: 12) {
-            ProgressView().tint(.white)
+            PulseRing(state: .thinking, size: 48, onDarkSurface: true)
             Text("Working out the details…")
                 .font(Theme.Fonts.body(14, .semibold))
                 .foregroundStyle(Theme.Colors.heroLabel)
@@ -354,7 +372,7 @@ struct TalkToLogView: View {
                 .buttonStyle(.pressable)
                 .disabled(vm.isLogging || vm.pendingCount == 0)
             }
-        } else if dictation.isListening {
+        } else if captureActive {
             HStack(spacing: 10) {
                 Button {
                     dictation.stop()
@@ -406,44 +424,6 @@ private struct MicPulseRing: View {
                 }
             }
             .accessibilityHidden(true)
-    }
-}
-
-private struct RecordingDot: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var dim = false
-    var body: some View {
-        Circle()
-            .fill(Theme.Colors.listening)
-            .frame(width: 8, height: 8)
-            .opacity(dim ? 0.3 : 1)
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { dim = true }
-            }
-            .accessibilityHidden(true)
-    }
-}
-
-private struct WaveformView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var animate = false
-    private let heights: [CGFloat] = [18, 30, 40, 26, 36, 44, 30, 22, 38, 44, 28, 34, 20, 32, 24, 14]
-
-    var body: some View {
-        HStack(spacing: 5) {
-            ForEach(heights.indices, id: \.self) { i in
-                Capsule()
-                    .fill(Theme.Colors.heroLabel)
-                    .frame(width: 4, height: (animate || reduceMotion) ? heights[i] : heights[i] * 0.4)
-            }
-        }
-        .frame(height: 44)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { animate = true }
-        }
-        .accessibilityHidden(true)
     }
 }
 

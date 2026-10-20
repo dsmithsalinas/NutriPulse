@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="80" height="80" role="img" aria-label="Pulse: Listening">
+  <circle data-part="track" cx="50" cy="50" r="33" fill="none" stroke="#817EA6" stroke-width="6"/>
+  <path d="M50.0000 17.0000 A33 33 0 1 1 18.9901 61.2867" fill="none" stroke="#C7D2FE" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" data-part="active"/>
+  <path d="M41 46V54 M50 40V60 M59 46V54" fill="none" stroke="#C7D2FE" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" data-part="waveform"/>
+  <circle data-part="signature-node" cx="18.99" cy="61.29" r="7.5" fill="#C7D2FE"/>
+</svg>

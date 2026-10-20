@@ -32,6 +32,12 @@ struct FoodLoggingView: View {
         self.initialTab = initialTab
         _vm = State(initialValue: FoodLoggingViewModel(selectedTab: initialTab ?? LogMethodPreference.read(userId: supabase.auth.currentSession?.user.id)))
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--log-preview") {
+            _vm = State(initialValue: FoodLoggingViewModel(selectedTab: .talk))
+            let preview = TalkToLogViewModel()
+            preview.isParsing = ProcessInfo.processInfo.arguments.contains("--ring-parsing-preview")
+            _talkVM = State(initialValue: preview)
+        }
         if AppStoreScreenshotMode.active {
             _talkVM = State(initialValue: AppStoreScreenshotPreview.foodModel())
         }

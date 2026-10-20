@@ -46,73 +46,77 @@ struct ProfileView: View {
     }
     #endif
 
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
-                    header
-                        .popIn(order: 0)
+    // Keep each band and presentation layer behind a fixed view boundary. The device
+    // crash in 1.3.2 (296) exhausted the main-thread stack while resolving the combined
+    // generic Profile/pulseTile type. A simulator's larger stack hid it.
+    private var profileHighlights: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            header.popIn(order: 0)
+            dailyTargetsTile.popIn(order: 1)
+            HStack(spacing: Theme.Spacing.tileGap) {
+                glp1QuickTile
+                healthQuickTile
+            }.popIn(order: 2)
+        }
+    }
 
-                    dailyTargetsTile
-                        .popIn(order: 1)
-
-                    HStack(spacing: Theme.Spacing.tileGap) {
-                        glp1QuickTile
-                        healthQuickTile
-                    }
-                    .popIn(order: 2)
-
-                    pulseTile
-                        .popIn(order: 3)
-
-                    SettingsTile(eyebrow: "Tracking") {
-                        actionRow(icon: "leaf", title: "Take it easier", showChevron: true) { showLighterTracking = true }
-                        Text(TrackingPreferencesStore.shared.isActive
-                             ? "Lighter tracking is on. Goal reminders are paused."
-                             : "Less tracking pressure, with logging and Pulse still available.")
-                            .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
-                            .padding(.horizontal, 16).padding(.bottom, 14)
-                    }
-
-                    FootingSiriSection()
-                    PulseAttentionSection()
-                    notificationsTile
-                        .popIn(order: 3)
-
-                    glp1DetailsTile
-                        .popIn(order: 4)
-
-                    healthKitDetailsTile
-                        .popIn(order: 4)
-
-                    bodyStatsTile
-                        .popIn(order: 5)
-
-                    measurementsTile
-                        .popIn(order: 5)
-
-                    supportTile
-                        .popIn(order: 6)
-
-                    #if DEBUG
-                    debugTile
-                    #endif
-
-                    accountTile
-                }
-                .padding(.horizontal, Theme.Spacing.page)
-                .padding(.top, Theme.Spacing.sm)
-                .padding(.bottom, Theme.Spacing.xl)
+    private var profileCoaching: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            AnyView(pulseTile).popIn(order: 3)
+            SettingsTile(eyebrow: "Tracking") {
+                actionRow(icon: "leaf", title: "Take it easier", showChevron: true) { showLighterTracking = true }
+                Text(TrackingPreferencesStore.shared.isActive
+                     ? "Lighter tracking is on. Goal reminders are paused."
+                     : "Pause goal reminders for a few days or longer. Logging and Pulse stay available.")
+                    .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+                    .padding(.horizontal, 16).padding(.bottom, 14)
             }
-            .background(Theme.Colors.ground.ignoresSafeArea())
-            // No navigation bar, so cover the status bar or scrolled tiles slide under the clock
-            // (same as Pulse). A ShapeStyle background extends into the safe area.
-            .overlay(alignment: .top) {
-                Color.clear
-                    .frame(height: 0)
-                    .background(Theme.Colors.ground)
+            FootingSiriSection()
+            PulseAttentionSection()
+            notificationsTile.popIn(order: 3)
+        }
+    }
+
+    private var profileHealth: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            glp1DetailsTile.popIn(order: 4)
+            healthKitDetailsTile.popIn(order: 4)
+            bodyStatsTile.popIn(order: 5)
+            measurementsTile.popIn(order: 5)
+        }
+    }
+
+    private var profileSupport: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            supportTile.popIn(order: 6)
+            #if DEBUG
+            debugTile
+            #endif
+            accountTile
+        }
+    }
+
+    private var profileCanvas: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                AnyView(profileHighlights)
+                AnyView(profileCoaching)
+                AnyView(profileHealth)
+                AnyView(profileSupport)
             }
-            .toolbar(.hidden, for: .navigationBar)
+            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.top, Theme.Spacing.sm)
+            .padding(.bottom, Theme.Spacing.xl)
+        }
+        .background(Theme.Colors.ground.ignoresSafeArea())
+        .overlay(alignment: .top) {
+            Color.clear.frame(height: 0).background(Theme.Colors.ground)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var profileLifecycle: some View {
+        AnyView(profileCanvas)
             .task {
                 #if DEBUG
                 if skipInitialLoad { return }
@@ -132,6 +136,10 @@ struct ProfileView: View {
                     await NotificationManager.shared.reconcileSmartNotificationHistory()
                 }
             }
+    }
+
+    private var profileEditors: some View {
+        AnyView(profileLifecycle)
             .sheet(isPresented: $vm.showEditProfile, onDismiss: {
                 Task { await appState.fetchProfile() }
             }) {
@@ -175,6 +183,10 @@ struct ProfileView: View {
                     await vm.setSmartCoaching(true)
                 }
             }
+    }
+
+    private var profileNotices: some View {
+        AnyView(profileEditors)
             .alert("Notifications are off", isPresented: $vm.showWeeklyReminderDeniedAlert) {
                 Button("Open Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
@@ -220,6 +232,10 @@ struct ProfileView: View {
             } message: {
                 Text(vm.errorMessage ?? "")
             }
+    }
+
+    private var profileConfirmations: some View {
+        AnyView(profileNotices)
             .confirmationDialog(
                 "Clear all Pulse chat history?",
                 isPresented: $showClearHistoryConfirm,
@@ -268,6 +284,11 @@ struct ProfileView: View {
             } message: {
                 Text("This permanently deletes your account and all your data — logs, goals, weight history, and chat history. This cannot be undone.")
             }
+    }
+
+    var body: some View {
+        NavigationStack {
+            AnyView(profileConfirmations)
         }
         .tint(Theme.Colors.primary)
     }

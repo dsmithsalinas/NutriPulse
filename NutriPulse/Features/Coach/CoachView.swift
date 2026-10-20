@@ -129,6 +129,14 @@ struct CoachView: View {
             }
             await vm.refreshSuggestedPrompts()
             await consumePendingPrompt()
+            #if DEBUG
+            // Read-only screenshots of real chat views; no request is sent.
+            if CoachViewModel.isPreview && ProcessInfo.processInfo.arguments.contains("--ring-chat-preview") {
+                vm.messages = Array(vm.messages.prefix(2))
+                inConversation = true
+                vm.isLoading = ProcessInfo.processInfo.arguments.contains("--ring-thinking-preview")
+            }
+            #endif
         }
     }
 
@@ -200,17 +208,18 @@ struct CoachView: View {
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         HStack(spacing: 12) {
-            PulseMark()
-                .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .frame(width: 44, height: 44)
-                .background(Theme.Colors.hero, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .accessibilityHidden(true)
+            PulseRing(state: dictation.isListening ? .listening : vm.isLoading ? .thinking : .ready,
+                      size: 48)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Pulse")
                     .font(Theme.Fonts.display(titleSize, .extraBold, relativeTo: .title))
                     .foregroundStyle(Theme.Colors.textPrimary)
                     .accessibilityAddTraits(.isHeader)
+                if dictation.isListening {
+                    Text("Listening")
+                        .font(Theme.Fonts.body(13))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                }
                 if let subtitle {
                     Text(subtitle)
                         .font(Theme.Fonts.body(13))
@@ -1158,47 +1167,24 @@ private struct WeeklyProteinBars: View {
     }
 }
 
-// The brand mark on a solid indigo rounded square — reads as an avatar, not the loading spinner
-// the bare ring used to look like mid-chat.
+// Reply attribution stays still once the text arrives.
 private struct PulseAvatar: View {
     var body: some View {
-        PulseMark()
-            .foregroundStyle(.white)
-            .padding(6)
-            .frame(width: 28, height: 28)
-            .background(Theme.Colors.hero, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        PulseRing(state: .coaching)
     }
 }
 
-// MARK: - Typing indicator
-
+// Unknown-duration request: the approved static segment and an explicit state label.
 private struct PulseTypingIndicator: View {
-    @State private var phase = 0
-    let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
-
     var body: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            pulseAvatar
-            HStack(spacing: 5) {
-                ForEach(0..<3, id: \.self) { i in
-                    Circle()
-                        .fill(Color.secondary)
-                        .frame(width: 7, height: 7)
-                        .scaleEffect(phase == i ? 1.2 : 0.85)
-                        .opacity(phase == i ? 1.0 : 0.4)
-                        .animation(.easeInOut(duration: 0.3), value: phase)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .card()
+        HStack(spacing: 8) {
+            PulseRing(state: .thinking)
+            Text("Pulse · Thinking")
+                .font(Theme.Fonts.body(14))
+                .foregroundStyle(Theme.Colors.textSecondary)
             Spacer()
         }
         .padding(.horizontal, 12)
-        .onReceive(timer) { _ in
-            phase = (phase + 1) % 3
-        }
+        .accessibilityElement(children: .combine)
     }
-
-    private var pulseAvatar: some View { PulseAvatar() }
 }

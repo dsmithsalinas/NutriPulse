@@ -4,7 +4,7 @@ Implemented October 19, 2026, before the next TestFlight build.
 
 ## Entry points
 
-Today → **Make today easier** opens four compact tools:
+Today → **Make today easier**, below water logging, opens four compact tools:
 
 - **Try:** one small experiment, without an active goal prerequisite. An explicit tried/not-tried observation plus a subjective 1–5 rating can be saved or updated for today. Blank days remain unknown. Both groups need at least three explicit observations before the descriptive comparison appears; comparisons never claim causation. Pause/resume, finish while preserving observations, remove observations, delete, and a user-initiated **Reflect with Pulse** handoff are available. Existing detailed goal-linked experiments remain available separately.
 - **Keep:** a situation and what helped are composed into an editable proposal. **Review before remembering** opens the existing explicit approval flow. The account-owned practical memory library supports edit/forget and is used by Pulse’s existing server context. Nothing is silently promoted from an experiment or a meal note.
@@ -14,6 +14,10 @@ Today → **Make today easier** opens four compact tools:
 Experiments, leftovers cards and decision drafts are **device-only** in this version. The screen explicitly says they do not sync across devices. Separate account files use atomic writes and complete file protection. A failed read blocks replacement, and the screen provides Retry. Auth switches clear in-memory state and rotate a generation token, including A→B→A. Account deletion removes the local file. None of this new local data is automatically sent to Pulse. Meal/day notes and approved memories retain their existing cloud sync/RLS.
 
 No additional proactive notifications, medication recommendations, inferred nutrition, goal grading or catch-up obligations are added.
+
+## Distinct kinds of support
+
+Home groups the two help actions beneath water logging. **Today went sideways** helps with an immediate situation or saves a note. **Make today easier** opens the optional practical tools without changing tracking settings. **Take it easier** (previously “Need a lighter week?”) opens the setting that pauses goal reminders for a chosen stretch. Its helper copy names that effect. In lighter tracking, the existing management control remains, and the two help actions still sit below water without duplicating the setting shortcut.
 
 ## Siri
 

@@ -27,6 +27,11 @@ struct AppStoreScreenshotPreview: View {
             }
         }
         .allowsHitTesting(false)
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("--lighter-preview") {
+                TrackingPreferencesStore.shared.preview()
+            }
+        }
     }
 
     static let sampleUser = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!

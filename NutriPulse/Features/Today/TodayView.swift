@@ -627,31 +627,6 @@ struct TodayView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.tileGap) {
                     header
-                    if vm.isToday {
-                        Button {
-                            offScriptOwner = appState.session?.user.id; offScriptPrompt = nil; showOffScript = true
-                        } label: {
-                            HStack {
-                                Label("Today went sideways", systemImage: "arrow.triangle.branch")
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
-                            }.font(Theme.Fonts.body(15, .semibold)).foregroundStyle(Theme.Colors.primaryText)
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        }.buttonStyle(.plain)
-                    }
-
-                    if vm.isToday {
-                        Button {
-                            offScriptOwner = appState.session?.user.id; offScriptPrompt = nil; showEverydayTools = true
-                        } label: {
-                            HStack {
-                                Label("Make today easier", systemImage: "sparkles")
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                            }.font(Theme.Fonts.body(15, .semibold)).frame(minHeight: 44)
-                        }.buttonStyle(.plain).foregroundStyle(Theme.Colors.primaryText)
-                    }
-
                     // No account in the tour, so every sync "fails"; that banner is noise there.
                     if let status = SyncEngine.shared.statusMessage, !DebugLaunch.tour {
                         SyncStatusBanner(status: status) {
@@ -673,12 +648,7 @@ struct TodayView: View {
                         } else {
                             firstDayCard
                             tileGrid
-                            if vm.isToday {
-                                Button("Need a lighter week?") { showLighterTracking = true }
-                                    .font(Theme.Fonts.body(14, .semibold))
-                                    .foregroundStyle(Theme.Colors.primaryText)
-                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                            }
+                            if vm.isToday { homeSupportActions }
                         }
 
                         if vm.foodLogs.isEmpty, vm.mealNotes.isEmpty, !BreakfastCheckinStore.shared.checkins.contains(where: { $0.localDay == vm.selectedDate.isoDateString }), !vm.showsReturnExperience, !isLighterToday {
@@ -745,6 +715,14 @@ struct TodayView: View {
                 .padding(.horizontal, Theme.Spacing.page)
                 .padding(.bottom, Theme.Spacing.xl)
             }
+    }
+
+    private var homeSupportActions: some View {
+        HomeSupportActions(showsLighterTracking: !isLighterToday, onOffScript: {
+            offScriptOwner = appState.session?.user.id; offScriptPrompt = nil; showOffScript = true
+        }, onTools: {
+            offScriptOwner = appState.session?.user.id; offScriptPrompt = nil; showEverydayTools = true
+        }, onLighterTracking: { showLighterTracking = true })
     }
 
     private var lighterTodayContent: some View {
@@ -815,6 +793,7 @@ struct TodayView: View {
                 .background(Theme.Colors.sky, in: RoundedRectangle(cornerRadius: Theme.Radius.tile))
             }
             .buttonStyle(.plain)
+            if vm.isToday { homeSupportActions }
             Text("Your food entries")
                 .font(Theme.Fonts.body(16, .semibold))
                 .accessibilityAddTraits(.isHeader)

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32" role="img" aria-label="Pulse: Floor Cleared">
+  <circle data-part="track" cx="50" cy="50" r="33" fill="none" stroke="#817EA6" stroke-width="6"/>
+  <circle data-part="active" cx="50" cy="50" r="33" fill="none" stroke="#D9F99D" stroke-width="6"/>
+  <circle cx="50" cy="50" r="14" fill="#D9F99D"/>
+  <path d="M43 50L48 55L57 45" fill="none" stroke="#1A2E05" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <circle data-part="signature-node" cx="18.99" cy="61.29" r="7.5" fill="#D9F99D"/>
+</svg>

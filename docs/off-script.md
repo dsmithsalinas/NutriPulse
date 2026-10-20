@@ -1,7 +1,7 @@
 # Off-script: Today went sideways
 
-Implemented October 19, 2026. Today has a compact “Today went sideways” button below
-its date header, available in normal and lighter tracking. It opens three choices:
+Implemented October 19, 2026. Today has a compact “Today went sideways” action below
+water logging, available in normal and lighter tracking. It opens three choices:
 
 - **Help me find something:** send the person’s description to Pulse to find a practical
   option using what is available.

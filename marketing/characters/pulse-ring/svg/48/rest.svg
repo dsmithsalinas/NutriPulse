@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="48" height="48" role="img" aria-label="Pulse: Rest">
+  <circle data-part="track" cx="50" cy="50" r="33" fill="none" stroke="#B8BFCD" stroke-width="6"/>
+  <path d="M50.0000 17.0000 A33 33 0 1 1 18.9901 61.2867" fill="none" stroke="#0F172A" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" data-part="active"/>
+  <path d="M54 37 A14 14 0 1 0 63 59 A16 16 0 0 1 54 37Z" fill="#0F172A"/>
+  <circle data-part="signature-node" cx="18.99" cy="61.29" r="7.5" fill="#0F172A"/>
+</svg>
