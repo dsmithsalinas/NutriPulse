@@ -121,7 +121,7 @@ struct AboutYouContext: Encodable, Equatable {
 
 /// Something Pulse heard in chat and offers to save ("Save to what Pulse knows? Avoid: salmon").
 struct PulseRememberSuggestion: Codable, Equatable, Hashable {
-    enum Kind: String, Codable { case allergy, avoid, love }
+    enum Kind: String, Codable { case allergy, avoid, love, helpful }
     let kind: Kind
     let value: String
 
@@ -130,6 +130,7 @@ struct PulseRememberSuggestion: Codable, Equatable, Hashable {
         case .allergy: "Allergy: \(value)"
         case .avoid: "Avoid: \(value)"
         case .love: "Loves: \(value)"
+        case .helpful: value
         }
     }
 }

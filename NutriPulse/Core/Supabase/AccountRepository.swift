@@ -1,4 +1,5 @@
 import Foundation
+import Foundation
 import Supabase
 
 // Proxies the delete-account Edge Function, which deletes the auth.users row
@@ -8,6 +9,11 @@ import Supabase
 struct AccountRepository {
     func deleteAccount() async throws {
         struct Response: Decodable { let success: Bool }
+        let id = try await supabase.auth.session.user.id
         let _: Response = try await supabase.functions.invoke("delete-account")
+        try await EverydayToolsStore.shared.purgeAccount(id)
+        try await MealNoteStore.shared.purgeAccount(id)
+        try await UsualMealStore.shared.purgeAccount(id)
+        UserDefaults.standard.removeObject(forKey: LogMethodPreference.key(id))
     }
 }

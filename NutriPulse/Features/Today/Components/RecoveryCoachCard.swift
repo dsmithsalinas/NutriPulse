@@ -34,7 +34,7 @@ struct RecoveryCoachCard: View {
             if opportunity.hasGap {
                 HStack(spacing: Theme.Spacing.sm) {
                     if opportunity.proteinGap > 0 {
-                        Button("Close \(opportunity.proteinGap)g gap", action: onCloseGap)
+                        Button("Review protein options", action: onCloseGap)
                             .font(Theme.Fonts.body(14, .semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 14)
@@ -61,7 +61,7 @@ struct RecoveryCoachCard: View {
         }
         let protein = opportunity.proteinGap > 0 ? "\(opportunity.proteinGap)g protein" : nil
         let water = opportunity.waterGapMl > 0 ? "\(opportunity.waterGapMl) ml water" : nil
-        return "You put the work in. " + [protein, water].compactMap { $0 }.joined(separator: " and ") + " closes today's recovery gap."
+        return "You put the work in. " + [protein, water].compactMap { $0 }.joined(separator: " and ") + " remains against your targets in the diary. Entries may be partial; log anything else you’ve had before choosing more."
     }
 }
 

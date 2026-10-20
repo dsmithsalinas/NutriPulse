@@ -48,6 +48,9 @@ enum RecentFoodsGrouper {
         // a phone set to another language doesn't get "Yesterday" over "Montag".
         var english = calendar
         english.locale = Locale(identifier: "en_US")
-        return english.weekdaySymbols[english.component(.weekday, from: date) - 1]
+        if let cutoff = calendar.date(byAdding: .day, value: -6, to: now), date >= cutoff {
+            return english.weekdaySymbols[english.component(.weekday, from: date) - 1]
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 }

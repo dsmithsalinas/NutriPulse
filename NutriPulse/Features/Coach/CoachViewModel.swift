@@ -115,6 +115,7 @@ final class CoachViewModel {
             return
         }
         #endif
+        await PulseMemoryStore.shared.load()
         await loadProfile()
         await refreshSuggestedPrompts()
         await loadHistory()
@@ -136,7 +137,8 @@ final class CoachViewModel {
                 .limit(1)
                 .execute()
                 .value
-            profile = profiles.first
+            guard supabase.auth.currentSession?.user.id == userId else { return }
+            profile = profiles.first { $0.id == userId }
             profileLoadFailed = false
         } catch {
             // Deliberately non-blocking: Pulse is still useful without the profile, just
@@ -379,6 +381,7 @@ final class CoachViewModel {
         case .allergy: items = prefs.allergies
         case .avoid: items = prefs.avoids
         case .love: items = prefs.loves
+        case .helpful: items = PulseMemoryStore.shared.memories.map(\.content)
         }
         return items.contains { $0.caseInsensitiveCompare(suggestion.value) == .orderedSame }
     }
@@ -386,10 +389,10 @@ final class CoachViewModel {
     /// Allergies are safety-relevant and are never saved except by this explicit tap — nothing
     /// else in the app writes to `allergies`.
     func saveRememberSuggestion(_ suggestion: PulseRememberSuggestion, in message: CoachMessage) async {
-        guard rememberStates[message.id]?[suggestion] == nil else { return }
+        guard message.userId == supabase.auth.currentSession?.user.id, rememberStates[message.id]?[suggestion] == nil else { return }
         rememberStates[message.id, default: [:]][suggestion] = .saving
         do {
-            try await PulseProfileStore.shared.remember(suggestion)
+            try await PulseProfileStore.shared.remember(suggestion, for: message.userId)
             rememberStates[message.id, default: [:]][suggestion] = .saved
         } catch {
             rememberStates[message.id]?[suggestion] = nil
@@ -441,8 +444,11 @@ final class CoachViewModel {
     // "no messages", which is what silently swallowing this error used to cause.
     @discardableResult
     private func loadHistory() async -> Bool {
+        guard let owner = supabase.auth.currentSession?.user.id else { return false }
         do {
-            messages = try await repo.fetchHistory(limit: Self.historyPageSize)
+            let loaded = try await repo.fetchHistory(limit: Self.historyPageSize)
+            guard supabase.auth.currentSession?.user.id == owner else { return false }
+            messages = loaded
             // A full page means there is probably more behind it.
             canLoadOlder = messages.count == Self.historyPageSize
             historyLoadFailed = false
@@ -473,14 +479,17 @@ final class CoachViewModel {
     // A request Pulse answers from a trigger rather than the user's words (today, only the
     // weekly recap). The trigger isn't saved; the reply is, tagged with `type`.
     private func generateAutoMessage(type: String, trigger: String) async {
+        guard let owner = supabase.auth.currentSession?.user.id else { return }
         isLoading = true
         await ensureProfileLoaded()
         let context = await contextBuilder.build(profile: profile, includeLastWeek: type == "weekly_summary")
         let historyItems = visibleMessages.suffix(15).map { ChatRequest.HistoryItem(role: $0.role, content: $0.content) }
         do {
             let userId = try await supabase.auth.session.user.id
+            guard userId == owner else { isLoading = false; return }
             let req = ChatRequest(message: trigger, messageType: type, history: historyItems, context: context)
             let resp: ChatResponse = try await supabase.functions.invoke("coach-chat", options: .init(body: req))
+            guard supabase.auth.currentSession?.user.id == owner else { isLoading = false; return }
             if let reply = resp.reply {
                 let saved = try await saveAssistantReply(
                     userId: userId, content: reply, messageType: type, payload: resp.payload
@@ -509,9 +518,13 @@ final class CoachViewModel {
     private func saveAssistantReply(
         userId: UUID, content: String, messageType: String, payload: CoachMessagePayload?
     ) async throws -> CoachMessage {
+        // Helpful proposals are for this exchange. Older released clients cannot decode
+        // this new enum case, so persist only the existing food-preference card kinds.
+        var compatiblePayload = payload
+        compatiblePayload?.remember = payload?.remember?.filter { $0.kind != .helpful }
         do {
             return try await repo.save(
-                NewCoachMessage(userId: userId, role: "assistant", content: content, messageType: messageType, payload: payload)
+                NewCoachMessage(userId: userId, role: "assistant", content: content, messageType: messageType, payload: compatiblePayload)
             )
         } catch {
             guard payload != nil else { throw error }
@@ -551,9 +564,11 @@ final class CoachViewModel {
                 ChatRequest.HistoryItem(role: $0.role, content: $0.content)
             }
 
+            guard supabase.auth.currentSession?.user.id == userId else { isLoading = false; return }
             let req = ChatRequest(message: text, messageType: "chat", history: historyItems, context: context)
             let resp: ChatResponse = try await supabase.functions.invoke("coach-chat", options: .init(body: req))
 
+            guard supabase.auth.currentSession?.user.id == userId else { isLoading = false; return }
             guard let reply = resp.reply else {
                 error = "Pulse didn't respond. Try again."
                 isLoading = false

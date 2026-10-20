@@ -907,6 +907,10 @@ private struct RememberSuggestionCard: View {
         let isSaving = vm.rememberIsSaving(suggestion, in: message)
         let isSaved = vm.rememberIsSaved(suggestion, in: message)
 
+        let layout = suggestion.kind == .helpful
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+            : AnyLayout(HStackLayout(spacing: 10))
+
         VStack(alignment: .leading, spacing: 8) {
             Text("Save to what Pulse knows?")
                 .font(Theme.Fonts.body(11, .bold))
@@ -914,13 +918,13 @@ private struct RememberSuggestionCard: View {
                 .tracking(Theme.Typography.eyebrowTracking)
                 .foregroundStyle(Theme.Colors.textFaint)
 
-            HStack(spacing: 10) {
+            layout {
                 Text(suggestion.label)
                     .font(Theme.Fonts.body(14, .bold))
                     .foregroundStyle(Theme.Colors.textPrimary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                Spacer(minLength: 8)
+                if suggestion.kind != .helpful { Spacer(minLength: 8) }
 
                 if isSaved {
                     Label("Saved", systemImage: "checkmark.circle.fill")

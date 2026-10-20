@@ -9,6 +9,7 @@ struct FoodSearchView: View {
     let date: Date
     let headerMeal: Meal
     let onLogged: (LogSource, _ keepOpen: Bool) -> Void
+    @Environment(\.foodSaveUndo) private var undo
     let onEnterManually: () -> Void
 
     var body: some View {
@@ -137,7 +138,7 @@ struct FoodSearchView: View {
                         },
                         onQuickLog: {
                             Task {
-                                if await vm.quickLog(result, meal: headerMeal, on: date) {
+                                if (await FoodSaveUndo.$current.withValue(undo) { await vm.quickLog(result, meal: headerMeal, on: date) }) {
                                     onLogged(.search, true)
                                 }
                             }
@@ -284,6 +285,7 @@ struct FoodDetailSheet: View {
     // scan flow — each caller hardcodes which one it is.
     let source: LogSource
     let onLogged: (LogSource) -> Void
+    @Environment(\.foodSaveUndo) private var undo
 
     @Environment(\.dismiss) private var dismiss
 
@@ -419,7 +421,7 @@ struct FoodDetailSheet: View {
         Button {
             Task {
                 do {
-                    try await vm.logFood(on: date)
+                    try await FoodSaveUndo.$current.withValue(undo) { try await vm.logFood(on: date) }
                     vm.selectedResult = nil
                     onLogged(source)
                 } catch {

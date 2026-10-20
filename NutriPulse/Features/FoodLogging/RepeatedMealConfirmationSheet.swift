@@ -6,10 +6,15 @@ struct RepeatedMealConfirmationSheet: View {
     let vm: TodayViewModel
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
     @State private var logs: [FoodLog] = []
     @State private var quantities: [UUID: Double] = [:]
     @State private var isLoading = true
     @State private var isSaving = false
+    @State private var saveFailed = false
+    @State private var saved = false
+    @State private var showSaveUsual = false
+    @State private var undo = FoodSaveUndo()
 
     private func quantity(for log: FoodLog) -> Double {
         quantities[log.id] ?? log.quantity
@@ -28,7 +33,20 @@ struct RepeatedMealConfirmationSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading {
+                if saved {
+                    VStack(spacing: 16) {
+                        Text("Saved for today").font(Theme.Fonts.display(26, .bold, relativeTo: .title2))
+                        Text("No need to fill in previous days.").font(Theme.Fonts.body(16))
+                        Button("Save as a usual meal") { showSaveUsual = true }.frame(minHeight: 44).disabled(undo.isUndoing)
+                        if undo.canUndo {
+                            Button("Undo") { Task { if await undo.undo() { saved = false } } }.disabled(undo.isUndoing)
+                        }
+                        if let error = undo.error { Text(error).foregroundStyle(Theme.Colors.danger) }
+                        Button("Done") { dismiss() }.buttonStyle(.brandPrimary).disabled(undo.isUndoing)
+                        Button("Add something else") { dismiss(); appState.pendingOpenTalkToLog = true }
+                            .frame(minHeight: 44).disabled(undo.isUndoing)
+                    }.padding(Theme.Spacing.page)
+                } else if isLoading {
                     ProgressView("Loading your usual meal…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if logs.isEmpty {
@@ -98,8 +116,9 @@ struct RepeatedMealConfirmationSheet: View {
                         Button {
                             isSaving = true
                             Task {
-                                await vm.repeatMeal(from: sourceDate, meal: meal, quantities: quantities)
-                                dismiss()
+                                let saved = await FoodSaveUndo.$current.withValue(undo) { await vm.repeatMeal(from: sourceDate, meal: meal, quantities: quantities) }
+                                isSaving = false
+                                if saved { self.saved = true } else { saveFailed = true }
                             }
                         } label: {
                             HStack {
@@ -115,6 +134,11 @@ struct RepeatedMealConfirmationSheet: View {
                     }
                 }
             }
+            .alert("Couldn’t log meal", isPresented: $saveFailed) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Your meal wasn’t saved. Please try again.")
+            }
             .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationTitle("Usual \(meal.displayName)")
             .navigationBarTitleDisplayMode(.inline)
@@ -123,7 +147,8 @@ struct RepeatedMealConfirmationSheet: View {
                     Button("Not now") { dismiss() }
                 }
             }
-            .task {
+            .sheet(isPresented: $showSaveUsual) { SaveUsualMealSheet(foods: undo.savedFoods) }
+        .task {
                 logs = await vm.mealLogs(from: sourceDate, meal: meal)
                 quantities = Dictionary(uniqueKeysWithValues: logs.map { ($0.id, $0.quantity) })
                 isLoading = false

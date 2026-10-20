@@ -4,20 +4,24 @@ import SwiftUI
 // last 72 hours" grouped by day. Every "+" logs straight to the header meal; the star on a
 // Recents row favorites that food (which then drops out of Recents).
 struct FavoritesView: View {
+    @Environment(\.foodSaveUndo) private var undo
     @Bindable var vm: FavoritesViewModel
     let date: Date
     let headerMeal: Meal
     let onLogged: (LogSource, _ keepOpen: Bool) -> Void
+
+    @State private var reviewFood: FoodLog?
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                UsualMealsSection(date: date, meal: headerMeal) { onLogged(.favorite, false) }
                 if vm.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: 200)
-                } else if vm.isEmpty {
+                } else if vm.isEmpty && UsualMealStore.shared.meals.isEmpty {
                     BrandedEmptyState(
                         icon: "star",
                         title: "No favorites yet",
@@ -34,7 +38,7 @@ struct FavoritesView: View {
                                 .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
                                 .foregroundStyle(Theme.Colors.textPrimary)
                             Spacer(minLength: 0)
-                            Text("Last 72 hours")
+                            Text("Familiar foods")
                                 .font(Theme.Fonts.body(13, .semibold))
                                 .foregroundStyle(Theme.Colors.textSecondary)
                         }
@@ -48,8 +52,7 @@ struct FavoritesView: View {
                                     log: log,
                                     onStar: { await vm.addToFavorites(log) },
                                     onLogAgain: {
-                                        let ok = await vm.logAgain(log, meal: headerMeal, date: date)
-                                        if ok { onLogged(.favorite, true) }
+                                        reviewFood = log
                                     }
                                 )
                             }
@@ -59,6 +62,9 @@ struct FavoritesView: View {
             }
             .padding(.top, 4)
             .padding(.bottom, 24)
+        }
+        .sheet(item: $reviewFood) { food in
+            FamiliarFoodReview(food: food, date: date, meal: headerMeal) { onLogged(.favorite, false) }
         }
         .task { await vm.load() }
         .alert("Error", isPresented: Binding(
@@ -81,7 +87,7 @@ struct FavoritesView: View {
         LazyVGrid(columns: columns, spacing: 10) {
             ForEach(Array(vm.favorites.enumerated()), id: \.element.id) { index, fav in
                 FavoriteTile(fav: fav) {
-                    let ok = await vm.logFavorite(fav, meal: headerMeal, date: date)
+                    let ok = await FoodSaveUndo.$current.withValue(undo) { await vm.logFavorite(fav, meal: headerMeal, date: date) }
                     if ok { onLogged(.favorite, true) }
                 }
                 .popIn(order: index)

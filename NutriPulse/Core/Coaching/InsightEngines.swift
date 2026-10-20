@@ -32,10 +32,7 @@ enum WeeklyReviewEngine {
             wentWell = "You showed up and logged on \(logged.count) days — enough to reveal a real pattern."
         }
 
-        let weakest = logged.min(by: { $0.proteinG < $1.proteinG })!
-        let gotDifficult = goal > 0
-            ? "Protein was hardest on \(weakest.date.formatted(.dateTime.weekday(.wide))): \(Int(weakest.proteinG.rounded()))g against a \(Int(goal.rounded()))g floor."
-            : "Your lightest protein day was \(weakest.date.formatted(.dateTime.weekday(.wide))) at \(Int(weakest.proteinG.rounded()))g."
+        let gotDifficult = "Food entries may be partial. Lower logged totals don’t confirm missed goals."
 
         let recentChecks = checkIns.filter { check in
             guard let date = Date.fromISODateString(check.checkinDate), let first = week.first?.date else { return false }
@@ -47,16 +44,16 @@ enum WeeklyReviewEngine {
             let days = Array(Set(lowAppetiteDays)).sorted().map(String.init).joined(separator: ", ")
             pattern = "Lower appetite showed up on cycle day\(lowAppetiteDays.count == 1 ? "" : "s") \(days)."
         } else if proteinHits >= 2 {
-            pattern = "Average protein held at \(Int(averageProtein.rounded()))g even as the week changed around it."
+            pattern = "Average logged protein was \(Int(averageProtein.rounded()))g on days with entries; full intake is unknown."
         } else {
-            pattern = "The biggest opportunity is consistency, not perfection: make one meal reliably protein-forward."
+            pattern = "There isn’t enough complete intake information to identify a nutrition shortfall."
         }
 
         let experiment: String
         if !lowAppetiteDays.isEmpty {
             experiment = "Before your next low-appetite day, stage one small 25–30g protein option you already like."
         } else if goal > 0, averageProtein < goal {
-            experiment = "Add 25g of protein to the first meal you log; let the rest of the day stay flexible."
+            experiment = "Start with one thing you ate today. There’s no need to catch up on missing entries."
         } else {
             experiment = "Repeat the meal that made your strongest protein day easy."
         }

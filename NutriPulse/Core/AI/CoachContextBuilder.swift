@@ -28,6 +28,20 @@ struct CoachContextBundle: Encodable {
     // rolling seven-day window ends today — on a Monday morning that's six days of last week
     // plus an empty day — so the summary was describing the wrong week.
     var lastWeek: LastWeekContext? = nil
+    var lighterTracking: LighterTrackingContext? = nil
+    var mealNotes: [MealNoteContext]? = nil
+    let pulseMemoryVersion = 1
+    struct MealNoteContext: Encodable {
+        let meal: String
+        let text: String
+    }
+
+    struct LighterTrackingContext: Encodable {
+        let available: Bool
+        let active: Bool
+        let reason: String?
+        let endsAt: String?
+    }
 
     struct UserContext: Encodable {
         let name: String
@@ -348,6 +362,15 @@ struct CoachContextBuilder {
             context.weeklyEvidence = await StrongWeekEvidenceBuilder().build(proteinTarget: goal?.proteinG)
         }
         context.lastWeek = lastWeek
+        if let notes = try? await MealNoteRepository().fetch(for: .now) {
+            context.mealNotes = notes.prefix(20).map { .init(meal: $0.contextMeal, text: $0.body) }
+        }
+        context.lighterTracking = await MainActor.run {
+            let store = TrackingPreferencesStore.shared
+            return .init(available: store.isLoaded && !store.loadFailed, active: store.isActive,
+                         reason: store.isActive ? store.contextReason?.rawValue : nil,
+                         endsAt: store.isActive ? store.setting?.endsAt?.ISO8601Format() : nil)
+        }
         return context
     }
 

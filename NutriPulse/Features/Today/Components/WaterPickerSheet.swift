@@ -10,6 +10,8 @@ struct WaterPickerSheet: View {
     /// Logs water and returns the new entry's id (nil if it failed), so it can be undone.
     let onAdd: (Double) async -> UUID?
     let onUndo: (UUID, Double) async -> Void
+    var loadHistory: () -> [WaterLog] = { [] }
+    @State private var history: [WaterLog] = []
 
     @Environment(\.dismiss) private var dismiss
     @State private var customAmount: Double = 0
@@ -56,6 +58,28 @@ struct WaterPickerSheet: View {
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
             }
+            if !history.isEmpty {
+                Text("Water history").font(Theme.Fonts.body(15, .semibold))
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(history) { entry in
+                            HStack {
+                                Text("\(unit.display(entry.amountMl)) · \(entry.loggedAt.formatted(date: .omitted, time: .shortened))")
+                                Spacer()
+                                Button("Remove", role: .destructive) {
+                                    isWorking = true
+                                    Task {
+                                        await onUndo(entry.id, entry.amountMl)
+                                        history = loadHistory()
+                                        if lastAdd?.id == entry.id { lastAdd = nil }
+                                        isWorking = false
+                                    }
+                                }.frame(minHeight: 44).disabled(isWorking)
+                            }.font(Theme.Fonts.body(14))
+                        }
+                    }
+                }
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Spacing.page)
@@ -65,6 +89,7 @@ struct WaterPickerSheet: View {
         .presentationDragIndicator(.visible)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: lastAdd?.id)
         .onAppear {
+            history = loadHistory()
             if customAmount == 0 { customAmount = unit == .ml ? 300 : 10 * 29.5735 }
         }
     }
@@ -221,7 +246,7 @@ struct WaterPickerSheet: View {
             Button {
                 let undone = last
                 lastAdd = nil
-                Task { await onUndo(undone.id, undone.ml) }
+                Task { await onUndo(undone.id, undone.ml); history = loadHistory() }
             } label: {
                 Text("Undo")
                     .font(Theme.Fonts.body(14, .bold))
@@ -247,6 +272,7 @@ struct WaterPickerSheet: View {
             if let id = await onAdd(ml) {
                 lastAdd = (id, ml)
             }
+            history = loadHistory()
             isWorking = false
         }
     }

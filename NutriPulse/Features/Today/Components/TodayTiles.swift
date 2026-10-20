@@ -9,6 +9,7 @@ import SwiftUI
 struct ProteinTile: View {
     let proteinG: Double
     let goalG: Double?
+    var hasFoodLogs: Bool = true
     /// Keeps the tile indigo after protein crosses the floor, while Today waits to play the
     /// moment to a watching user (the logging sheet is usually still up).
     var holdsClear: Bool = false
@@ -29,8 +30,9 @@ struct ProteinTile: View {
     }
 
     private var status: String {
-        guard let remaining else { return "No floor set" }
-        return remaining > 0 ? "\(remaining)g to go" : "Floor cleared"
+        guard hasFoodLogs else { return "No food logged today" }
+        guard let remaining else { return "Protein logged" }
+        return remaining > 0 ? "Logged · day not assessed" : "Floor cleared"
     }
 
     /// Past the floor: the tile turns lime for the rest of the day, matching the widget.
@@ -68,9 +70,12 @@ struct ProteinTile: View {
             Spacer(minLength: 12)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    CountingNumber(value: Int(proteinG.rounded()), font: Theme.Fonts.number(60, relativeTo: .largeTitle))
-                    Text("g")
-                        .font(Theme.Fonts.display(22, relativeTo: .title2))
+                    if hasFoodLogs {
+                        CountingNumber(value: Int(proteinG.rounded()), font: Theme.Fonts.number(60, relativeTo: .largeTitle))
+                        Text("g").font(Theme.Fonts.display(22, relativeTo: .title2))
+                    } else {
+                        Text("—").font(Theme.Fonts.number(60, relativeTo: .largeTitle))
+                    }
                 }
                 .foregroundStyle(ink)
                 .minimumScaleFactor(0.6)
@@ -112,8 +117,9 @@ struct ProteinTile: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(goalG.map { "Protein \(Int(proteinG.rounded())) of \(Int($0.rounded())) grams. \(status)" }
-            ?? "Protein \(Int(proteinG.rounded())) grams")
+        .accessibilityLabel(hasFoodLogs
+            ? "Protein \(Int(proteinG.rounded())) grams logged. \(status)"
+            : "Protein intake unknown. No food logged today.")
     }
 }
 
@@ -253,13 +259,11 @@ struct CaloriesTile: View {
     let fatG: Double
     let fiberG: Double
     let goal: DailyGoal?
+    var hasFoodLogs: Bool = true
 
     private var caloriesLine: (value: String, unit: String) {
-        guard let goal, goal.calories > 0 else {
-            return (Int(calories.rounded()).formatted(), "kcal")
-        }
-        let left = Int((goal.calories - calories).rounded())
-        return left >= 0 ? (left.formatted(), "left") : ((-left).formatted(), "over")
+        guard hasFoodLogs else { return ("—", "not logged") }
+        return (Int(calories.rounded()).formatted(), "kcal logged")
     }
 
     private var caloriesValue: some View {
@@ -289,14 +293,25 @@ struct CaloriesTile: View {
                         caloriesValue
                     }
                 }
-                if let goal, goal.calories > 0 {
+                if hasFoodLogs, let goal, goal.calories > 0 {
                     MeterBar(progress: calories / goal.calories, color: Theme.NutrientColor.calories, height: 8)
                 }
             }
             Spacer(minLength: 0)
-            macro("Carbs", carbsG, goal?.carbsG, Theme.NutrientColor.carbs)
-            macro("Fat", fatG, goal?.fatG, Theme.NutrientColor.fat)
-            macro("Fiber", fiberG, goal?.fiberG, Theme.NutrientColor.fiber)
+            if hasFoodLogs {
+                macro("Carbs", carbsG, goal?.carbsG, Theme.NutrientColor.carbs)
+                macro("Fat", fatG, goal?.fatG, Theme.NutrientColor.fat)
+                macro("Fiber", fiberG, goal?.fiberG, Theme.NutrientColor.fiber)
+            } else {
+                Text("No food logged today")
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Totals appear as you add food.")
+                    .font(Theme.Fonts.body(13))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .tile(radius: Theme.Radius.tile, padding: 14)
         .accessibilityElement(children: .ignore)
@@ -314,7 +329,7 @@ struct CaloriesTile: View {
                     Text("\(Int(value.rounded()))")
                         .font(Theme.Fonts.body(12, .bold))
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text(target.map { " / \(Int($0.rounded()))g" } ?? "g")
+                    Text("g logged")
                         .font(Theme.Fonts.body(12, .medium))
                         .foregroundStyle(Theme.Colors.textFaint)
                 }
@@ -327,9 +342,10 @@ struct CaloriesTile: View {
     }
 
     private var accessibilitySummary: String {
-        let cal = "Calories \(caloriesLine.value) \(caloriesLine.unit)"
+        guard hasFoodLogs else { return "No food logged. Calorie and macro intake unknown." }
+        let cal = "Calories \(caloriesLine.value) \(caloriesLine.unit). Diary may be partial"
         func part(_ name: String, _ v: Double, _ t: Double?) -> String {
-            t.map { "\(name) \(Int(v.rounded())) of \(Int($0.rounded())) grams" } ?? "\(name) \(Int(v.rounded())) grams"
+            "\(name) \(Int(v.rounded())) grams logged"
         }
         return [cal, part("carbs", carbsG, goal?.carbsG), part("fat", fatG, goal?.fatG), part("fiber", fiberG, goal?.fiberG)]
             .joined(separator: ". ")

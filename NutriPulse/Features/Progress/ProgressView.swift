@@ -349,7 +349,6 @@ private extension ProgressMarkState {
     var color: Color {
         switch self {
         case .met, .logged: Theme.Colors.primary
-        case .below: Theme.NutrientColor.calories
         case .unknown: .clear
         }
     }
@@ -376,7 +375,7 @@ private struct FloorDaysHero: View {
                             font: Theme.Fonts.number(44, relativeTo: .largeTitle)
                         )
                         .foregroundStyle(.white)
-                        Text("of \(metrics.hasGoal ? metrics.logged.count : summaries.count)")
+                        Text(metrics.hasGoal ? "confirmed" : "of \(summaries.count)")
                             .font(Theme.Fonts.display(20, relativeTo: .title3))
                             .foregroundStyle(Theme.Colors.heroLabel)
                     }
@@ -396,6 +395,12 @@ private struct FloorDaysHero: View {
             }
 
             FloorDaysGraphic(range: range, summaries: summaries, proteinGoal: proteinGoal)
+            if metrics.hasGoal {
+                Text("Other days stay unassessed — partial logs aren’t missed goals.")
+                    .font(Theme.Fonts.body(12))
+                    .foregroundStyle(Theme.Colors.heroLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -406,7 +411,7 @@ private struct FloorDaysHero: View {
 
     private var accessibilityLabel: String {
         let base = metrics.hasGoal
-            ? "Floor days, \(metrics.metCount) of \(metrics.logged.count)"
+            ? "Protein floor confirmed on \(metrics.metCount) days. \(metrics.unknownGoalCount) days unassessed."
             : "Logged days, \(metrics.logged.count) of \(summaries.count)"
         guard let trend else { return base }
         return "\(base). \(trend.label) last period."
@@ -466,7 +471,6 @@ private struct FloorDaysGraphic: View {
     private func fillColor(_ state: ProgressMarkState) -> Color {
         switch state {
         case .met, .logged: Theme.Colors.hero
-        case .below: Theme.Colors.hero.opacity(0.4)
         case .unknown: .clear
         }
     }
@@ -509,8 +513,7 @@ private struct FloorDaysGraphic: View {
 
     private var accessibilitySummary: String {
         if metrics.hasGoal {
-            let below = metrics.logged.count - metrics.metCount
-            return "\(metrics.metCount) days met the protein floor, \(below) \(below == 1 ? "day was" : "days were") below, and \(metrics.missingCount) \(metrics.missingCount == 1 ? "day was" : "days were") not measured."
+            return "Protein floor confirmed on \(metrics.metCount) days. \(metrics.unknownGoalCount) days unassessed; partial logs do not confirm a missed goal."
         }
         return "Nutrition was logged on \(metrics.logged.count) days and missing on \(metrics.missingCount) days."
     }
@@ -579,7 +582,7 @@ private struct AvgProteinStatTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TileEyebrow("Avg protein")
+            TileEyebrow("Avg logged protein")
             if logged.count > 1 {
                 // A 3-day rolling average, matching the tile's "average" label: raw daily values
                 // zig-zag between high and low days and read as noise rather than a trend.
@@ -596,7 +599,7 @@ private struct AvgProteinStatTile: View {
         .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
         .tile()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(logged.isEmpty ? "Average protein, no data yet" : "Average protein \(average) grams")
+        .accessibilityLabel(logged.isEmpty ? "Average logged protein, no data yet" : "Average logged protein \(average) grams. Food entries may be partial.")
     }
 }
 
@@ -872,7 +875,7 @@ private struct ProgressSummariesView: View {
                     proteinGoal: viewModel.proteinGoal
                 )
 
-                Text("Based only on logged and measured data; missing days stay unknown.")
+                Text("Food entries may be partial. Unassessed days don’t count as missed goals.")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
@@ -883,7 +886,7 @@ private struct ProgressSummariesView: View {
 
     private var summaryHeadline: String {
         if metrics.hasGoal {
-            return "You reached your protein floor on \(metrics.metCount) of \(metrics.logged.count) measured days."
+            return "Your entries confirm \(metrics.metCount) protein-floor days. Other days remain unassessed."
         }
         return "You logged nutrition on \(metrics.logged.count) of \(currentSummaries.count) days."
     }
@@ -989,7 +992,6 @@ private struct SummaryTimelineGraphic: View {
 
             HStack(spacing: 14) {
                 ProgressLegend(color: Theme.Colors.primary, title: metrics.hasGoal ? "Met" : "Logged")
-                if metrics.hasGoal { ProgressLegend(color: Theme.NutrientColor.calories, title: "Below") }
                 ProgressLegend(color: .clear, title: "Unknown", outlined: true)
             }
         }
@@ -997,13 +999,12 @@ private struct SummaryTimelineGraphic: View {
 
     private func color(for fraction: Double) -> Color {
         guard metrics.hasGoal else { return Theme.Colors.primary.opacity(0.35 + 0.65 * fraction) }
-        return fraction >= 0.5 ? Theme.Colors.primary.opacity(0.35 + 0.65 * fraction) : Theme.NutrientColor.calories
+        return Theme.Colors.primary.opacity(0.35 + 0.65 * fraction)
     }
 
     private var accessibilitySummary: String {
         if metrics.hasGoal {
-            let below = metrics.logged.count - metrics.metCount
-            return "\(metrics.metCount) days met the protein floor, \(below) \(below == 1 ? "day was" : "days were") below, and \(metrics.missingCount) \(metrics.missingCount == 1 ? "day was" : "days were") not measured."
+            return "Protein floor confirmed on \(metrics.metCount) days. \(metrics.unknownGoalCount) days unassessed; partial logs do not confirm a missed goal."
         }
         return "Nutrition was logged on \(metrics.logged.count) days and missing on \(metrics.missingCount) days."
     }
@@ -1033,7 +1034,6 @@ private struct SummaryReviewCard: View {
     let proteinGoal: Double?
 
     private var metrics: ProgressMetrics { .init(summaries: summaries, proteinGoal: proteinGoal) }
-    private var weakest: DailySummary? { metrics.logged.min { $0.proteinG < $1.proteinG } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -1048,7 +1048,7 @@ private struct SummaryReviewCard: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
             row("What went well", wentWell, "checkmark.circle.fill", .green)
-            row("Where it got difficult", gotDifficult, "arrow.down.right.circle.fill", .orange)
+            row("What’s unknown", gotDifficult, "arrow.down.right.circle.fill", .orange)
             row("Pattern noticed", pattern, "point.3.connected.trianglepath.dotted", Theme.Colors.primary)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -1067,25 +1067,24 @@ private struct SummaryReviewCard: View {
 
     private var wentWell: String {
         if metrics.hasGoal {
-            return "You protected your protein floor on \(metrics.metCount) of \(metrics.logged.count) measured days."
+            return "Your entries confirm \(metrics.metCount) protein-floor days. Other days remain unassessed."
         }
         return "You logged enough nutrition to build a summary from \(metrics.logged.count) measured days."
     }
 
     private var gotDifficult: String {
-        guard let weakest else { return "There isn’t enough measured data to identify a difficult day yet." }
-        return "Protein was lowest on \(weakest.date.formatted(.dateTime.weekday(.wide))) at \(Int(weakest.proteinG.rounded()))g."
+        "Entries may cover only part of each day, so lower totals don’t confirm missed goals."
     }
 
     private var pattern: String {
-        "Average protein was \(Int(metrics.averageProtein.rounded()))g across measured days in this period."
+        "Average logged protein was \(Int(metrics.averageProtein.rounded()))g on days with entries; full intake is unknown."
     }
 
     private var experiment: String {
         if let proteinGoal, proteinGoal > 0, metrics.averageProtein < proteinGoal {
-            return "Add one protein-dense option to the first meal you log and watch the next comparable period."
+            return "Start with something you ate today. No need to fill in the missing days."
         }
-        return "Repeat the meal that made your strongest protein day easy."
+        return "Use a recent meal as a shortcut when you eat it again."
     }
 
     private func row(_ title: String, _ detail: String, _ icon: String, _ color: Color) -> some View {
@@ -1110,7 +1109,7 @@ private struct ProgressHistoryRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title).font(Theme.Typography.headline)
                 Text(item.dateRange).font(Theme.Typography.caption).foregroundStyle(Theme.Colors.textSecondary)
-                Text("\(item.measuredDays) of \(item.expectedDays) measured days · \(item.averageProtein)g average protein")
+                Text("\(item.measuredDays) of \(item.expectedDays) measured days · \(item.averageProtein)g average logged protein")
                     .font(Theme.Typography.caption)
                     .foregroundStyle(Theme.Colors.textSecondary)
             }

@@ -12,6 +12,7 @@ struct ProfileView: View {
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
     @AppStorage("chatHistoryVersion") private var chatHistoryVersion = 0
     @State private var showClearHistoryConfirm = false
+    @State private var showLighterTracking = false
     @State private var showDeleteAccountConfirm = false
     @State private var showGLP1Tracker = false
     @State private var showGLP1PauseOptions = false
@@ -64,6 +65,17 @@ struct ProfileView: View {
                     pulseTile
                         .popIn(order: 3)
 
+                    SettingsTile(eyebrow: "Tracking") {
+                        actionRow(icon: "leaf", title: "Take it easier", showChevron: true) { showLighterTracking = true }
+                        Text(TrackingPreferencesStore.shared.isActive
+                             ? "Lighter tracking is on. Goal reminders are paused."
+                             : "Less tracking pressure, with logging and Pulse still available.")
+                            .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+                            .padding(.horizontal, 16).padding(.bottom, 14)
+                    }
+
+                    FootingSiriSection()
+                    PulseAttentionSection()
                     notificationsTile
                         .popIn(order: 3)
 
@@ -107,6 +119,7 @@ struct ProfileView: View {
                 #endif
                 await vm.loadData(profile: appState.profile)
             }
+            .sheet(isPresented: $showLighterTracking) { LighterTrackingSheet() }
             .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
                 Task { await vm.loadData(profile: appState.profile) }
             }
@@ -470,8 +483,12 @@ struct ProfileView: View {
     private var notificationsTile: some View {
         SettingsTile(
             eyebrow: "Pulse notifications",
-            footer: "Smart coaching sends at most one timely suggestion a day. Your Monday outlook reminder and shot-day reminders are separate."
+            footer: "Smart coaching and Monday’s outlook share your Pulse attention limit. Shot-day reminders are separate."
         ) {
+            if TrackingPreferencesStore.shared.suppressesGoalPrompts {
+                Text("Goal reminders are paused while taking it easier. Your saved preferences resume afterward.")
+                    .font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
+            }
             toggleRow(
                 icon: "calendar.badge.clock",
                 title: "Your strong week",

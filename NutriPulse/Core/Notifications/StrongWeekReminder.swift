@@ -1,8 +1,8 @@
 import Foundation
 import UserNotifications
 
-// A floating local calendar trigger: no fixed date, UTC offset, or timezone.
-// iOS repeats it weekly without waking the app or generating an outlook in advance.
+// Bounded to one Monday so every proactive notification consumes the shared attention
+// allowance. Reconcile at launch/foreground; never queue an unbudgeted repeating trigger.
 enum StrongWeekReminder {
     static let identifier = "pulse-strong-week"
     static let routeKey = "strongWeekReminderRoute"
@@ -17,14 +17,17 @@ enum StrongWeekReminder {
         date.minute = 0
         return date
     }
-    static func request(userId: UUID) -> UNNotificationRequest {
+    static func nextFireDate(after now: Date = .now, calendar: Calendar = .current) -> Date? {
+        calendar.nextDate(after: now, matching: components, matchingPolicy: .nextTime)
+    }
+    static func request(userId: UUID, fireDate: Date? = nil) -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
         content.title = "Your strong week"
         content.body = "Check in with Pulse for food, movement, and recovery ideas that fit your week."
         content.sound = .default
         content.userInfo = ["destination": "strong_week", "userId": userId.uuidString]
         return .init(identifier: identifier, content: content,
-                     trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: true))
+                     trigger: UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate ?? nextFireDate()!), repeats: false))
     }
     static func saveRoute(userId: UUID, defaults: UserDefaults = .standard) {
         defaults.set(userId.uuidString, forKey: routeKey)

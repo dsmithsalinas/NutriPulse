@@ -6,6 +6,7 @@ enum FootingQuickAction: String, AppEnum, Codable {
     case talkToLog
     case logFavorite
     case logDose
+    case offScript
 
     static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Footing action")
     static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
@@ -13,6 +14,7 @@ enum FootingQuickAction: String, AppEnum, Codable {
         .talkToLog: "Talk to Log",
         .logFavorite: "Log a favorite",
         .logDose: "Log dose",
+        .offScript: "Today went sideways",
     ]
 }
 

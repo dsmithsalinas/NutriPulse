@@ -156,6 +156,8 @@ struct AboutYouView: View {
                 } else if vm.showLoadError {
                     loadFailedTile
                 } else {
+                    PulseMemoriesSection()
+                    BreakfastCheckinSettings()
                     allergySection
                     eatingPatternSection
                     lovesSection

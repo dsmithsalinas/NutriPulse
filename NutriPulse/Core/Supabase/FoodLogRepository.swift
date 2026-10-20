@@ -6,6 +6,27 @@ import Supabase
 // Classes are for things that need identity or shared mutable state (ViewModels, AppState).
 
 struct FoodLogRepository {
+    func familiarHistory() async throws -> [FoodLog] {
+        let id = try await supabase.auth.session.user.id
+        let logs: [FoodLog] = try await supabase.from("food_logs")
+            .select("*, food_items(name, brand, serving_desc)")
+            .eq("user_id", value: id)
+            .lte("log_date", value: Date.now.isoDateString)
+            .order("logged_at", ascending: false).limit(200).execute().value
+        guard (try? await supabase.auth.session.user.id) == id else { throw URLError(.userAuthenticationRequired) }
+        return logs
+    }
+
+    func latestLoggedDate(before date: Date) async throws -> String? {
+        struct Row: Decodable { let log_date: String }
+        let rows: [Row] = try await supabase.from("food_logs")
+            .select("log_date")
+            .lt("log_date", value: date.isoDateString)
+            .order("log_date", ascending: false)
+            .limit(1)
+            .execute().value
+        return rows.first?.log_date
+    }
     // SWIFT CONCEPT — `async throws` = async function that can fail.
     // Callers use `try await`. It's equivalent to `Promise<T>` that can reject in TS.
     func fetchLogs(for date: Date) async throws -> [FoodLog] {

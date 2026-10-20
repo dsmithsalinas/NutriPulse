@@ -190,12 +190,12 @@ final class ProgressTrendTests: XCTestCase {
         XCTAssertEqual(window.upperBound, date(23))
     }
 
-    func testTryThisFlagsAverageBelowFloor() {
+    func testTryThisDoesNotInferShortfallFromPartialEntries() {
         let metrics = ProgressMetrics(
             summaries: [summary(8, protein: 100), summary(9, protein: 100)],
             proteinGoal: 130
         )
-        XCTAssertTrue(ProgressTryThisBuilder.text(metrics).contains("under your floor"))
+        XCTAssertTrue(ProgressTryThisBuilder.text(metrics).contains("may cover only part"))
     }
 
     func testTryThisPraisesWhenFloorIsCleared() {
@@ -618,7 +618,7 @@ final class ProteinFloorGoalTests: XCTestCase {
         XCTAssertEqual(result.totalDays, ProteinFloorGoal.windowDays)
     }
 
-    func testStreakSkipsMissingDaysButStopsAtAConfirmedMiss() {
+    func testPartialDaysStayUnknownAndDoNotBreakConfirmedWins() {
         let today = date("2026-08-30")
         let summaries = [
             summary(calendar.date(byAdding: .day, value: -3, to: today)!, protein: 90),   // below
@@ -628,6 +628,8 @@ final class ProteinFloorGoalTests: XCTestCase {
         ]
         let result = ProteinFloorGoal.summary(from: summaries, floorTarget: 130, today: today, calendar: calendar)!
         XCTAssertEqual(result.currentStreak, 2)
+        XCTAssertEqual(result.days[result.days.count - 4].state, .missing)
+        XCTAssertFalse(result.days.contains { $0.state == .notMet })
     }
 
     func testTodayProgressAndCaption() {
@@ -635,7 +637,7 @@ final class ProteinFloorGoalTests: XCTestCase {
         let underFloor = ProteinFloorGoal.summary(
             from: [summary(today, protein: 90)], floorTarget: 130, today: today, calendar: calendar
         )!
-        XCTAssertEqual(underFloor.todayCaption, "40g to go")
+        XCTAssertEqual(underFloor.todayCaption, "90g logged · day not assessed")
         XCTAssertFalse(underFloor.todayMet)
         XCTAssertEqual(underFloor.todayProgress, 90.0 / 130.0, accuracy: 0.0001)
 
@@ -647,11 +649,11 @@ final class ProteinFloorGoalTests: XCTestCase {
         XCTAssertEqual(clearedFloor.todayProgress, 1, accuracy: 0.0001)
     }
 
-    func testNoLogTodayShowsFullRemainingFloor() {
+    func testNoLogTodayShowsUnknownIntake() {
         let today = date("2026-08-30")
         let result = ProteinFloorGoal.summary(from: [], floorTarget: 130, today: today, calendar: calendar)!
         XCTAssertEqual(result.todayProteinG, 0)
-        XCTAssertEqual(result.todayCaption, "130g to go")
+        XCTAssertEqual(result.todayCaption, "No food logged today")
         XCTAssertFalse(result.todayMet)
     }
 }
@@ -2707,6 +2709,28 @@ final class LocalStoreSyncStateTests: XCTestCase {
         return try container.mainContext.fetch(descriptor).first
     }
 
+    func testReviewedMealIsAtomicAndKeepsSourceSnapshots() throws {
+        let id = try insertLog(quantity: 2)
+        let source = try XCTUnwrap(row(id)).asFoodLog
+        let second = FoodLog(id: UUID(), userId: userId, loggedAt: .now, logDate: "2026-07-07",
+            meal: .lunch, foodItemId: UUID(), quantity: 1, caloriesSnapshot: 250,
+            proteinGSnapshot: 30, carbsGSnapshot: 20, fatGSnapshot: 5, fiberGSnapshot: 2,
+            foodItems: .init(name: "Chicken", brand: nil, servingDesc: nil))
+        // A failure on the second item must roll back the first, not leave a partial copy.
+        XCTAssertThrowsError(try LocalStore.shared.insertRepeatedMeal(
+            [source, second], quantities: [second.id: .nan], userId: userId,
+            logDate: "2026-07-19", meal: .lunch))
+        let target = Date.fromISODateString("2026-07-19")!
+        XCTAssertTrue(try LocalStore.shared.fetchFoodLogs(for: target, userId: userId).isEmpty)
+        try LocalStore.shared.insertRepeatedMeal([source, second], quantities: [source.id: 1.5],
+            userId: userId, logDate: "2026-07-19", meal: .lunch)
+        let saved = try LocalStore.shared.fetchFoodLogs(for: target, userId: userId)
+        XCTAssertEqual(saved.count, 2)
+        XCTAssertEqual(saved.first { $0.foodItemId == source.foodItemId }?.totalCalories, 150)
+        XCTAssertEqual(try row(id)?.quantity, 2) // source meal stays intact
+        XCTAssertTrue(try LocalStore.shared.fetchFoodLogs(for: target, userId: UUID()).isEmpty)
+    }
+
     // MARK: Create
 
     func testCleanCreatePushMarksSynced() throws {
@@ -3343,8 +3367,8 @@ final class DayNudgeTests: XCTestCase {
 
     func testMorningsStayQuietEvenAfterAWorkout() {
         XCTAssertNil(nudge(protein: 0, calories: 0, workouts: [workout()], hour: 9))
-        XCTAssertNotNil(nudge(protein: 0, calories: 0, workouts: [workout()], hour: 14),
-                        "2pm is the existing afternoon gate")
+        XCTAssertNil(nudge(protein: 0, calories: 0, workouts: [workout()], hour: 14),
+                     "An empty diary cannot establish under-eating, even after a workout")
     }
 
     // The workout-aware part: 75% of protein is fine on a rest day but behind on a
@@ -4023,12 +4047,12 @@ final class StrongWeekReminderTests: XCTestCase {
         let userId = UUID()
         let request = StrongWeekReminder.request(userId: userId)
         let trigger = try XCTUnwrap(request.trigger as? UNCalendarNotificationTrigger)
-        XCTAssertTrue(trigger.repeats)
-        XCTAssertEqual(trigger.dateComponents.weekday, 2)
+        XCTAssertFalse(trigger.repeats)
+        XCTAssertEqual(Calendar.current.component(.weekday, from: trigger.nextTriggerDate()!), 2)
         XCTAssertEqual(trigger.dateComponents.hour, 8)
         XCTAssertEqual(trigger.dateComponents.minute, 0)
         XCTAssertNil(trigger.dateComponents.timeZone)
-        XCTAssertNil(trigger.dateComponents.year)
+        XCTAssertNotNil(trigger.dateComponents.year)
         XCTAssertEqual(request.content.userInfo["userId"] as? String, userId.uuidString)
         XCTAssertEqual(request.content.userInfo["destination"] as? String, "strong_week")
         XCTAssertFalse(request.identifier.hasPrefix(NotificationManager.smartIdentifierPrefix))
@@ -5019,5 +5043,849 @@ final class FirstDayChecklistTests: XCTestCase {
         FirstDayChecklistStore.markCompleted(on: "2026-10-20", userId: "a", defaults: defaults)
         FirstDayChecklistStore.markCompleted(on: "2026-10-21", userId: "a", defaults: defaults)
         XCTAssertEqual(FirstDayChecklistStore.completedOn(userId: "a", defaults: defaults), "2026-10-20")
+    }
+}
+
+// MARK: - Return experience and incomplete food diaries
+final class ReturnExperienceTests: XCTestCase {
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .gregorian)
+        value.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        return value
+    }
+
+    private func date(_ day: Int, month: Int = 10, hour: Int = 12) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour))!
+    }
+
+    func testReturnRequiresThreeCompletedBlankDaysAndSuccessfulHistory() {
+        let today = date(19)
+        func eligible(_ last: Date?, hasFood: Bool = false, loaded: Bool = true) -> Bool {
+            ReturnExperience.isEligible(lastLoggedDate: last, today: today,
+                hasFoodToday: hasFood, historyLoaded: loaded, calendar: calendar)
+        }
+        XCTAssertTrue(eligible(date(15))) // 16, 17, 18 are complete blank days
+        XCTAssertTrue(eligible(date(1))) // history beyond the seven-day sync window
+        XCTAssertFalse(eligible(date(16)))
+        XCTAssertFalse(eligible(nil)) // no existing history / new account
+        XCTAssertFalse(eligible(date(15), loaded: false)) // fetch failure is unknown
+        XCTAssertFalse(eligible(date(15), hasFood: true)) // first save ends return state
+        XCTAssertFalse(eligible(date(20))) // future data cannot establish a gap
+    }
+
+    func testGapUsesLocalCalendarDaysAcrossDST() {
+        // Nov 1 ends daylight saving: counting 24-hour intervals would be wrong.
+        XCTAssertTrue(ReturnExperience.isEligible(
+            lastLoggedDate: date(29, hour: 23), today: date(2, month: 11, hour: 1),
+            hasFoodToday: false, historyLoaded: true, calendar: calendar))
+    }
+
+    func testPartialDayIsUnknownAcrossProgressGoalsAndRecap() {
+        let day = DailySummary(date: date(15), calories: 400, proteinG: 32,
+            carbsG: 40, fatG: 10, fiberG: 4)
+        let win = DailySummary(date: date(14), calories: 1600, proteinG: 140,
+            carbsG: 140, fatG: 50, fiberG: 20)
+        XCTAssertNil(day.proteinFloorHit(target: 130))
+        XCTAssertEqual(win.proteinFloorHit(target: 130), true)
+        XCTAssertNil(win.proteinFloorHit(target: nil))
+        let progress = ProgressMetrics(summaries: [win, day], proteinGoal: 130)
+        XCTAssertEqual(progress.state(for: day), .unknown)
+        XCTAssertEqual(progress.metCount, 1)
+        XCTAssertEqual(progress.unknownGoalCount, 1)
+        let floor = ProteinFloorGoal.summary(from: [win, day], floorTarget: 130,
+            today: date(19), calendar: calendar)!
+        XCTAssertFalse(floor.days.contains { $0.state == .notMet })
+        XCTAssertEqual(floor.loggedDays, 2) // retain actual records, don't erase partial days
+        let recap = WeeklyRecapDigest.build(
+            interval: (start: date(12, hour: 0), end: date(18, hour: 0), priorStart: date(5, hour: 0)),
+            summaries: [win, day], movement: [], weightLogs: [], checkIns: [],
+            foodNames: [], proteinGoal: 130, calendar: calendar)
+        XCTAssertNil(recap.days.first { $0.proteinG == 32 }?.proteinFloorHit)
+        XCTAssertEqual(recap.proteinFloorDays, 1)
+    }
+}
+
+// Opt-in production integration check. The operator provisions a disposable, synthetic
+// account and places credentials at this private path only for the duration of the run.
+// Normal CI never authenticates or spends model tokens; absence of the file skips this test.
+@MainActor
+final class SignedInReturnExperienceTests: XCTestCase {
+    func testReturnMealSyncPartialProgressAndPulse() async throws {
+        let root = URL(fileURLWithPath: "/private/tmp/footing-return-e2e")
+        func phase(_ name: String) {
+            try? Data(name.utf8).write(to: root.appendingPathComponent("ios-phase.txt"), options: .atomic)
+        }
+        phase("read credentials")
+        let credentialsURL = root.appendingPathComponent("ios-credentials.json")
+        guard FileManager.default.fileExists(atPath: credentialsURL.path) else {
+            throw XCTSkip("Requires the isolated signed-in return-experience fixture")
+        }
+        struct Credentials: Decodable {
+            let email: String
+            let password: String
+            let userId: UUID
+            let projectRef: String
+        }
+        let credentials = try JSONDecoder().decode(Credentials.self, from: Data(contentsOf: credentialsURL))
+        guard credentials.projectRef == "dcabdzuhuixlcgwavtsc",
+              credentials.email.hasPrefix("footing-return-e2e-"),
+              Config.supabaseURL.contains(credentials.projectRef) else {
+            XCTFail("The live check must use the isolated test fixture on the linked project")
+            return
+        }
+        if let existing = try? await supabase.auth.session, existing.user.id != credentials.userId {
+            throw XCTSkip("An unrelated session is present; never replace it for a test")
+        }
+        phase("email sign-in")
+        let auth = AuthViewModel()
+        auth.email = credentials.email
+        auth.password = credentials.password
+        await auth.submitEmail()
+        XCTAssertNil(auth.errorMessage)
+        phase("read signed-in session")
+        let session = try await supabase.auth.session
+        XCTAssertEqual(session.user.id, credentials.userId)
+        do {
+            phase("configure local store")
+            let schema = Schema(versionedSchema: NutriPulseSchemaLatest.self)
+            let container = try ModelContainer(for: schema,
+                configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            LocalStore.shared.configure(with: container)
+            phase("load Pulse preferences")
+            await PulseProfileStore.shared.load()
+            let today = TodayViewModel()
+            phase("load return history")
+            await today.loadData()
+            XCTAssertTrue(today.showsReturnExperience, "A successfully fetched eight-day gap should offer Start with today")
+            XCTAssertTrue(today.foodLogs.isEmpty)
+            let sourceDate = try XCTUnwrap(today.recentMealDate)
+            phase("review recent meal")
+            let source = await today.mealLogs(from: sourceDate, meal: .breakfast)
+            XCTAssertEqual(source.count, 2, "History beyond the seven-day sync window must be available for review")
+            XCTAssertEqual(source.reduce(0) { $0 + $1.totalProteinG }, 32)
+            phase("save reviewed meal")
+            let saved = await today.repeatMeal(from: sourceDate, meal: .breakfast)
+            XCTAssertTrue(saved)
+            XCTAssertFalse(today.showsReturnExperience, "A successful first entry must end the return state")
+            XCTAssertEqual(today.totalProteinG, 32)
+            XCTAssertFalse(today.proteinGoalHit)
+
+            // RepeatMeal starts a background push; wait for the same production sync path.
+            phase("sync reviewed meal")
+            var remote: [FoodLog] = []
+            for _ in 0..<12 {
+                await SyncEngine.shared.pushPendingChanges()
+                remote = try await FoodLogRepository().fetchLogs(for: .now)
+                if remote.count == 2 { break }
+                try await Task.sleep(for: .milliseconds(250))
+            }
+            XCTAssertEqual(remote.count, 2)
+            XCTAssertEqual(Set(remote.map(\.id)).count, 2)
+            XCTAssertTrue(Set(remote.map(\.id)).isDisjoint(with: Set(source.map(\.id))))
+            let preserved = try await FoodLogRepository().fetchLogs(for: Date.fromISODateString(sourceDate)!)
+            XCTAssertEqual(Set(preserved.map(\.id)), Set(source.map(\.id)))
+
+            phase("read analytics")
+            let summaries = try await AnalyticsRepository().fetchDailySummaries(days: 14)
+            let current = try XCTUnwrap(summaries.last)
+            let metrics = ProgressMetrics(summaries: summaries, proteinGoal: 130)
+            XCTAssertEqual(metrics.state(for: current), .unknown)
+            XCTAssertEqual(metrics.metCount, 1, "The separate confirmed floor win must survive")
+            let floor = try XCTUnwrap(ProteinFloorGoal.summary(from: summaries, floorTarget: 130))
+            XCTAssertEqual(floor.days.last?.state, .missing)
+            XCTAssertFalse(floor.days.contains { $0.state == .notMet })
+            phase("reload Today")
+            let reloaded = TodayViewModel()
+            await reloaded.loadData()
+            XCTAssertFalse(reloaded.showsReturnExperience)
+            XCTAssertEqual(reloaded.totalProteinG, 32)
+
+            // Production context assembly, authenticated function invocation, parsing and
+            // saved chat history all run through the same view model as the signed-in app.
+            phase("load Pulse")
+            let coach = CoachViewModel()
+            await coach.loadIfNeeded()
+            phase("send live Pulse chat")
+            await coach.sendMessage("I was on vacation and didn't log most days. I've logged only breakfast today, not everything I ate. Did I miss my goals, and do I need to catch up?")
+            XCTAssertNil(coach.error)
+            let reply = try XCTUnwrap(coach.messages.last(where: { $0.role == "assistant" }))
+            XCTAssertFalse(reply.content.isEmpty)
+            let history = try await CoachRepository().fetchHistory()
+            // Chat displays an optimistic client ID; persistence assigns the server ID.
+            let persistedReply = try XCTUnwrap(history.last {
+                $0.role == "assistant" && $0.userId == credentials.userId
+                    && $0.content == reply.content && $0.payload == reply.payload
+            })
+            let reloadedCoach = CoachViewModel()
+            await reloadedCoach.loadIfNeeded()
+            XCTAssertTrue(reloadedCoach.messages.contains { $0.id == persistedReply.id })
+            phase("request live weekly recap")
+            await coach.requestWeeklyRecap()
+            XCTAssertNil(coach.error)
+            let recap = try XCTUnwrap(coach.messages.last(where: { $0.messageType == "weekly_summary" }))
+            XCTAssertNotNil(recap.payload?.recap)
+            let result: [String: Any] = [
+                "signedIn": true, "returnCardShown": true, "sourceItems": source.count,
+                "mealSavedAndSynced": remote.count == 2, "partialDayState": "unknown",
+                "confirmedFloorDays": metrics.metCount, "returnCardGoneAfterReload": !reloaded.showsReturnExperience,
+                "chatReply": reply.content, "chatPersistedAndReloaded": true, "weeklyRecap": recap.content,
+                "structuredRecap": ["story": recap.payload?.recap?.story ?? "", "wentWell": recap.payload?.recap?.wentWell ?? "",
+                                    "pattern": recap.payload?.recap?.pattern ?? "", "focus": recap.payload?.recap?.focus ?? ""]
+            ]
+            let report = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+            try report.write(to: root.appendingPathComponent("ios-results.json"), options: .atomic)
+            let attachment = XCTAttachment(string: String(decoding: report, as: UTF8.self))
+            attachment.name = "Signed-in return experience — synthetic account"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            try await supabase.auth.signOut()
+        } catch {
+            let failure = error as NSError
+            print("Signed-in return failure domain: \(failure.domain), code: \(failure.code)")
+            try? await supabase.auth.signOut()
+            throw error
+        }
+    }
+}
+
+final class LighterTrackingSettingTests: XCTestCase {
+    func testExpiryAndOptionalContextAreIndependentOfGoals() {
+        let now = Date(timeIntervalSince1970: 1_792_000_000)
+        let id = UUID()
+        let mode = LighterTrackingSetting.start(userId: id, reason: nil, duration: .untilReady, now: now)
+        XCTAssertTrue(mode.isActive(at: now))
+        XCTAssertNil(mode.reason)
+        XCTAssertNil(mode.endsAt)
+        var bounded = LighterTrackingSetting.start(userId: id, reason: .feelingUnwell, duration: .threeDays, now: now)
+        XCTAssertTrue(bounded.isActive(at: now))
+        XCTAssertFalse(bounded.isActive(at: bounded.endsAt!))
+        XCTAssertFalse(bounded.isActive(at: now.addingTimeInterval(-1)))
+        bounded.enabled = false
+        XCTAssertFalse(bounded.isActive(at: now))
+    }
+
+    func testResumeEncodesExplicitNullsForUpsert() throws {
+        let setting = LighterTrackingSetting(userId: UUID())
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(setting)) as? [String: Any])
+        XCTAssertTrue(body["reason"] is NSNull)
+        XCTAssertTrue(body["started_at"] is NSNull)
+        XCTAssertTrue(body["ends_at"] is NSNull)
+        XCTAssertEqual(body["enabled"] as? Bool, false)
+    }
+
+    func testDurationPreservesLocalTimeAcrossDaylightSaving() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let start = calendar.date(from: DateComponents(year: 2026, month: 10, day: 30, hour: 14))!
+        let end = LighterTrackingSetting.Duration.threeDays.endDate(from: start, calendar: calendar)!
+        XCTAssertEqual(calendar.component(.hour, from: end), 14)
+        XCTAssertEqual(calendar.component(.day, from: end), 2)
+        XCTAssertEqual(end.timeIntervalSince(start), 73 * 3600)
+    }
+}
+
+@MainActor
+private final class TestTrackingRepository: TrackingPreferencesRepositoryProtocol {
+    var rows: [UUID: LighterTrackingSetting] = [:]
+    var fails = false
+    var holdFetch = false
+    var pending: CheckedContinuation<LighterTrackingSetting?, Error>?
+    func fetch(userId: UUID) async throws -> LighterTrackingSetting? {
+        if holdFetch { return try await withCheckedThrowingContinuation { pending = $0 } }
+        if fails { throw TrackingPreferencesStore.SaveError.unavailable }
+        return rows[userId]
+    }
+    func save(_ setting: LighterTrackingSetting) async throws -> LighterTrackingSetting {
+        if fails { throw TrackingPreferencesStore.SaveError.unavailable }
+        rows[setting.userId] = setting
+        return setting
+    }
+}
+
+@MainActor
+final class TrackingPreferencesStoreTests: XCTestCase {
+    private func defaults() -> UserDefaults {
+        let name = "lighter-tracking-tests-\(UUID())"
+        let value = UserDefaults(suiteName: name)!
+        value.removePersistentDomain(forName: name)
+        addTeardownBlock { UserDefaults(suiteName: name)?.removePersistentDomain(forName: name) }
+        return value
+    }
+
+    func testPauseAndResumePreserveStoredReminderAndPulsePreferences() async throws {
+        let repo = TestTrackingRepository(), prefs = defaults(), id = UUID()
+        prefs.set(true, forKey: NotificationManager.smartCoachingEnabledKey)
+        prefs.set(false, forKey: StrongWeekReminder.preferenceKey(userId: id))
+        prefs.set(true, forKey: "pulse.enabled")
+        let store = TrackingPreferencesStore(defaults: prefs, repository: repo)
+        store.setAccount(id)
+        XCTAssertTrue(store.suppressesGoalPrompts, "Unloaded settings are unknown")
+        await store.load()
+        XCTAssertFalse(store.suppressesGoalPrompts)
+        try await store.start(reason: .vacation, duration: .untilReady)
+        XCTAssertTrue(store.isActive)
+        XCTAssertTrue(store.suppressesGoalPrompts)
+        XCTAssertTrue(prefs.bool(forKey: NotificationManager.smartCoachingEnabledKey))
+        XCTAssertFalse(prefs.bool(forKey: StrongWeekReminder.preferenceKey(userId: id)))
+        XCTAssertTrue(prefs.bool(forKey: "pulse.enabled"))
+        try await store.resume()
+        XCTAssertFalse(store.isActive)
+        XCTAssertFalse(store.suppressesGoalPrompts)
+        XCTAssertNil(store.setting?.reason)
+        XCTAssertNil(store.setting?.endsAt)
+        XCTAssertTrue(prefs.bool(forKey: NotificationManager.smartCoachingEnabledKey))
+    }
+
+    func testEditingReasonKeepsEndTimeAndFailedResumeKeepsPause() async throws {
+        let repo = TestTrackingRepository(), store = TrackingPreferencesStore(defaults: defaults(), repository: repo)
+        store.setAccount(UUID())
+        await store.load()
+        try await store.start(reason: .vacation, duration: .threeDays)
+        let end = store.setting?.endsAt
+        try await store.update(reason: .feelingUnwell, duration: nil)
+        XCTAssertEqual(store.setting?.endsAt, end)
+        XCTAssertEqual(store.setting?.reason, .feelingUnwell)
+        repo.fails = true
+        do { try await store.resume(); XCTFail("Expected save failure") } catch { }
+        XCTAssertTrue(store.isActive)
+        XCTAssertFalse(store.isSaving)
+    }
+
+    func testCachedPauseSurvivesRestartButNeverCrossesAccountsOrSignOut() async throws {
+        let repo = TestTrackingRepository(), prefs = defaults(), first = UUID(), second = UUID()
+        let store = TrackingPreferencesStore(defaults: prefs, repository: repo)
+        store.setAccount(first)
+        await store.load()
+        try await store.start(reason: .feelingUnwell, duration: .untilReady)
+        let restart = TrackingPreferencesStore(defaults: prefs, repository: repo)
+        restart.setAccount(first)
+        XCTAssertTrue(restart.isActive)
+        restart.setAccount(second)
+        XCTAssertFalse(restart.isActive)
+        XCTAssertNil(restart.setting?.reason)
+        await restart.load()
+        XCTAssertFalse(restart.suppressesGoalPrompts)
+        store.setAccount(nil)
+        let signedOut = TrackingPreferencesStore(defaults: prefs, repository: repo)
+        signedOut.setAccount(first)
+        XCTAssertFalse(signedOut.isActive)
+        XCTAssertNil(signedOut.setting)
+    }
+
+    func testFailedRefreshAndStaleAccountResponseDoNotResumeOrLeakContext() async throws {
+        let repo = TestTrackingRepository(), store = TrackingPreferencesStore(defaults: defaults(), repository: repo)
+        let first = UUID(), second = UUID()
+        store.setAccount(first)
+        await store.load()
+        repo.fails = true
+        await store.load()
+        XCTAssertTrue(store.loadFailed)
+        XCTAssertTrue(store.suppressesGoalPrompts)
+        repo.fails = false
+        repo.holdFetch = true
+        let load = Task { await store.load() }
+        while repo.pending == nil { await Task.yield() }
+        store.setAccount(second)
+        repo.pending?.resume(returning: .start(userId: first, reason: .feelingUnwell, duration: .untilReady))
+        await load.value
+        XCTAssertNil(store.setting)
+        XCTAssertFalse(store.isActive)
+        XCTAssertEqual(store.accountId, second)
+    }
+
+    func testExpiredPauseWaitsForChoiceWithoutCarryingIllnessForward() async {
+        let repo = TestTrackingRepository(), id = UUID()
+        repo.rows[id] = .init(userId: id, enabled: true, reason: .feelingUnwell,
+                             startedAt: .now.addingTimeInterval(-100), endsAt: .now.addingTimeInterval(-1))
+        let store = TrackingPreferencesStore(defaults: defaults(), repository: repo)
+        store.setAccount(id)
+        await store.load()
+        XCTAssertTrue(store.isActive)
+        XCTAssertTrue(store.needsResumeChoice)
+        XCTAssertNil(store.contextReason)
+        XCTAssertTrue(store.suppressesGoalPrompts)
+    }
+}
+
+/// Opt-in production check; only disposable fixtures on a dedicated simulator are allowed.
+@MainActor
+final class SignedInLighterTrackingTests: XCTestCase {
+    func testPauseLoggingPulseAndResume() async throws {
+        let root = URL(fileURLWithPath: "/private/tmp/footing-return-e2e")
+        let file = root.appendingPathComponent("ios-credentials.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { throw XCTSkip("Requires disposable signed-in fixture") }
+        struct Credentials: Decodable { let email: String; let password: String; let userId: UUID; let projectRef: String }
+        let fixture = try JSONDecoder().decode(Credentials.self, from: Data(contentsOf: file))
+        guard fixture.email.hasPrefix("footing-return-e2e-"), fixture.projectRef == "dcabdzuhuixlcgwavtsc",
+              Config.supabaseURL.contains(fixture.projectRef) else { XCTFail("Invalid fixture"); return }
+        if let existing = try? await supabase.auth.session, existing.user.id != fixture.userId {
+            throw XCTSkip("Never replace an unrelated session")
+        }
+        let auth = AuthViewModel(); auth.email = fixture.email; auth.password = fixture.password
+        await auth.submitEmail(); XCTAssertNil(auth.errorMessage)
+        let session = try await supabase.auth.session
+        XCTAssertEqual(session.user.id, fixture.userId)
+        do {
+            let schema = Schema(versionedSchema: NutriPulseSchemaLatest.self)
+            let container = try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            LocalStore.shared.configure(with: container)
+            await PulseProfileStore.shared.load()
+            let store = TrackingPreferencesStore.shared
+            store.setAccount(fixture.userId); await store.load()
+            XCTAssertFalse(store.isActive)
+            let weeklyBefore = StrongWeekReminder.enabled(userId: fixture.userId)
+            let smartBefore = UserDefaults.standard.bool(forKey: NotificationManager.smartCoachingEnabledKey)
+            try await store.start(reason: .vacation, duration: .oneWeek)
+            XCTAssertTrue(store.isActive); XCTAssertTrue(store.suppressesGoalPrompts)
+            let reloaded = TrackingPreferencesStore()
+            reloaded.setAccount(fixture.userId); await reloaded.load()
+            XCTAssertTrue(reloaded.isActive); XCTAssertEqual(reloaded.setting?.reason, .vacation)
+            let today = TodayViewModel(); await today.loadData()
+            XCTAssertFalse(today.showsReturnExperience)
+            let sourceDate = try XCTUnwrap(today.recentMealDate)
+            let saved = await today.repeatMeal(from: sourceDate, meal: .breakfast)
+            XCTAssertTrue(saved)
+            var remote: [FoodLog] = []
+            for _ in 0..<12 {
+                await SyncEngine.shared.pushPendingChanges()
+                remote = try await FoodLogRepository().fetchLogs(for: .now)
+                if remote.count == 2 { break }
+                try await Task.sleep(for: .milliseconds(250))
+            }
+            XCTAssertEqual(remote.count, 2)
+            let coach = CoachViewModel(); await coach.loadIfNeeded()
+            await coach.sendMessage("I'm taking it easier on vacation. I logged only breakfast today. Please give me a brief supportive check-in without any food targets or things to catch up on.")
+            XCTAssertNil(coach.error)
+            let vacationReply = try XCTUnwrap(coach.messages.last(where: { $0.role == "assistant" }))
+            XCTAssertFalse(vacationReply.content.isEmpty)
+            let end = store.setting?.endsAt
+            try await store.update(reason: .feelingUnwell, duration: nil)
+            XCTAssertEqual(store.setting?.endsAt, end)
+            await coach.sendMessage("I changed my context to feeling unwell. I just want a little support, not a diagnosis or medication advice.")
+            XCTAssertNil(coach.error)
+            let unwellReply = try XCTUnwrap(coach.messages.last(where: { $0.role == "assistant" }))
+            let history = try await CoachRepository().fetchHistory()
+            XCTAssertTrue(history.contains { $0.role == "assistant" && $0.content == unwellReply.content })
+            try await store.resume()
+            await reloaded.load()
+            XCTAssertFalse(reloaded.isActive); XCTAssertFalse(reloaded.suppressesGoalPrompts)
+            XCTAssertNil(reloaded.setting?.reason); XCTAssertNil(reloaded.setting?.startedAt); XCTAssertNil(reloaded.setting?.endsAt)
+            XCTAssertEqual(StrongWeekReminder.enabled(userId: fixture.userId), weeklyBefore)
+            XCTAssertEqual(UserDefaults.standard.bool(forKey: NotificationManager.smartCoachingEnabledKey), smartBefore)
+            let report: [String: Any] = ["signedIn": true, "pausePersisted": true, "loggingSynced": remote.count == 2,
+                "vacationReply": vacationReply.content, "unwellReply": unwellReply.content, "chatPersisted": true,
+                "resumeClearedContext": true, "reminderPreferencesPreserved": true]
+            let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+            try data.write(to: root.appendingPathComponent("lighter-ios-results.json"), options: .atomic)
+            let attachment = XCTAttachment(string: String(decoding: data, as: UTF8.self))
+            attachment.name = "Signed-in lighter tracking — synthetic account"; attachment.lifetime = .keepAlways; add(attachment)
+            try await supabase.auth.signOut()
+        } catch {
+            try? await supabase.auth.signOut()
+            throw error
+        }
+    }
+}
+
+final class FamiliarFoodsAndMealNoteTests: XCTestCase {
+    func testFamiliarFoodsSurviveLongBreakAndKeepLatestPortion() {
+        let now = Date.now
+        let id = UUID(), owner = UUID()
+        func log(_ food: UUID, daysAgo: Int, quantity: Double = 1) -> FoodLog {
+            let date = Calendar.current.date(byAdding: .day, value: -daysAgo, to: now)!
+            return FoodLog(id: UUID(), userId: owner, loggedAt: date, logDate: date.isoDateString,
+                meal: .breakfast, foodItemId: food, quantity: quantity, caloriesSnapshot: 100,
+                proteinGSnapshot: 10, carbsGSnapshot: 5, fatGSnapshot: 2, fiberGSnapshot: 1,
+                foodItems: .init(name: "Usual breakfast", brand: nil, servingDesc: "1 bowl"))
+        }
+        let older = log(id, daysAgo: 30), latest = log(id, daysAgo: 8, quantity: 0.5)
+        let occasional = log(UUID(), daysAgo: 7)
+        let future = log(UUID(), daysAgo: -1)
+        let suggestions = FamiliarFoods.suggestions([older,latest,occasional,future], now: now)
+        XCTAssertEqual(suggestions.count, 2)
+        XCTAssertEqual(suggestions.first?.id, latest.id)
+        XCTAssertEqual(suggestions.first?.quantity, 0.5)
+        XCTAssertFalse(suggestions.contains { $0.id == future.id })
+        XCTAssertEqual(FamiliarFoods.suggestions([older,latest,occasional],limit: 1,now: now).count,1)
+    }
+    func testOldDatesDoNotCollapseIntoSameWeekday() {
+        let now = Date.now
+        let first = Calendar.current.date(byAdding: .day, value: -14, to: now)!
+        let second = Calendar.current.date(byAdding: .day, value: -21, to: now)!
+        XCTAssertNotEqual(RecentFoodsGrouper.dayLabel(for: first, now: now, calendar: .current),
+                          RecentFoodsGrouper.dayLabel(for: second, now: now, calendar: .current))
+    }
+    func testMealNoteValidationAndEncodingHaveNoNutrition() throws {
+        XCTAssertNil(MealNote.validBody(" \n "))
+        XCTAssertNil(MealNote.validBody(String(repeating: "x", count: 1001)))
+        XCTAssertEqual(MealNote.validBody("  Lunch out  "), "Lunch out")
+        let note = MealNote(userId: UUID(), logDate: "2026-10-19", meal: .lunch, body: "Lunch out")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(note)) as? [String: Any])
+        XCTAssertEqual(Set(json.keys), Set(["id","user_id","log_date","meal","body"]))
+    }
+}
+
+@MainActor
+final class SignedInMealNoteTests: XCTestCase {
+    func testNoteLifecycleAndFamiliarFoodAfterBreak() async throws {
+        let root = URL(fileURLWithPath: "/private/tmp/footing-return-e2e")
+        let file = root.appendingPathComponent("ios-credentials.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { throw XCTSkip("Requires disposable signed-in fixture") }
+        struct Fixture: Decodable { let email: String; let password: String; let userId: UUID; let projectRef: String }
+        let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: file))
+        guard fixture.email.hasPrefix("footing-return-e2e-"), fixture.projectRef == "dcabdzuhuixlcgwavtsc",
+              Config.supabaseURL.contains(fixture.projectRef) else { XCTFail("Invalid fixture"); return }
+        if let existing = try? await supabase.auth.session, existing.user.id != fixture.userId { throw XCTSkip("Never replace another session") }
+        let auth = AuthViewModel(); auth.email = fixture.email; auth.password = fixture.password
+        await auth.submitEmail(); XCTAssertNil(auth.errorMessage)
+        do {
+            let schema = Schema(versionedSchema: NutriPulseSchemaLatest.self)
+            let container = try ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            LocalStore.shared.configure(with: container)
+            await PulseProfileStore.shared.load()
+            TrackingPreferencesStore.shared.setAccount(fixture.userId); await TrackingPreferencesStore.shared.load()
+            let repository = MealNoteRepository()
+            let history = try await FoodLogRepository().familiarHistory()
+            let suggestions = FamiliarFoods.suggestions(history)
+            XCTAssertTrue(suggestions.contains { $0.displayName == "Greek yogurt" })
+            XCTAssertTrue(suggestions.contains { $0.logDate < Date.now.isoDateString })
+            var note = MealNote(userId: fixture.userId, logDate: Date.now.isoDateString, meal: .lunch, body: "Lunch out with friends. I don’t remember the details.")
+            try await repository.save(note)
+            try await repository.save(note) // An ambiguous retry must not duplicate the record.
+            let loaded = try await repository.fetch(for: .now)
+            XCTAssertEqual(loaded.count,1); XCTAssertEqual(loaded.first?.id,note.id)
+            let today = TodayViewModel(); await today.loadData()
+            XCTAssertEqual(today.mealNotes.count,1)
+            XCTAssertTrue(today.foodLogs.isEmpty)
+            XCTAssertFalse(today.showsReturnExperience)
+            XCTAssertEqual(today.totalProteinG,0) // Logged numeric amount only; no invented food rows.
+            XCTAssertFalse(today.proteinGoalHit)
+            let foodBefore = try await FoodLogRepository().fetchLogs(for: .now)
+            XCTAssertTrue(foodBefore.isEmpty)
+            note.body = "Lunch with friends. Details unknown."
+            try await repository.save(note)
+            let updated = try await repository.fetch(for: .now)
+            XCTAssertEqual(updated.first?.body,note.body)
+            let favoriteVM = FavoritesViewModel()
+            await favoriteVM.load()
+            XCTAssertFalse(favoriteVM.recentSections.isEmpty, "A break longer than 72 hours must not empty familiar foods")
+            let food = try XCTUnwrap(suggestions.first { $0.displayName == "Greek yogurt" })
+            let saved = await favoriteVM.logAgain(food, meal: .breakfast, date: .now, quantity: 0.5)
+            XCTAssertTrue(saved)
+            var remote: [FoodLog] = []
+            for _ in 0..<12 {
+                await SyncEngine.shared.pushPendingChanges()
+                remote = try await FoodLogRepository().fetchLogs(for: .now)
+                if remote.count == 1 { break }
+                try await Task.sleep(for: .milliseconds(250))
+            }
+            XCTAssertEqual(remote.count,1); XCTAssertEqual(remote.first?.quantity,0.5)
+            XCTAssertEqual(remote.first?.proteinGSnapshot,food.proteinGSnapshot)
+            XCTAssertNotEqual(remote.first?.id,food.id)
+            try await repository.delete(note)
+            let remaining = try await repository.fetch(for: .now)
+            XCTAssertTrue(remaining.isEmpty)
+            let report: [String: Any] = ["signedIn":true,"noteCreatedEditedDeleted":true,"retryDeduplicated":true,
+                "noteOnlyDayHasNoFoodRows":true,"noteOnlyDayNotGraded":true,"familiarFoodsAfterEightDays":true,
+                "reviewedPortionSynced":true]
+            let data = try JSONSerialization.data(withJSONObject: report,options:[.prettyPrinted,.sortedKeys])
+            try data.write(to:root.appendingPathComponent("meal-notes-ios-results.json"),options:.atomic)
+            let attachment = XCTAttachment(string:String(decoding:data,as:UTF8.self));attachment.name="Meal notes and familiar foods — synthetic account";attachment.lifetime = .keepAlways;add(attachment)
+            try await supabase.auth.signOut()
+        } catch { try? await supabase.auth.signOut(); throw error }
+    }
+}
+
+extension SignedInMealNoteTests {
+    func testPulseUsesSavedNoteWithoutInventingNutrition() async throws {
+        let root = URL(fileURLWithPath: "/private/tmp/footing-return-e2e")
+        let file = root.appendingPathComponent("ios-credentials.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { throw XCTSkip("Requires disposable fixture") }
+        struct Fixture: Decodable { let email: String; let password: String; let userId: UUID; let projectRef: String }
+        let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: file))
+        guard fixture.email.hasPrefix("footing-return-e2e-"),fixture.projectRef == "dcabdzuhuixlcgwavtsc",
+              Config.supabaseURL.contains(fixture.projectRef) else { XCTFail("Invalid fixture"); return }
+        if let existing = try? await supabase.auth.session,existing.user.id != fixture.userId { throw XCTSkip("Never replace another session") }
+        let auth = AuthViewModel();auth.email=fixture.email;auth.password=fixture.password
+        await auth.submitEmail();XCTAssertNil(auth.errorMessage)
+        do {
+            let schema = Schema(versionedSchema: NutriPulseSchemaLatest.self)
+            let container = try ModelContainer(for:schema,configurations:ModelConfiguration(isStoredInMemoryOnly:true))
+            LocalStore.shared.configure(with:container)
+            await PulseProfileStore.shared.load()
+            TrackingPreferencesStore.shared.setAccount(fixture.userId);await TrackingPreferencesStore.shared.load()
+            let repository = MealNoteRepository()
+            let note = MealNote(userId:fixture.userId,logDate:Date.now.isoDateString,meal:.lunch,body:"Lunch was a picnic by the lake. Details unknown.")
+            try await repository.save(note)
+            let before = try await FoodLogRepository().fetchLogs(for:.now)
+            let coach=CoachViewModel();await coach.loadIfNeeded()
+            await coach.sendMessage("What do you know about my lunch today? Please don't estimate any nutrition or ask me to fill in details.")
+            XCTAssertNil(coach.error)
+            let reply=try XCTUnwrap(coach.messages.last(where:{$0.role == "assistant"}))
+            XCTAssertTrue(reply.content.lowercased().contains("picnic") || reply.content.lowercased().contains("lake"))
+            let history=try await CoachRepository().fetchHistory()
+            XCTAssertTrue(history.contains{$0.role == "assistant" && $0.content == reply.content})
+            let after=try await FoodLogRepository().fetchLogs(for:.now)
+            XCTAssertEqual(Set(before.map(\.id)),Set(after.map(\.id)))
+            try await repository.delete(note)
+            let data=try JSONSerialization.data(withJSONObject:["reply":reply.content,"persisted":true,"nutritionRecordsUnchanged":true],options:[.prettyPrinted,.sortedKeys])
+            try data.write(to:root.appendingPathComponent("meal-note-pulse-results.json"),options:.atomic)
+            let attachment=XCTAttachment(string:String(decoding:data,as:UTF8.self));attachment.name="Pulse meal note — synthetic account";attachment.lifetime = .keepAlways;add(attachment)
+            try await supabase.auth.signOut()
+        } catch { try? await supabase.auth.signOut();throw error }
+    }
+}
+
+@MainActor
+private final class TestMealNoteTransport: MealNoteTransport {
+    var fails = false
+    var holdSave = false
+    var holdFetch = false
+    var pendingSave: CheckedContinuation<Void, Error>?
+    var pendingFetch: CheckedContinuation<[MealNote], Error>?
+    var remote: [UUID: MealNote] = [:]
+    var saved: [MealNote] = []
+    var deleted: [UUID] = []
+    func fetch(for date: Date) async throws -> [MealNote] {
+        if holdFetch { return try await withCheckedThrowingContinuation { pendingFetch = $0 } }
+        if fails { throw URLError(.notConnectedToInternet) }
+        return remote.values.filter { $0.logDate == date.isoDateString }
+    }
+    func save(_ note: MealNote) async throws {
+        if holdSave { try await withCheckedThrowingContinuation { pendingSave = $0 } }
+        if fails { throw URLError(.notConnectedToInternet) }
+        saved.append(note); remote[note.id] = note
+    }
+    func delete(_ note: MealNote) async throws {
+        if fails { throw URLError(.notConnectedToInternet) }
+        deleted.append(note.id); remote[note.id] = nil
+    }
+}
+
+@MainActor
+final class OfflineMealNoteTests: XCTestCase {
+    private func folder() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
+    }
+    func testOfflineSaveRestartRetryAndAccountIsolation() async throws {
+        let root = try folder(), transport = TestMealNoteTransport(), owner = UUID()
+        transport.fails = true
+        var note = MealNote(userId: owner, logDate: Date.now.isoDateString, meal: .lunch, body: "Lunch out")
+        let store = MealNoteStore(folder: root, transport: transport); store.setAccount(owner)
+        try store.save(note); note.body = "Lunch with friends"; try store.save(note)
+        XCTAssertEqual(store.pendingCount,1)
+        let synced = await store.sync(); XCTAssertFalse(synced)
+        let restart = MealNoteStore(folder: root, transport: transport); restart.setAccount(owner)
+        let offline = try await restart.fetch(for: .now)
+        XCTAssertEqual(offline.map(\.body),["Lunch with friends"])
+        restart.setAccount(UUID()); XCTAssertTrue(restart.cached(for:.now).isEmpty)
+        restart.setAccount(owner); transport.fails = false
+        let recovered = await restart.sync(); XCTAssertTrue(recovered)
+        XCTAssertEqual(restart.pendingCount,0)
+        XCTAssertEqual(transport.remote.count,1)
+        XCTAssertEqual(transport.remote[note.id]?.body,"Lunch with friends")
+    }
+    func testUndoDuringUploadDeletesAfterCreateWithoutResurrection() async throws {
+        let transport = TestMealNoteTransport(), owner = UUID()
+        let store = MealNoteStore(folder:try folder(),transport:transport);store.setAccount(owner)
+        let note=MealNote(userId:owner,logDate:Date.now.isoDateString,meal:.dinner,body:"Dinner")
+        try store.save(note);transport.holdSave = true
+        let upload=Task { await store.sync() }
+        while transport.pendingSave == nil { await Task.yield() }
+        try store.delete(note)
+        XCTAssertTrue(store.cached(for:.now).isEmpty)
+        transport.holdSave = false;transport.pendingSave?.resume()
+        let result = await upload.value;XCTAssertTrue(result)
+        XCTAssertEqual(transport.deleted,[note.id]);XCTAssertTrue(transport.remote.isEmpty)
+        XCTAssertEqual(store.pendingCount,0)
+    }
+    func testEditDuringUploadIsNotAcknowledgedAsOldVersion() async throws {
+        let transport=TestMealNoteTransport(),owner=UUID()
+        let store=MealNoteStore(folder:try folder(),transport:transport);store.setAccount(owner)
+        var note=MealNote(userId:owner,logDate:Date.now.isoDateString,meal:.breakfast,body:"Breakfast")
+        try store.save(note);transport.holdSave = true
+        let upload=Task { await store.sync() }
+        while transport.pendingSave == nil { await Task.yield() }
+        note.body="Breakfast at the hotel";try store.save(note)
+        transport.holdSave=false;transport.pendingSave?.resume()
+        let result=await upload.value;XCTAssertTrue(result)
+        XCTAssertEqual(transport.saved.map(\.body),["Breakfast","Breakfast at the hotel"])
+        XCTAssertEqual(transport.remote[note.id]?.body,note.body)
+    }
+    func testStaleFetchCannotOverwriteNewNoteOrCrossAccounts() async throws {
+        let transport=TestMealNoteTransport(),owner=UUID()
+        let store=MealNoteStore(folder:try folder(),transport:transport);store.setAccount(owner)
+        var note=MealNote(userId:owner,logDate:Date.now.isoDateString,meal:.lunch,body:"Old")
+        try store.save(note);_ = await store.sync()
+        transport.holdFetch=true
+        let fetch=Task { try await store.fetch(for:.now) }
+        while transport.pendingFetch == nil { await Task.yield() }
+        note.body="New";try store.save(note)
+        transport.pendingFetch?.resume(returning:[])
+        let notes=try await fetch.value;XCTAssertEqual(notes.first?.body,"New")
+        transport.pendingFetch=nil
+        let otherFetch=Task { try await store.fetch(for:.now) }
+        while transport.pendingFetch == nil { await Task.yield() }
+        store.setAccount(UUID());transport.pendingFetch?.resume(returning:[note])
+        do { _ = try await otherFetch.value;XCTFail("Must discard old account response") } catch {}
+        XCTAssertTrue(store.cached(for:.now).isEmpty)
+    }
+    func testFailedDiskWriteDoesNotClaimSaveOrReplaceQueue() throws {
+        let root=try folder().appendingPathComponent("file")
+        try Data().write(to:root)
+        let store=MealNoteStore(folder:root,transport:TestMealNoteTransport()),owner=UUID()
+        store.setAccount(owner)
+        XCTAssertThrowsError(try store.save(MealNote(userId:owner,logDate:Date.now.isoDateString,meal:.snack,body:"Tea")))
+        XCTAssertEqual(store.pendingCount,0)
+    }
+}
+
+@MainActor
+final class LoggingComfortTests: XCTestCase {
+    func testPreferenceIsAccountScopedAndExplicitMethodCanBeRemembered() {
+        let suite="logging-method-\(UUID())",first=UUID(),second=UUID()
+        let defaults=UserDefaults(suiteName:suite)!
+        defer { defaults.removePersistentDomain(forName:suite) }
+        XCTAssertEqual(LogMethodPreference.read(userId:first,defaults:defaults),.talk)
+        LogMethodPreference.save(.search,userId:first,defaults:defaults)
+        XCTAssertEqual(LogMethodPreference.read(userId:first,defaults:defaults),.search)
+        XCTAssertEqual(LogMethodPreference.read(userId:second,defaults:defaults),.talk)
+        XCTAssertEqual(LogMethodPreference.read(userId:nil,defaults:defaults),.talk)
+    }
+    func testExactSaveReceiptAndAtomicUndoPreserveOlderLogsAndRejectOtherOwner() throws {
+        let container=try ModelContainer(for:Schema(versionedSchema:NutriPulseSchemaLatest.self),configurations:ModelConfiguration(isStoredInMemoryOnly:true))
+        LocalStore.shared.configure(with:container)
+        let owner=UUID(),other=UUID(),old=UUID(),new=UUID(),foreign=UUID(),receipt=FoodSaveUndo()
+        func insert(_ id:UUID,_ user:UUID) throws {
+            try LocalStore.shared.insertFoodLog(id:id,userId:user,logDate:Date.now.isoDateString,meal:"lunch",foodItemId:UUID(),foodItemName:"Meal",quantity:1,caloriesSnapshot:100,proteinGSnapshot:10,carbsGSnapshot:5,fatGSnapshot:2,fiberGSnapshot:1)
+        }
+        try insert(old,owner);try insert(foreign,other)
+        try FoodSaveUndo.$current.withValue(receipt) { try insert(new,owner) }
+        XCTAssertEqual(Set(receipt.foodIDs.keys),[new])
+        XCTAssertThrowsError(try LocalStore.shared.markFoodLogsDeleted(ids:[new,foreign],userId:owner))
+        XCTAssertEqual(try LocalStore.shared.fetchFoodLogs(for:.now,userId:owner).count,2)
+        try LocalStore.shared.markFoodLogsDeleted(ids:[new],userId:owner)
+        XCTAssertEqual(try LocalStore.shared.fetchFoodLogs(for:.now,userId:owner).map(\.id),[old])
+        XCTAssertEqual(try LocalStore.shared.deletedFoodLogs().map(\.id),[new])
+        XCTAssertEqual(try LocalStore.shared.fetchFoodLogs(for:.now,userId:other).map(\.id),[foreign])
+    }
+    func testRepeatedMealReceiptUsesNewIDsAndDoesNotIncludeSource() throws {
+        let container=try ModelContainer(for:Schema(versionedSchema:NutriPulseSchemaLatest.self),configurations:ModelConfiguration(isStoredInMemoryOnly:true))
+        LocalStore.shared.configure(with:container)
+        let owner=UUID(),receipt=FoodSaveUndo()
+        let food=FoodLog(id:UUID(),userId:owner,loggedAt:.now,logDate:"2026-10-01",meal:.breakfast,foodItemId:UUID(),quantity:1,caloriesSnapshot:100,proteinGSnapshot:20,carbsGSnapshot:5,fatGSnapshot:2,fiberGSnapshot:1,foodItems:.init(name:"Yogurt",brand:nil,servingDesc:nil))
+        try FoodSaveUndo.$current.withValue(receipt) { try LocalStore.shared.insertRepeatedMeal([food],quantities:[food.id:0.5],userId:owner,logDate:Date.now.isoDateString,meal:.breakfast) }
+        XCTAssertEqual(receipt.foodIDs.count,1);XCTAssertNil(receipt.foodIDs[food.id])
+        XCTAssertEqual(receipt.savedFoods.first?.quantity,0.5)
+        var usual=UsualMeal(userId:owner,name:"My breakfast",meal:.breakfast,items:[food])
+        XCTAssertTrue(usual.isValid);usual.name="  ";XCTAssertFalse(usual.isValid)
+    }
+}
+
+@MainActor
+final class SignedInLoggingComfortTests: XCTestCase {
+    func testUndoOfflineNotesUsualMealsPreferenceAndPauseChoice() async throws {
+        let root=URL(fileURLWithPath:"/private/tmp/footing-return-e2e")
+        let file=root.appendingPathComponent("ios-credentials.json")
+        guard FileManager.default.fileExists(atPath:file.path) else { throw XCTSkip("Requires isolated signed-in fixture") }
+        struct Fixture:Decodable { let email:String;let password:String;let userId:UUID;let projectRef:String }
+        let fixture=try JSONDecoder().decode(Fixture.self,from:Data(contentsOf:file))
+        guard fixture.email.hasPrefix("footing-return-e2e-"),fixture.projectRef == "dcabdzuhuixlcgwavtsc",Config.supabaseURL.contains(fixture.projectRef) else { XCTFail("Invalid fixture");return }
+        if let existing=try? await supabase.auth.session,existing.user.id != fixture.userId { throw XCTSkip("Never replace another session") }
+        let auth=AuthViewModel();auth.email=fixture.email;auth.password=fixture.password
+        await auth.submitEmail();XCTAssertNil(auth.errorMessage)
+        do {
+            let container=try ModelContainer(for:Schema(versionedSchema:NutriPulseSchemaLatest.self),configurations:ModelConfiguration(isStoredInMemoryOnly:true))
+            LocalStore.shared.configure(with:container)
+            await PulseProfileStore.shared.load()
+            let tracking=TrackingPreferencesStore.shared
+            tracking.setAccount(fixture.userId);await tracking.load()
+            MealNoteStore.shared.setAccount(fixture.userId)
+            SyncEngine.shared.isOnline=false
+            let note=MealNote(userId:fixture.userId,logDate:Date.now.isoDateString,meal:.lunch,body:"Lunch away from a connection")
+            try await MealNoteRepository().save(note)
+            XCTAssertTrue(MealNoteStore.shared.isPending(note.id))
+            let restart=MealNoteStore();restart.setAccount(fixture.userId)
+            XCTAssertEqual(restart.cached(for:.now).first?.body,note.body)
+            let offlineRead=try await MealNoteRepository().fetch(for:.now)
+            XCTAssertTrue(offlineRead.contains{$0.id == note.id})
+            let noteUndo=FoodSaveUndo();noteUndo.record(note:note)
+            let undoneNote=await noteUndo.undo();XCTAssertTrue(undoneNote)
+            XCTAssertTrue(MealNoteStore.shared.cached(for:.now).isEmpty)
+            SyncEngine.shared.isOnline=true
+            for _ in 0..<80 {
+                await SyncEngine.shared.pushPendingChanges()
+                if MealNoteStore.shared.pendingCount == 0 { break }
+                try await Task.sleep(for: .milliseconds(250))
+            }
+            let remoteNotes=try await RemoteMealNoteRepository().fetch(for:.now)
+            XCTAssertFalse(remoteNotes.contains{$0.id == note.id})
+            XCTAssertEqual(MealNoteStore.shared.pendingCount,0)
+
+            let source=try await FoodLogRepository().familiarHistory().filter{$0.displayName == "Greek yogurt" || $0.displayName == "Berries"}
+            XCTAssertEqual(source.count,2)
+            let library=UsualMealStore.shared
+            library.setAccount(fixture.userId)
+            var usual=UsualMeal(userId:fixture.userId,name:"My usual breakfast",meal:.breakfast,items:source)
+            try await library.save(usual);try await library.save(usual)
+            await library.load()
+            XCTAssertEqual(library.meals.filter{$0.id == usual.id}.count,1)
+            usual.name="Hotel breakfast";try await library.save(usual)
+            XCTAssertEqual(library.meals.first?.name,"Hotel breakfast")
+            let receipt=FoodSaveUndo()
+            let quantities=Dictionary(uniqueKeysWithValues:source.map{($0.id,0.5)})
+            try FoodSaveUndo.$current.withValue(receipt) {
+                try LocalStore.shared.insertRepeatedMeal(usual.items,quantities:quantities,userId:fixture.userId,logDate:Date.now.isoDateString,meal:.breakfast)
+            }
+            XCTAssertEqual(receipt.foodIDs.count,2)
+            XCTAssertTrue(Set(receipt.foodIDs.keys).isDisjoint(with:Set(source.map(\.id))))
+            var logged: [FoodLog] = []
+            for _ in 0..<80 {
+                await SyncEngine.shared.pushPendingChanges()
+                logged = try await FoodLogRepository().fetchLogs(for:.now)
+                if logged.count == 2 { break }
+                try await Task.sleep(for:.milliseconds(250))
+            }
+            XCTAssertEqual(logged.count,2);XCTAssertEqual(logged.reduce(0){$0+$1.totalProteinG},16)
+            let undoneFood=await receipt.undo();XCTAssertTrue(undoneFood)
+            var afterUndo: [FoodLog] = logged
+            for _ in 0..<80 {
+                await SyncEngine.shared.pushPendingChanges()
+                afterUndo = try await FoodLogRepository().fetchLogs(for:.now)
+                if afterUndo.isEmpty { break }
+                try await Task.sleep(for:.milliseconds(250))
+            }
+            XCTAssertTrue(afterUndo.isEmpty)
+            let preserved=try await FoodLogRepository().familiarHistory()
+            XCTAssertTrue(Set(source.map(\.id)).isSubset(of:Set(preserved.map(\.id))))
+            try await library.delete(usual)
+
+            LogMethodPreference.save(.search,userId:fixture.userId)
+            XCTAssertEqual(LogMethodPreference.read(userId:fixture.userId),.search)
+            XCTAssertEqual(LogMethodPreference.read(userId:UUID()),.talk)
+            let weekly=StrongWeekReminder.enabled(userId:fixture.userId)
+            let smart=UserDefaults.standard.bool(forKey:NotificationManager.smartCoachingEnabledKey)
+            let expired=LighterTrackingSetting(userId:fixture.userId,enabled:true,reason:.feelingUnwell,startedAt:.now.addingTimeInterval(-500),endsAt:.now.addingTimeInterval(-10))
+            _ = try await TrackingPreferencesRepository().save(expired)
+            await tracking.load()
+            XCTAssertTrue(tracking.needsResumeChoice);XCTAssertTrue(tracking.suppressesGoalPrompts);XCTAssertNil(tracking.contextReason)
+            let coach=CoachViewModel();await coach.loadIfNeeded()
+            await coach.sendMessage("My timed lighter stretch ended, but I haven't chosen whether to resume. Am I expected to catch up? Please keep it brief.")
+            XCTAssertNil(coach.error)
+            let reply=try XCTUnwrap(coach.messages.last(where:{$0.role == "assistant"}))
+            XCTAssertFalse(reply.content.isEmpty)
+            try await tracking.start(reason:nil,duration:.untilReady)
+            XCTAssertTrue(tracking.isActive);XCTAssertFalse(tracking.needsResumeChoice);XCTAssertNil(tracking.contextReason)
+            try await tracking.resume();XCTAssertFalse(tracking.isActive)
+            XCTAssertEqual(StrongWeekReminder.enabled(userId:fixture.userId),weekly)
+            XCTAssertEqual(UserDefaults.standard.bool(forKey:NotificationManager.smartCoachingEnabledKey),smart)
+            let data=try JSONSerialization.data(withJSONObject:["offlineNoteSurvivedReload":true,"queuedNoteUndoSynced":true,"usualMealSavedRenamedDeleted":true,"reviewedMealUndoPreservedSource":true,"preferredMethodIsolated":true,"expiryWaitsForChoice":true,"pulseReply":reply.content],options:[.prettyPrinted,.sortedKeys])
+            try data.write(to:root.appendingPathComponent("logging-comfort-results.json"),options:.atomic)
+            let attachment=XCTAttachment(string:String(decoding:data,as:UTF8.self));attachment.name="Logging comfort — synthetic account";attachment.lifetime = .keepAlways;add(attachment)
+            try await supabase.auth.signOut()
+        } catch { SyncEngine.shared.isOnline=true;try? await supabase.auth.signOut();throw error }
     }
 }

@@ -12,6 +12,33 @@ final class NotificationManager {
         // Pulse-on here: `scheduleSmartOpportunity`'s guard just stops blocking the next
         // evaluation: TodayView re-runs one as soon as it sees this same notification.
         NotificationCenter.default.addObserver(
+            forName: .trackingModeChanged, object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in
+                if TrackingPreferencesStore.shared.suppressesGoalPrompts {
+                    NotificationManager.shared.cancelSmartNotifications()
+                    let center = UNUserNotificationCenter.current()
+                    let delivered = await center.deliveredNotifications()
+                    if TrackingPreferencesStore.shared.suppressesGoalPrompts {
+                        center.removeDeliveredNotifications(withIdentifiers: delivered
+                            .filter { $0.request.identifier.hasPrefix(NotificationManager.smartIdentifierPrefix) }
+                            .map { $0.request.identifier })
+                    }
+                }
+                await NotificationManager.shared.reconcileWeeklyReminder()
+            }
+        }
+        NotificationCenter.default.addObserver(forName: .pulseAttentionChanged, object: nil, queue: .main) { _ in
+            Task { @MainActor in
+                if !PulseAttentionStore.shared.allowsProactive {
+                    NotificationManager.shared.cancelSmartNotifications()
+                    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [StrongWeekReminder.identifier])
+                } else {
+                    await NotificationManager.shared.reconcileWeeklyReminder()
+                }
+            }
+        }
+        NotificationCenter.default.addObserver(
             forName: .pulseProfileChanged, object: nil, queue: .main
         ) { _ in
             Task { @MainActor in
@@ -42,6 +69,7 @@ final class NotificationManager {
     func setWeeklyReminderAccount(_ userId: UUID?) {
         guard weeklyUserId != userId || userId == nil else { return }
         weeklyUserId = userId
+        cancelSmartNotifications()
         center.removePendingNotificationRequests(withIdentifiers: [StrongWeekReminder.identifier])
         center.removeDeliveredNotifications(withIdentifiers: [StrongWeekReminder.identifier])
     }
@@ -72,27 +100,38 @@ final class NotificationManager {
         let settings = await center.notificationSettings()
         // Signed out or switched accounts while waiting: that path already cleared the request.
         guard userId == weeklyUserId else { return false }
-        guard StrongWeekReminder.enabled(userId: userId),
+        guard PulseAttentionStore.shared.accountId == userId, PulseAttentionStore.shared.allowsProactive,
+              PulseProfileStore.shared.pulseEnabled,
+              !TrackingPreferencesStore.shared.suppressesGoalPrompts,
+              StrongWeekReminder.enabled(userId: userId),
               settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
             center.removePendingNotificationRequests(withIdentifiers: [StrongWeekReminder.identifier])
             center.removeDeliveredNotifications(withIdentifiers: [StrongWeekReminder.identifier])
             return false
         }
         let pending = await center.pendingNotificationRequests()
+        // Upgrade legacy repeating requests before attempting a shared reservation.
+        center.removePendingNotificationRequests(withIdentifiers: pending.filter {
+            $0.identifier == StrongWeekReminder.identifier && $0.trigger?.repeats == true
+        }.map(\.identifier))
         if pending.contains(where: {
             $0.identifier == StrongWeekReminder.identifier
                 && $0.content.userInfo["userId"] as? String == userId.uuidString
+                && $0.trigger?.repeats == false
         }) {
             return true
         }
-        guard userId == weeklyUserId else { return false }
+        guard userId == weeklyUserId, !TrackingPreferencesStore.shared.suppressesGoalPrompts else { return false }
+        guard let fireDate = StrongWeekReminder.nextFireDate(),
+              await PulseAttentionStore.shared.reserve(on: fireDate, token: UUID()),
+              userId == weeklyUserId, PulseAttentionStore.shared.allowsProactive else { return false }
         do {
-            try await center.add(StrongWeekReminder.request(userId: userId))
+            try await center.add(StrongWeekReminder.request(userId: userId, fireDate: fireDate))
         } catch {
             return false
         }
         // An account switch landed while Notification Center accepted the request.
-        if userId != weeklyUserId {
+        if userId != weeklyUserId || TrackingPreferencesStore.shared.suppressesGoalPrompts || !PulseAttentionStore.shared.allowsProactive {
             center.removePendingNotificationRequests(withIdentifiers: [StrongWeekReminder.identifier])
             return false
         }
@@ -107,7 +146,7 @@ final class NotificationManager {
         }
         UserDefaults.standard.set(enabled, forKey: StrongWeekReminder.preferenceKey(userId: userId))
         let scheduled = await reconcileWeeklyReminder()
-        return !enabled || scheduled
+        return !enabled || scheduled || TrackingPreferencesStore.shared.suppressesGoalPrompts || !PulseAttentionStore.shared.allowsProactive
     }
 
     // Shot reminders fire at 9am local time.
@@ -266,7 +305,25 @@ final class NotificationManager {
         return true
     }
 
+    private var smartSchedule: Task<Void, Never>?
     func scheduleSmartOpportunity(_ opportunity: SmartNotificationOpportunity?) async {
+        let previous = smartSchedule
+        let task = Task { @MainActor in
+            await previous?.value
+            await self.performSmartOpportunity(opportunity)
+        }
+        smartSchedule = task
+        await task.value
+    }
+
+    private func performSmartOpportunity(_ opportunity: SmartNotificationOpportunity?) async {
+        guard PulseAttentionStore.shared.allowsProactive,
+              let trackingAccount = TrackingPreferencesStore.shared.accountId,
+              PulseAttentionStore.shared.accountId == trackingAccount,
+              !TrackingPreferencesStore.shared.suppressesGoalPrompts else {
+            cancelSmartNotifications()
+            return
+        }
         // Smart coaching is presented to the user as a Pulse feature (Profile's "Pulse
         // notifications" section, the "Pulse waits for a specific next step" explainer) even
         // though its content doesn't literally say "Pulse" — so it stops the moment Pulse is
@@ -318,6 +375,10 @@ final class NotificationManager {
         let existing = pending.first { $0.identifier.hasPrefix(Self.smartIdentifierPrefix) }
         let existingPriority = existing?.content.userInfo["priority"] as? Int ?? -1
         if existingPriority >= opportunity.priority { return }
+        let sameDay = existing?.content.userInfo["fireDay"] as? String == opportunity.fireDate.isoDateString
+        let token = sameDay ? (existing?.content.userInfo["attentionToken"] as? String).flatMap(UUID.init(uuidString:)) ?? UUID() : UUID()
+        guard await PulseAttentionStore.shared.reserve(on: opportunity.fireDate, token: token),
+              PulseAttentionStore.shared.allowsProactive, TrackingPreferencesStore.shared.accountId == trackingAccount else { return }
         let replacedIDs = pending.filter { $0.identifier.hasPrefix(Self.smartIdentifierPrefix) }.map(\.identifier)
         center.removePendingNotificationRequests(withIdentifiers: replacedIDs)
 
@@ -326,6 +387,9 @@ final class NotificationManager {
         content.body = opportunity.body
         content.sound = .default
         content.userInfo = [
+            "userId": trackingAccount.uuidString,
+            "attentionToken": token.uuidString,
+            "fireDay": opportunity.fireDate.isoDateString,
             "kind": opportunity.kind.rawValue,
             "priority": opportunity.priority,
             "sourceDate": opportunity.sourceDate ?? "",
@@ -340,6 +404,13 @@ final class NotificationManager {
 
         let interval = max(opportunity.fireDate.timeIntervalSinceNow, 1)
         let identifier = "\(dayPrefix)\(opportunity.kind.rawValue)"
+        guard PulseAttentionStore.shared.allowsProactive,
+              PulseAttentionStore.shared.accountId == trackingAccount,
+              TrackingPreferencesStore.shared.accountId == trackingAccount,
+              !TrackingPreferencesStore.shared.suppressesGoalPrompts else {
+            cancelSmartNotifications()
+            return
+        }
         do {
             try await center.add(UNNotificationRequest(
                 identifier: identifier,
@@ -347,6 +418,13 @@ final class NotificationManager {
                 trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
             ))
             SmartNotificationHistoryStore.remove(ids: replacedIDs)
+            guard PulseAttentionStore.shared.allowsProactive,
+              PulseAttentionStore.shared.accountId == trackingAccount,
+              TrackingPreferencesStore.shared.accountId == trackingAccount,
+                  !TrackingPreferencesStore.shared.suppressesGoalPrompts else {
+                center.removePendingNotificationRequests(withIdentifiers: [identifier])
+                return
+            }
             SmartNotificationHistoryStore.upsert(.init(
                 id: identifier,
                 kind: opportunity.kind,

@@ -35,10 +35,16 @@ final class FavoritesViewModel {
             recentSections = []
             return
         }
-        let since = Date.now.addingTimeInterval(-RecentFoodsGrouper.window)
-        let logs = (try? LocalStore.shared.fetchFoodLogs(since: since, userId: userId)) ?? []
+        let history: [FoodLog]
+        do {
+            history = try await FoodLogRepository().familiarHistory()
+        } catch {
+            history = (try? LocalStore.shared.fetchFoodLogs(since: .distantPast, userId: userId)) ?? []
+        }
+        guard (try? await supabase.auth.session.user.id) == userId else { return }
         let favoritedIds = Set(favorites.map(\.foodItemId))
-        let recent = RecentFoodsGrouper.recentLogs(from: logs, favoritedFoodItemIds: favoritedIds)
+        let recent = FamiliarFoods.suggestions(history.filter { !favoritedIds.contains($0.foodItemId) }, limit: 20)
+            .sorted { $0.loggedAt > $1.loggedAt }
         recentSections = RecentFoodsGrouper.grouped(recent).map {
             RecentSection(id: $0.id, label: $0.label, logs: $0.logs)
         }
@@ -59,7 +65,7 @@ final class FavoritesViewModel {
     // "Log again" on a Recents row: a fresh log entry with that row's snapshot macros, under
     // a new id and today's timestamp — the food_item itself already exists, so there's nothing
     // to upsert.
-    func logAgain(_ log: FoodLog, meal: Meal, date: Date) async -> Bool {
+    func logAgain(_ log: FoodLog, meal: Meal, date: Date, quantity: Double? = nil) async -> Bool {
         do {
             let userId = try await supabase.auth.session.user.id
             try LocalStore.shared.insertFoodLog(
@@ -69,7 +75,7 @@ final class FavoritesViewModel {
                 meal: meal.rawValue,
                 foodItemId: log.foodItemId,
                 foodItemName: log.displayName,
-                quantity: log.quantity,
+                quantity: quantity ?? log.quantity,
                 caloriesSnapshot: log.caloriesSnapshot,
                 proteinGSnapshot: log.proteinGSnapshot,
                 carbsGSnapshot: log.carbsGSnapshot,

@@ -29,6 +29,7 @@ enum ProteinFloorGoal {
         let totalDays: Int
         let todayProteinG: Double
         let todayMet: Bool
+        var todayHasLogs: Bool = true
 
         var loggedDaysLabel: String { "\(loggedDays) of \(totalDays) logged days" }
 
@@ -39,9 +40,10 @@ enum ProteinFloorGoal {
 
         /// "Ng to go", or "Floor cleared" once today's log meets or passes the floor.
         var todayCaption: String {
+            guard todayHasLogs else { return "No food logged today" }
             let remaining = (floorTarget - todayProteinG).rounded(.up)
             guard remaining > 0 else { return "Floor cleared" }
-            return "\(Int(remaining))g to go"
+            return "\(Int(todayProteinG.rounded()))g logged · day not assessed"
         }
     }
 
@@ -67,10 +69,10 @@ enum ProteinFloorGoal {
             guard let day = latestByDay[date], day.hasData else {
                 return DaySummary(date: date, state: .missing)
             }
-            return DaySummary(date: date, state: day.proteinG >= floorTarget ? .met : .notMet)
+            return DaySummary(date: date, state: day.proteinFloorHit(target: floorTarget) == true ? .met : .missing)
         }
 
-        let loggedDays = days.filter { $0.state != .missing }.count
+        let loggedDays = latestByDay.filter { $0.key >= days[0].date && $0.key <= todayStart && $0.value.hasData }.count
         let todaySummary = latestByDay[todayStart]
         let todayProteinG = (todaySummary?.hasData == true) ? todaySummary!.proteinG : 0
 
@@ -81,7 +83,8 @@ enum ProteinFloorGoal {
             loggedDays: loggedDays,
             totalDays: days.count,
             todayProteinG: todayProteinG,
-            todayMet: todayProteinG >= floorTarget
+            todayMet: todayProteinG >= floorTarget,
+            todayHasLogs: todaySummary?.hasData == true
         )
     }
 

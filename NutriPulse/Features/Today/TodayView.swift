@@ -26,6 +26,20 @@ struct TodayView: View {
     @State private var editingLog: FoodLog? = nil
     @State private var showWaterPicker = false
     @State private var showMovement = false
+    @State private var showRecentMeals = false
+    @State private var showLighterTracking = false
+    @State private var showSaveUsualMeal = false
+    @State private var usualMealFoods: [FoodLog] = []
+    @State private var editingMealNote: MealNote?
+    @State private var deletingMealNote: MealNote?
+    @State private var mealNoteError: String?
+    @State private var rememberingNote: MealNote?
+    @State private var showOffScript = false
+    @State private var showEverydayTools = false
+    @State private var offScriptOwner: UUID?
+    @State private var offScriptPrompt: String?
+
+    @State private var lighterTrackingError: String?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppState.self) private var appState
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
@@ -50,6 +64,8 @@ struct TodayView: View {
     // The signed-in account, for keying the floor-cleared celebration's "already played today"
     // record. Nil (signed out) just means the celebration never persists — it can still play
     // in memory for the rest of this session.
+    private var isLighterToday: Bool { vm.isToday && TrackingPreferencesStore.shared.isActive }
+
     private var currentAccountId: String? { appState.session?.user.id.uuidString }
 
     // Pieces of the body pulled out so the compiler can type-check it in reasonable time.
@@ -80,6 +96,36 @@ struct TodayView: View {
         }
     }
 
+    @ViewBuilder private var mealNoteSections: some View {
+        if vm.mealNotesLoadFailed {
+            Button("Couldn’t load meal notes. Tap to retry.") { Task { await vm.loadMealNotes() } }
+                .font(Theme.Fonts.body(14)).frame(minHeight: 44)
+        }
+        if let mealNoteError { Text(mealNoteError).foregroundStyle(Theme.Colors.danger) }
+        ForEach(vm.mealNotes) { note in
+            VStack(alignment: .leading, spacing: 10) {
+                Label(note.displayTitle, systemImage: "square.and.pencil")
+                    .font(Theme.Fonts.body(14, .bold))
+                Text(note.body).font(Theme.Fonts.body(16))
+                if MealNoteStore.shared.isPending(note.id) {
+                    Button { Task { await SyncEngine.shared.pushPendingChanges() } } label: {
+                        Text(MealNoteStore.shared.lastSyncFailed ? "Saved on this phone · Retry sync" : "Saved on this phone · Waiting to sync")
+                            .font(Theme.Fonts.body(13)).frame(minHeight: 44)
+                    }.foregroundStyle(Theme.Colors.textSecondary)
+                }
+                Text("Nutrition unknown · not included in totals")
+                    .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+                HStack {
+                    Button("Edit") { editingMealNote = note }.frame(minHeight: 44)
+                    Spacer()
+                    Button("Delete", role: .destructive) { deletingMealNote = note }.frame(minHeight: 44)
+                }.font(Theme.Fonts.body(14, .semibold))
+                Button("Remember what helped") { rememberingNote = note }
+                    .font(Theme.Fonts.body(14, .semibold)).frame(minHeight: 44)
+            }.tile(padding: Theme.Spacing.md)
+        }
+    }
+
     private var mealSections: some View {
         ForEach(Meal.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { meal in
             let logs = vm.logsByMeal[meal] ?? []
@@ -93,6 +139,9 @@ struct TodayView: View {
                 .popIn(order: 7)
                 // Only on the first meal shown, so the tip points at one row.
                 .popoverTip(MealRowTip(), arrowEdge: .bottom, when: meal == firstLoggedMeal)
+                Button("Save \(meal.displayName.lowercased()) as a usual meal") {
+                    usualMealFoods = logs; showSaveUsualMeal = true
+                }.font(Theme.Fonts.body(14, .semibold)).frame(minHeight: 44)
             }
         }
     }
@@ -193,13 +242,18 @@ struct TodayView: View {
     // Plays a latched protein win, but only with Today actually in front of the user. The short
     // delay lets the sheet finish sliding away, so the lime flood is seen from its start.
     private func playProteinCelebrationIfVisible() {
-        guard proteinCelebrationPending, isFrontmost, !showProteinRescue,
+        guard proteinCelebrationPending, !isLighterToday, isFrontmost, !showProteinRescue,
               !showRecoveryLogger, vm.isToday else { return }
         proteinCelebrationPending = false
         proteinCelebrationInFlight = true
         let accountId = currentAccountId
         let date = vm.selectedDate
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            guard proteinCelebrationInFlight, isFrontmost, !isLighterToday, vm.proteinGoalHit,
+                  currentAccountId == accountId, vm.selectedDate.isoDateString == date.isoDateString else {
+                proteinCelebrationInFlight = false
+                return
+            }
             proteinCelebrationInFlight = false
             proteinCelebrationTrigger += 1
             // Only remembered once the moment actually starts playing — a latch that never
@@ -223,91 +277,8 @@ struct TodayView: View {
         }
     }
 
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Theme.Spacing.tileGap) {
-                    header
-
-                    // No account in the tour, so every sync "fails"; that banner is noise there.
-                    if let status = SyncEngine.shared.statusMessage, !DebugLaunch.tour {
-                        SyncStatusBanner(status: status) {
-                            Task { await SyncEngine.shared.syncNow() }
-                        }
-                    }
-
-                    if vm.isLoading {
-                        ProgressView()
-                            .frame(maxWidth: .infinity, minHeight: 200)
-                    } else {
-                        // Pulse gets one adaptive slot. A single, ranked next step keeps Today
-                        // calm even when dose, recovery, pacing, and target signals coexist.
-                        pulsePriorityCard
-                            .popIn(order: 1)
-
-                        firstDayCard
-
-                        tileGrid
-
-                        if vm.foodLogs.isEmpty {
-                            EmptyDayView(isToday: vm.isToday)
-                                .popIn(order: 7)
-                        } else {
-                            // Meal sections in fixed display order (breakfast → snack)
-                            mealSections
-                        }
-
-                        if vm.isToday, !vm.availableYesterdayMeals.isEmpty {
-                            RepeatYesterdayCard(
-                                meals: vm.availableYesterdayMeals
-                                    .map { (meal: $0.key, itemCount: $0.value.count) }
-                                    .sorted { $0.meal.sortOrder < $1.meal.sortOrder },
-                                busyMeal: vm.repeatingMeal,
-                                onRepeat: { meal in Task { await vm.repeatYesterday(meal) } }
-                            )
-                        }
-
-                        if vm.isToday {
-                            StrongWeekCard(vm: strongWeek) {
-                                showStrongWeek = true
-                                Task { await strongWeek.load() }
-                            }
-                        }
-
-                        if HealthKitManager.shared.isAvailable {
-                            HealthStatsCard(
-                                context: vm.recoveryContext,
-                                shotCycleCheckIn: vm.todayShotCycleCheckIn,
-                                shotCycleDay: vm.currentShotCycleDay,
-                                activeCalories: vm.activeCalories,
-                                restingHR:      vm.restingHeartRate,
-                                hrv:            vm.hrv,
-                                sleepHours:     vm.sleepHours,
-                                hasRequestedAuthorization: HealthKitManager.shared.hasRequestedAuthorization,
-                                onConnect:       { Task { await vm.requestHealthAuthorization() } },
-                                onOpenHealthApp: openHealthApp
-                            )
-                        }
-
-                        BodyCompositionCard(
-                            data: vm.bodyComp,
-                            waistCm: vm.latestWaistCm,
-                            units: units,
-                            onOpen: { showBodyHub = true },
-                            onAddTapped: { showBodyCompSheet = true }
-                        )
-
-                        if let error = vm.errorMessage {
-                            Text(error)
-                                .font(Theme.Typography.caption)
-                                .foregroundStyle(Theme.Colors.danger)
-                                .padding()
-                        }
-                    }
-                }
-                .padding(.horizontal, Theme.Spacing.page)
-                .padding(.bottom, Theme.Spacing.xl)
-            }
+    private var presentedContent: some View {
+            scrollContent
             .background(Theme.Colors.ground.ignoresSafeArea())
             // No navigation bar, so cover the status bar or scrolled tiles slide under the clock.
             .overlay(alignment: .top) {
@@ -341,7 +312,11 @@ struct TodayView: View {
                     unit: waterUnit,
                     usualMl: Binding(get: { usualWaterMl }, set: { storedUsualWaterMl = $0 }),
                     onAdd: { ml in await vm.addWater(ml) },
-                    onUndo: { id, ml in await vm.undoWater(id: id, ml: ml) }
+                    onUndo: { id, ml in await vm.undoWater(id: id, ml: ml) },
+                    loadHistory: {
+                        guard let owner = appState.session?.user.id else { return [] }
+                        return (try? LocalStore.shared.waterHistory(for: vm.selectedDate, userId: owner)) ?? []
+                    }
                 )
             }
             .sheet(isPresented: $showMovement) {
@@ -422,8 +397,23 @@ struct TodayView: View {
                     }
                 )
             }
+            .sheet(isPresented: $showLighterTracking) { LighterTrackingSheet() }
             .sheet(isPresented: $showStrongWeek, onDismiss: { strongWeek.editing = false }) {
                 StrongWeekView(vm: strongWeek, profile: appState.profile)
+            }
+            .confirmationDialog("Use a recent meal", isPresented: $showRecentMeals, titleVisibility: .visible) {
+                ForEach(vm.recentMeals.keys.sorted { $0.sortOrder < $1.sortOrder }, id: \.self) { meal in
+                    Button(meal.displayName) {
+                        repeatedMealRoute = SmartNotificationRoute(
+                            action: .reviewMeal, sourceDate: vm.recentMealDate, mealRawValue: meal.rawValue
+                        )
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                if let sourceDate = vm.recentMealDate.flatMap({ Date.fromISODateString($0) }) {
+                    Text("From \(sourceDate.formatted(date: .abbreviated, time: .omitted)). Review servings before adding to today.")
+                }
             }
             .sheet(item: $repeatedMealRoute) { route in
                 if let sourceDate = route.sourceDate, let meal = route.meal {
@@ -434,6 +424,11 @@ struct TodayView: View {
                     )
                 }
             }
+    }
+
+    var body: some View {
+        NavigationStack {
+            presentedContent
             .task(id: vm.selectedDate) {
                 #if DEBUG
                 if AppStoreScreenshotMode.active || DebugLaunch.tour {
@@ -467,7 +462,7 @@ struct TodayView: View {
             }
             #endif
             .onChange(of: vm.justClosedAllRings) { _, justClosed in
-                guard vm.isToday, justClosed else { return }
+                guard vm.isToday, !isLighterToday, justClosed else { return }
                 ringCelebrationTrigger += 1
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             }
@@ -475,7 +470,7 @@ struct TodayView: View {
             // (firstDayObserver) to keep this modifier chain short enough to type-check.
             .background { firstDayObserver }
             .onChange(of: vm.justHitProteinGoal) { _, justHit in
-                guard vm.isToday, justHit else { return }
+                guard vm.isToday, !isLighterToday, justHit else { return }
                 // A fresh view model (new launch, or swiping back to today from another day)
                 // recomputes this edge from scratch, so it can fire again for a floor that was
                 // already cleared — and already celebrated — earlier today. The persisted record
@@ -502,9 +497,13 @@ struct TodayView: View {
                 if pending { openWeeklyReminderIfNeeded() }
             }
             .onChange(of: appState.pendingQuickAction) { _, action in
-                guard action == .logDose else { return }
-                appState.pendingQuickAction = nil
-                showRitual = true
+                guard let action else { return }
+                if action == .logDose {
+                    appState.pendingQuickAction = nil; showRitual = true
+                } else if action == .offScript {
+                    appState.pendingQuickAction = nil
+                    offScriptOwner = appState.session?.user.id; offScriptPrompt = nil; showOffScript = true
+                }
             }
             .onChange(of: appState.pendingSmartNotificationRoute) { _, route in
                 guard let route else { return }
@@ -554,6 +553,36 @@ struct TodayView: View {
                 strongWeek.changedSinceGeneration = true
                 Task { await vm.loadData() }
             }
+            .background { memorySheetPresenter }
+            .sheet(isPresented: $showSaveUsualMeal) { SaveUsualMealSheet(foods: usualMealFoods) }
+        .sheet(item: $editingMealNote) { note in
+            MealNoteSheet(date: vm.selectedDate, meal: note.meal, existing: note) {
+                Task { await vm.loadMealNotes() }
+            }
+        }
+        .confirmationDialog("Delete this meal note?", isPresented: Binding(
+            get: { deletingMealNote != nil }, set: { if !$0 { deletingMealNote = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete note", role: .destructive) {
+                guard let note = deletingMealNote else { return }
+                Task {
+                    do { try await MealNoteRepository().delete(note); await vm.loadMealNotes(); mealNoteError = nil }
+                    catch { mealNoteError = "Couldn’t delete your note. Please try again." }
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .foodSaveUndone)) { _ in
+            proteinCelebrationPending = false
+            proteinCelebrationInFlight = false
+            Task { await vm.loadData() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mealNotesChanged)) { _ in
+            Task { await vm.loadMealNotes() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .trackingModeChanged)) { _ in
+                if isLighterToday { proteinCelebrationPending = false }
+                Task { await vm.refreshSmartNotifications() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .smartCoachingSettingsChanged)) { _ in
                 Task { await vm.refreshSmartNotifications() }
             }
@@ -562,6 +591,253 @@ struct TodayView: View {
             // the next natural trigger (a workout finishing, etc.).
             .onReceive(NotificationCenter.default.publisher(for: .pulseProfileChanged)) { _ in
                 Task { await vm.refreshSmartNotifications() }
+            }
+        }
+    }
+
+    private var memorySheetPresenter: some View {
+        Color.clear.frame(width: 0, height: 0)
+            .onReceive(NotificationCenter.default.publisher(for: .quickCaptureChanged)) { notification in
+                guard notification.object as? UUID == appState.session?.user.id else { return }
+                Task { await vm.loadData() }
+            }
+            .sheet(item: $rememberingNote) { note in PulseMemoryEditor(proposed: note.body) }
+            .sheet(isPresented: $showEverydayTools, onDismiss: {
+                let prompt = offScriptPrompt; offScriptPrompt = nil
+                guard let owner = offScriptOwner, owner == appState.session?.user.id, let prompt else { return }
+                appState.askPulse(prompt)
+            }) {
+                if let owner = offScriptOwner {
+                    EverydayToolsView(userId: owner, onAskPulse: { offScriptPrompt = $0 })
+                }
+            }
+            .sheet(isPresented: $showOffScript, onDismiss: {
+                let prompt = offScriptPrompt; offScriptPrompt = nil
+                guard let owner = offScriptOwner, owner == appState.session?.user.id, let prompt else { return }
+                appState.askPulse(prompt)
+            }) {
+                if let owner = offScriptOwner {
+                    OffScriptSheet(userId: owner, date: .now, onAskPulse: { offScriptPrompt = $0 },
+                                   onSaved: { Task { await vm.loadMealNotes() } })
+                }
+            }
+    }
+
+    private var scrollContent: some View {
+            ScrollView {
+                VStack(spacing: Theme.Spacing.tileGap) {
+                    header
+                    if vm.isToday {
+                        Button {
+                            offScriptOwner = appState.session?.user.id; offScriptPrompt = nil; showOffScript = true
+                        } label: {
+                            HStack {
+                                Label("Today went sideways", systemImage: "arrow.triangle.branch")
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                            }.font(Theme.Fonts.body(15, .semibold)).foregroundStyle(Theme.Colors.primaryText)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        }.buttonStyle(.plain)
+                    }
+
+                    if vm.isToday {
+                        Button {
+                            offScriptOwner = appState.session?.user.id; offScriptPrompt = nil; showEverydayTools = true
+                        } label: {
+                            HStack {
+                                Label("Make today easier", systemImage: "sparkles")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                            }.font(Theme.Fonts.body(15, .semibold)).frame(minHeight: 44)
+                        }.buttonStyle(.plain).foregroundStyle(Theme.Colors.primaryText)
+                    }
+
+                    // No account in the tour, so every sync "fails"; that banner is noise there.
+                    if let status = SyncEngine.shared.statusMessage, !DebugLaunch.tour {
+                        SyncStatusBanner(status: status) {
+                            Task { await SyncEngine.shared.syncNow() }
+                        }
+                    }
+
+                    if vm.isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: 200)
+                    } else {
+                        // Pulse gets one adaptive slot. A single, ranked next step keeps Today
+                        // calm even when dose, recovery, pacing, and target signals coexist.
+                        pulsePriorityCard
+                            .popIn(order: 1)
+
+                        if isLighterToday {
+                            lighterTodayContent
+                        } else {
+                            firstDayCard
+                            tileGrid
+                            if vm.isToday {
+                                Button("Need a lighter week?") { showLighterTracking = true }
+                                    .font(Theme.Fonts.body(14, .semibold))
+                                    .foregroundStyle(Theme.Colors.primaryText)
+                                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            }
+                        }
+
+                        if vm.foodLogs.isEmpty, vm.mealNotes.isEmpty, !BreakfastCheckinStore.shared.checkins.contains(where: { $0.localDay == vm.selectedDate.isoDateString }), !vm.showsReturnExperience, !isLighterToday {
+                            EmptyDayView(isToday: vm.isToday)
+                                .popIn(order: 7)
+                        } else {
+                            // Meal sections in fixed display order (breakfast → snack)
+                            mealSections
+                        }
+
+                        BreakfastCheckinCard(date: vm.selectedDate, hasDetailedBreakfast: vm.foodLogs.contains { $0.meal == .breakfast }) {
+                            appState.pendingOpenTalkToLog = true
+                        }
+                        mealNoteSections
+
+                        if vm.isToday, !isLighterToday, !vm.availableYesterdayMeals.isEmpty {
+                            RepeatYesterdayCard(
+                                meals: vm.availableYesterdayMeals
+                                    .map { (meal: $0.key, itemCount: $0.value.count) }
+                                    .sorted { $0.meal.sortOrder < $1.meal.sortOrder },
+                                busyMeal: vm.repeatingMeal,
+                                onRepeat: { meal in Task { await vm.repeatYesterday(meal) } }
+                            )
+                        }
+
+                        if vm.isToday, !isLighterToday {
+                            StrongWeekCard(vm: strongWeek) {
+                                showStrongWeek = true
+                                Task { await strongWeek.load() }
+                            }
+                        }
+
+                        if !isLighterToday, HealthKitManager.shared.isAvailable {
+                            HealthStatsCard(
+                                context: vm.recoveryContext,
+                                shotCycleCheckIn: vm.todayShotCycleCheckIn,
+                                shotCycleDay: vm.currentShotCycleDay,
+                                activeCalories: vm.activeCalories,
+                                restingHR:      vm.restingHeartRate,
+                                hrv:            vm.hrv,
+                                sleepHours:     vm.sleepHours,
+                                hasRequestedAuthorization: HealthKitManager.shared.hasRequestedAuthorization,
+                                onConnect:       { Task { await vm.requestHealthAuthorization() } },
+                                onOpenHealthApp: openHealthApp
+                            )
+                        }
+
+                        if !isLighterToday { BodyCompositionCard(
+                            data: vm.bodyComp,
+                            waistCm: vm.latestWaistCm,
+                            units: units,
+                            onOpen: { showBodyHub = true },
+                            onAddTapped: { showBodyCompSheet = true }
+                        ) }
+
+                        if let error = vm.errorMessage {
+                            Text(error)
+                                .font(Theme.Typography.caption)
+                                .foregroundStyle(Theme.Colors.danger)
+                                .padding()
+                        }
+                    }
+                }
+                .padding(.horizontal, Theme.Spacing.page)
+                .padding(.bottom, Theme.Spacing.xl)
+            }
+    }
+
+    private var lighterTodayContent: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            if TrackingPreferencesStore.shared.needsResumeChoice {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Your lighter stretch has ended").font(Theme.Fonts.body(18, .bold))
+                    Text("Keep taking it easier, or return to usual tracking when you’re ready. Goal reminders stay paused until you choose.")
+                        .font(Theme.Fonts.body(15)).foregroundStyle(Theme.Colors.textSecondary)
+                    Button("Keep taking it easier") {
+                        Task {
+                            do { try await TrackingPreferencesStore.shared.start(reason: nil, duration: .untilReady); lighterTrackingError = nil }
+                            catch { lighterTrackingError = "Couldn’t save your choice. Please try again." }
+                        }
+                    }.buttonStyle(.brandPrimary).disabled(TrackingPreferencesStore.shared.isSaving)
+                    Button("Return to usual tracking") {
+                        Task {
+                            do { try await TrackingPreferencesStore.shared.resume(); lighterTrackingError = nil }
+                            catch { lighterTrackingError = "Couldn’t resume. Please try again." }
+                        }
+                    }.font(Theme.Fonts.body(15, .semibold)).foregroundStyle(Theme.Colors.primaryText)
+                        .frame(minHeight: 44).disabled(TrackingPreferencesStore.shared.isSaving)
+                }.tile(padding: Theme.Spacing.md)
+            }
+            HStack {
+                Text("Lighter tracking is on").font(Theme.Fonts.body(15, .semibold))
+                Spacer()
+                Button("Manage") { showLighterTracking = true }
+                    .font(Theme.Fonts.body(15, .semibold)).frame(minHeight: 44)
+            }
+            .foregroundStyle(Theme.Colors.primaryText)
+            .padding(.horizontal, Theme.Spacing.md)
+            .background(Theme.Colors.primarySoft, in: RoundedRectangle(cornerRadius: Theme.Radius.row))
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                Text("Make room for your week.")
+                    .font(Theme.Fonts.display(28, .bold, relativeTo: .title2))
+                    .accessibilityAddTraits(.isHeader)
+                Text("Log what’s useful. Leave the rest.")
+                    .font(Theme.Fonts.body(17)).foregroundStyle(Theme.Colors.textSecondary)
+                Button("Log something") { appState.pendingOpenTalkToLog = true }
+                    .buttonStyle(.brandPrimary)
+                if PulseProfileStore.shared.pulseEnabled {
+                    Button("Talk with Pulse") { appState.pendingSelectTab = .pulse }
+                        .font(Theme.Fonts.body(16, .semibold))
+                        .foregroundStyle(Theme.Colors.primaryText)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+            }
+            .foregroundStyle(Theme.Colors.textPrimary)
+            .tile(padding: Theme.Spacing.md)
+
+            Button { showWaterPicker = true } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Water").font(Theme.Fonts.display(20, .bold, relativeTo: .headline))
+                        Text(vm.waterIntakeMl > 0
+                             ? "\(waterUnit.displayAmount(vm.waterIntakeMl)) logged"
+                             : "Add a drink when you like")
+                            .font(Theme.Fonts.body(14))
+                    }
+                    Spacer()
+                    Image(systemName: "plus.circle.fill").font(.system(size: 32))
+                }
+                .foregroundStyle(Theme.Colors.skyInk)
+                .padding(Theme.Spacing.md)
+                .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
+                .background(Theme.Colors.sky, in: RoundedRectangle(cornerRadius: Theme.Radius.tile))
+            }
+            .buttonStyle(.plain)
+            Text("Your food entries")
+                .font(Theme.Fonts.body(16, .semibold))
+                .accessibilityAddTraits(.isHeader)
+            if vm.foodLogs.isEmpty && vm.mealNotes.isEmpty {
+                Text("Nothing logged today")
+                    .font(Theme.Fonts.body(15)).foregroundStyle(Theme.Colors.textSecondary)
+            }
+            Text("Goal reminders are paused. Incomplete days stay unassessed.")
+                .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+            if !TrackingPreferencesStore.shared.needsResumeChoice {
+            Button("Return to usual tracking") {
+                Task {
+                    do { try await TrackingPreferencesStore.shared.resume(); lighterTrackingError = nil }
+                    catch { lighterTrackingError = "Couldn’t resume tracking. Please try again." }
+                }
+            }
+            .font(Theme.Fonts.body(15, .semibold))
+            .foregroundStyle(Theme.Colors.primaryText)
+            .frame(minHeight: 44)
+            .disabled(TrackingPreferencesStore.shared.isSaving)
+            }
+            if let lighterTrackingError {
+                Text(lighterTrackingError).font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.danger)
             }
         }
     }
@@ -578,6 +854,7 @@ struct TodayView: View {
                 ProteinTile(
                     proteinG: vm.totalProteinG,
                     goalG: vm.dailyGoal?.proteinG,
+                    hasFoodLogs: !vm.foodLogs.isEmpty,
                     // Stay indigo until the moment can play to someone watching.
                     holdsClear: vm.isToday && (proteinCelebrationPending || proteinCelebrationInFlight),
                     celebration: proteinCelebrationTrigger
@@ -590,7 +867,8 @@ struct TodayView: View {
                         carbsG: vm.totalCarbsG,
                         fatG: vm.totalFatG,
                         fiberG: vm.totalFiberG,
-                        goal: vm.dailyGoal
+                        goal: vm.dailyGoal,
+                        hasFoodLogs: !vm.foodLogs.isEmpty
                     )
                     .popIn(order: 3)
                     if showsShotCycle, let cycleDay {
@@ -676,6 +954,14 @@ struct TodayView: View {
                 onNotNow: { dismissedShotCheckInDay = Date.now.isoDateString }
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
+        } else if TrackingPreferencesStore.shared.suppressesGoalPrompts {
+            EmptyView()
+        } else if vm.showsReturnExperience {
+            ReturnToTodayCard(
+                hasRecentMeals: !vm.recentMeals.isEmpty,
+                onLogFood: { appState.pendingOpenTalkToLog = true },
+                onRecentMeal: { showRecentMeals = true }
+            )
         } else if let recovery = vm.recoveryOpportunity {
             // Not Pulse: a general recovery card, and "Close Xg gap" opens the local protein
             // rescue sheet rather than handing anything to the coach. Nothing here to gate.
@@ -804,4 +1090,33 @@ enum FloorClearedCelebrationStore {
 #Preview {
     TodayView(vm: TodayViewModel())
         .environment(AppState())
+}
+
+private struct ReturnToTodayCard: View {
+    let hasRecentMeals: Bool
+    let onLogFood: () -> Void
+    let onRecentMeal: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            Text("Start with today")
+                .font(Theme.Fonts.display(26, .bold, relativeTo: .title2))
+                .foregroundStyle(Theme.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            Text("No need to fill in the missing days. Add one thing you’ve eaten today.")
+                .font(Theme.Fonts.body(16))
+                .foregroundStyle(Theme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Log food", action: onLogFood)
+                .buttonStyle(.brandPrimary)
+                .frame(maxWidth: .infinity)
+            if hasRecentMeals {
+                Button("Use a recent meal", action: onRecentMeal)
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .foregroundStyle(Theme.Colors.primaryText)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+        }
+        .tile(radius: Theme.Radius.tileSmall, padding: Theme.Spacing.md)
+    }
 }

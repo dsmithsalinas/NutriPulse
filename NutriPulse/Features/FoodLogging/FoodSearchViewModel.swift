@@ -88,6 +88,7 @@ final class FoodSearchViewModel {
 
     var quickLoggingID: String? = nil
     private(set) var quickLoggedIDs: Set<String> = []
+    func resetQuickLogState() { quickLoggedIDs = [] }
 
     /// Tapping a result's name opens the full confirm sheet; tapping "+" logs it immediately
     /// at quantity 1, straight to whichever meal the header shows, in the portion the row's

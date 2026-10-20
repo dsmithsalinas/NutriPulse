@@ -58,7 +58,7 @@ final class LocalStore {
         fatGSnapshot: Double,
         fiberGSnapshot: Double
     ) throws {
-        guard let context else { return }
+        guard let context else { throw URLError(.cannotWriteToFile) }
         let log = SDFoodLog(
             id: id, userId: userId, logDate: logDate, meal: meal,
             foodItemId: foodItemId, foodItemName: foodItemName, quantity: quantity,
@@ -67,7 +67,22 @@ final class LocalStore {
             fiberGSnapshot: fiberGSnapshot
         )
         context.insert(log)
-        try context.save()
+        do { try context.save() }
+        catch { context.delete(log); throw error }
+        FoodSaveUndo.current?.record(id: id, userId: userId)
+    }
+
+    func markFoodLogsDeleted(ids: Set<UUID>, userId: UUID) throws {
+        guard let context else { throw URLError(.cannotWriteToFile) }
+        let rows = try context.fetch(FetchDescriptor<SDFoodLog>()).filter { ids.contains($0.id) }
+        guard rows.allSatisfy({ $0.userId == userId }) else { throw URLError(.userAuthenticationRequired) }
+        let previous = rows.map { ($0, $0.syncState, $0.revision) }
+        for row in rows { row.syncState = "pendingDelete"; row.revision += 1 }
+        do { try context.save() }
+        catch {
+            for (row, state, revision) in previous { row.syncState = state; row.revision = revision }
+            throw error
+        }
     }
 
     // Always tombstone, never hard-delete. A pendingCreate row may have its create
@@ -82,6 +97,44 @@ final class LocalStore {
         log.syncState = "pendingDelete"
         log.revision += 1
         try context.save()
+    }
+
+    /// A reviewed meal saves as one transaction: retrying a failed save cannot duplicate
+    /// the first few items of a multi-item meal.
+    func insertRepeatedMeal(
+        _ source: [FoodLog], quantities: [UUID: Double], userId: UUID, logDate: String, meal: Meal
+    ) throws {
+        guard let container else {
+            throw NSError(domain: "Footing.LocalStore", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Food storage is unavailable."])
+        }
+        // An isolated context prevents a rollback from discarding unrelated UI edits.
+        let writer = ModelContext(container)
+        writer.autosaveEnabled = false
+        var createdIDs: [UUID] = []
+        do {
+            for log in source {
+                let quantity = quantities[log.id] ?? log.quantity
+                guard log.userId == userId, quantity.isFinite, quantity > 0 else {
+                    throw NSError(domain: "Footing.LocalStore", code: 2,
+                                  userInfo: [NSLocalizedDescriptionKey: "Check the serving amounts."])
+                }
+                let createdID = UUID()
+                createdIDs.append(createdID)
+                writer.insert(SDFoodLog(
+                    id: createdID, userId: userId, logDate: logDate, meal: meal.rawValue,
+                    foodItemId: log.foodItemId, foodItemName: log.displayName, quantity: quantity,
+                    caloriesSnapshot: log.caloriesSnapshot, proteinGSnapshot: log.proteinGSnapshot,
+                    carbsGSnapshot: log.carbsGSnapshot, fatGSnapshot: log.fatGSnapshot,
+                    fiberGSnapshot: log.fiberGSnapshot
+                ))
+            }
+            try writer.save()
+            for id in createdIDs { FoodSaveUndo.current?.record(id: id, userId: userId) }
+        } catch {
+            writer.rollback()
+            throw error
+        }
     }
 
     // Editing an unsynced row keeps it pendingCreate — it hasn't reached the server
@@ -244,11 +297,23 @@ final class LocalStore {
             .reduce(0) { $0 + $1.amountMl }
     }
 
+    func waterHistory(for date: Date, userId: UUID) throws -> [WaterLog] {
+        guard let context else { throw URLError(.cannotOpenFile) }
+        let day = date.isoDateString
+        let rows = try context.fetch(FetchDescriptor<SDWaterLog>(
+            predicate: #Predicate { $0.logDate == day }, sortBy: [SortDescriptor(\.loggedAt, order: .reverse)]))
+        return rows.filter { $0.userId == userId && $0.syncState != "pendingDelete" }.map {
+            WaterLog(id: $0.id, userId: $0.userId, loggedAt: $0.loggedAt, logDate: $0.logDate, amountMl: $0.amountMl, source: "manual")
+        }
+    }
+
     func insertWaterLog(id: UUID, userId: UUID, logDate: String, amountMl: Double) throws {
-        guard let context else { return }
+        guard let context else { throw URLError(.cannotWriteToFile) }
+        guard amountMl.isFinite, amountMl > 0 else { throw URLError(.badURL) }
         let log = SDWaterLog(id: id, userId: userId, logDate: logDate, amountMl: amountMl)
         context.insert(log)
-        try context.save()
+        do { try context.save() }
+        catch { context.delete(log); throw error }
     }
 
     func pendingWaterLogs() throws -> [SDWaterLog] {

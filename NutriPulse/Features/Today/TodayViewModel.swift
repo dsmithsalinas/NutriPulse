@@ -33,6 +33,35 @@ final class TodayViewModel {
     private var isTrackingToday = true
 
     var foodLogs: [FoodLog]   = []
+    private var returnHistoryLoaded = false
+    private var lastLoggedDate: Date?
+    var mealNotes: [MealNote] = []
+    var mealNotesLoadFailed = false
+    private var mealNotesRequest = UUID()
+    func loadMealNotes() async {
+        let request = UUID()
+        mealNotesRequest = request
+        let day = selectedDate.isoDateString
+        let owner = try? await supabase.auth.session.user.id
+        do {
+            let notes = try await MealNoteRepository().fetch(for: selectedDate)
+            guard mealNotesRequest == request, selectedDate.isoDateString == day, (try? await supabase.auth.session.user.id) == owner else { return }
+            mealNotes = notes; mealNotesLoadFailed = false
+        } catch {
+            guard mealNotesRequest == request, selectedDate.isoDateString == day else { return }
+            mealNotes = []; mealNotesLoadFailed = true
+        }
+    }
+    var recentMealDate: String?
+    var recentMeals: [Meal: [FoodLog]] = [:]
+
+    var showsReturnExperience: Bool {
+        ReturnExperience.isEligible(
+            lastLoggedDate: lastLoggedDate, today: .now,
+            hasFoodToday: !foodLogs.isEmpty,
+            historyLoaded: returnHistoryLoaded && isToday && !TrackingPreferencesStore.shared.isActive && mealNotes.isEmpty && !mealNotesLoadFailed && !BreakfastCheckinStore.shared.checkins.contains(where: { $0.localDay == selectedDate.isoDateString })
+        )
+    }
     var dailyGoal: DailyGoal? = nil
     var isLoading             = false
     var errorMessage: String? = nil
@@ -79,7 +108,7 @@ final class TodayViewModel {
     }
 
     var recoveryOpportunity: RecoveryOpportunity? {
-        guard isToday, strongWeekContext?.needsTailoredSuggestions != true else { return nil }
+        guard isToday, !TrackingPreferencesStore.shared.suppressesGoalPrompts, !foodLogs.isEmpty, !showsReturnExperience, strongWeekContext?.needsTailoredSuggestions != true else { return nil }
         return RecoveryCoach.opportunity(
             workouts: workouts,
             goal: dailyGoal,
@@ -89,7 +118,7 @@ final class TodayViewModel {
     }
 
     var lowAppetitePreparation: LowAppetitePreparation? {
-        guard isToday, strongWeekContext?.needsTailoredSuggestions != true, doseScheduleLoaded, !doseSchedule.cycleInterrupted, let injectedAt = latestGLP1?.injectedAt else { return nil }
+        guard isToday, !TrackingPreferencesStore.shared.suppressesGoalPrompts, strongWeekContext?.needsTailoredSuggestions != true, doseScheduleLoaded, !doseSchedule.cycleInterrupted, let injectedAt = latestGLP1?.injectedAt else { return nil }
         let currentDay = Calendar.current.dateComponents(
             [.day],
             from: Calendar.current.startOfDay(for: injectedAt),
@@ -239,14 +268,10 @@ final class TodayViewModel {
         Task { await loadData() }
     }
 
-    // A supportive, forward-looking nudge for the current day when the user is pacing under
-    // their targets. GLP-1 suppresses appetite, so under-eating (and losing muscle) is the real
-    // risk here — the framing protects results, it never scolds. Only surfaces on today, only in
-    // the afternoon/evening (mornings are legitimately low), and only when genuinely behind.
-    // On a day with a logged workout the copy becomes workout-aware and the protein trigger
-    // reaches a little higher — see buildNudge.
+    // Food entries may be partial. Offer a next-meal idea in the afternoon without
+    // treating the diary's remaining target as confirmed under-eating. Empty days stay quiet.
     var nudge: DayNudge? {
-        guard strongWeekContext?.needsTailoredSuggestions != true, isToday, let goal = dailyGoal else { return nil }
+        guard !TrackingPreferencesStore.shared.suppressesGoalPrompts, strongWeekContext?.needsTailoredSuggestions != true, isToday, let goal = dailyGoal else { return nil }
         return Self.buildNudge(
             goal: goal,
             totalProteinG: totalProteinG,
@@ -266,7 +291,7 @@ final class TodayViewModel {
         todaysWorkouts: [WorkoutLog],
         hour: Int
     ) -> DayNudge? {
-        guard goal.proteinG > 0 else { return nil }
+        guard goal.proteinG > 0, totalCalories > 0 || totalProteinG > 0 else { return nil }
         guard hour >= 14 else { return nil }
 
         let proteinLeft = goal.proteinG - totalProteinG
@@ -280,20 +305,19 @@ final class TodayViewModel {
         let workedOut = !todaysWorkouts.isEmpty
         let proteinTrigger = workedOut ? 0.8 : 0.7
 
-        // Behind on the day's priority (protein) or well under on energy…
+        // A diary-based opportunity, not evidence of a nutrition shortfall.
         guard proteinPct < proteinTrigger || caloriePct < 0.6 else { return nil }
         // …but not when they're basically there — no nagging over the last few grams.
         guard proteinLeft > 15 || calorieLeft > 400 else { return nil }
 
-        let pLeft = max(Int(proteinLeft.rounded()), 0)
-        let cLeft = max(Int(calorieLeft.rounded()), 0)
+        let loggedProtein = Int(totalProteinG.rounded())
 
         guard workedOut else {
             return DayNudge(
                 headline: "You've got room to finish strong",
-                body: "You're pacing a little under today. A protein-forward dinner keeps your muscle protected while the medication does its part — you're about \(pLeft)g of protein and \(cLeft) calories from your goals.",
+                body: "Your food entries show \(loggedProtein)g of protein. Your diary may be partial — log anything else you’ve eaten, or find an idea for your next meal.",
                 cta: "Ask Pulse for dinner ideas",
-                prompt: "I have about \(pLeft)g of protein and \(cLeft) calories left today — what should I eat to finish strong?"
+                prompt: "My entries show \(loggedProtein)g of protein, but may be partial. Suggest a familiar next meal without assuming I’ve eaten too little."
             )
         }
 
@@ -309,9 +333,9 @@ final class TodayViewModel {
 
         return DayNudge(
             headline: "Feed the work you put in",
-            body: "You logged \(sessionPhrase) today. Protein is how that work turns into protected muscle — you're about \(pLeft)g of protein and \(cLeft) calories from your goals.",
+            body: "You logged \(sessionPhrase) today and \(loggedProtein)g of protein. Your diary may be partial. Start your next meal with a familiar protein option.",
             cta: "Ask Pulse for a recovery dinner",
-            prompt: "I did \(sessionPhrase) today and I'm about \(pLeft)g of protein and \(cLeft) calories short of my goals — what should I eat tonight to support it?"
+            prompt: "I did \(sessionPhrase) today. My entries show \(loggedProtein)g of protein but may be partial. Suggest a familiar next meal without assuming a confirmed intake gap."
         )
     }
 
@@ -359,6 +383,7 @@ final class TodayViewModel {
         let wasClosed      = allRingsClosed
         let wasProteinHit  = proteinGoalHit
         isLoading    = true
+        returnHistoryLoaded = false
         errorMessage = nil
         defer { isLoading = false }
 
@@ -369,6 +394,10 @@ final class TodayViewModel {
 
         do {
             let userId = try await supabase.auth.session.user.id
+
+            await UsualMealStore.shared.load()
+            await BreakfastCheckinStore.shared.load()
+            await loadMealNotes()
 
             // Read from LocalStore — instant, works offline
             foodLogs      = (try? LocalStore.shared.fetchFoodLogs(for: selectedDate, userId: userId)) ?? []
@@ -412,6 +441,8 @@ final class TodayViewModel {
             errorMessage = error.localizedDescription
         }
 
+        if isToday { await loadReturnHistory() }
+
         justClosedAllRings = !wasClosed && allRingsClosed
         justHitProteinGoal = !wasProteinHit && proteinGoalHit
 
@@ -447,6 +478,52 @@ final class TodayViewModel {
         await checkWeightDrift()
         await FavoritesStore.shared.loadIfNeeded()
         await evaluateSmartNotifications()
+    }
+
+    #if DEBUG
+    /// Account-free fixture for reviewing the return state through production views.
+    func previewReturnExperience() {
+        let priorDate = Calendar.current.date(byAdding: .day, value: -8, to: .now)!
+        recentMeals = Dictionary(grouping: foodLogs, by: \.meal)
+        recentMealDate = priorDate.isoDateString
+        lastLoggedDate = priorDate
+        foodLogs = []
+        returnHistoryLoaded = true
+        latestGLP1 = nil
+        shotCycleCheckIns = []
+    }
+    #endif
+
+    private func loadReturnHistory() async {
+        recentMeals = [:]
+        recentMealDate = nil
+        guard foodLogs.isEmpty else { return }
+        let requestedDate = selectedDate
+        let requestedDay = requestedDate.isoDateString
+        do {
+            let userId = try await supabase.auth.session.user.id
+            async let priorDateTask = foodLogRepo.latestLoggedDate(before: requestedDate)
+            async let todayTask = foodLogRepo.fetchLogs(for: requestedDate)
+            let (priorDate, remoteToday) = try await (priorDateTask, todayTask)
+            for log in remoteToday { try LocalStore.shared.upsertFoodLog(from: log) }
+            if let priorDate, let date = Date.fromISODateString(priorDate) {
+                let source = try await foodLogRepo.fetchLogs(for: date)
+                for log in source { try LocalStore.shared.upsertFoodLog(from: log) }
+            }
+            guard isToday, selectedDate.isoDateString == requestedDay,
+                  (try? await supabase.auth.session.user.id) == userId else { return }
+            foodLogs = try LocalStore.shared.fetchFoodLogs(for: selectedDate, userId: userId)
+            let history = try LocalStore.shared.fetchFoodLogs(since: .distantPast, userId: userId)
+                .filter { $0.logDate < requestedDay }
+            let latest = history.map(\.logDate).max()
+            lastLoggedDate = latest.flatMap({ Date.fromISODateString($0) })
+            recentMealDate = latest
+            recentMeals = Dictionary(grouping: history.filter { $0.logDate == latest }, by: \.meal)
+            returnHistoryLoaded = true
+        } catch {
+            // A cache gap or failed refresh never establishes that the user stopped logging.
+            returnHistoryLoaded = false
+        }
     }
 
     // Copies the exact per-serving snapshots and quantities from yesterday into today.
@@ -489,43 +566,50 @@ final class TodayViewModel {
     // source date and meal that established the pattern, so the action remains local-first
     // and deterministic even if the network is unavailable when the user taps it.
     func mealLogs(from sourceDate: String, meal: Meal) async -> [FoodLog] {
+        #if DEBUG
+        if DebugLaunch.tour, sourceDate == recentMealDate { return recentMeals[meal] ?? [] }
+        #endif
         guard let date = Date.fromISODateString(sourceDate),
               let userId = try? await supabase.auth.session.user.id else { return [] }
+        let cached = ((try? LocalStore.shared.fetchFoodLogs(for: date, userId: userId)) ?? [])
+            .filter { $0.meal == meal }
+        if !cached.isEmpty { return cached }
+        // History beyond the sync window is fetched on demand, then read locally so
+        // pending edits and deletion tombstones remain authoritative.
+        if let remote = try? await foodLogRepo.fetchLogs(for: date) {
+            for log in remote { try? LocalStore.shared.upsertFoodLog(from: log) }
+        }
         return ((try? LocalStore.shared.fetchFoodLogs(for: date, userId: userId)) ?? [])
             .filter { $0.meal == meal }
     }
 
-    func repeatMeal(from sourceDate: String, meal: Meal, quantities: [UUID: Double] = [:]) async {
-        guard let userId = try? await supabase.auth.session.user.id else { return }
+    func repeatMeal(from sourceDate: String, meal: Meal, quantities: [UUID: Double] = [:]) async -> Bool {
+        guard let userId = try? await supabase.auth.session.user.id else { return false }
         let source = await mealLogs(from: sourceDate, meal: meal)
-        guard !source.isEmpty else { return }
+        guard !source.isEmpty, (try? await supabase.auth.session.user.id) == userId else { return false }
         do {
-            for log in source {
-                let quantity = max(quantities[log.id] ?? log.quantity, 0.5)
-                try LocalStore.shared.insertFoodLog(
-                    id: UUID(), userId: userId,
-                    logDate: Date.now.isoDateString, meal: meal.rawValue,
-                    foodItemId: log.foodItemId, foodItemName: log.displayName,
-                    quantity: quantity,
-                    caloriesSnapshot: log.caloriesSnapshot,
-                    proteinGSnapshot: log.proteinGSnapshot,
-                    carbsGSnapshot: log.carbsGSnapshot,
-                    fatGSnapshot: log.fatGSnapshot,
-                    fiberGSnapshot: log.fiberGSnapshot
-                )
-            }
+            try LocalStore.shared.insertRepeatedMeal(
+                source, quantities: quantities, userId: userId,
+                logDate: Date.now.isoDateString, meal: meal
+            )
             selectedDate = .now
             foodLogs = try LocalStore.shared.fetchFoodLogs(for: .now, userId: userId)
             SyncEngine.shared.refreshPendingCount()
             Task { await SyncEngine.shared.pushPendingChanges() }
             await evaluateSmartNotifications()
+            return true
         } catch {
             errorMessage = "Couldn't repeat that meal."
+            return false
         }
     }
 
     private func evaluateSmartNotifications() async {
         guard isToday else { return }
+        guard !TrackingPreferencesStore.shared.suppressesGoalPrompts else {
+            NotificationManager.shared.cancelSmartNotifications()
+            return
+        }
         guard UserDefaults.standard.bool(forKey: NotificationManager.smartCoachingEnabledKey) else {
             await NotificationManager.shared.scheduleSmartOpportunity(nil)
             return
@@ -1085,5 +1169,20 @@ final class TodayViewModel {
         calendar: Calendar = .current
     ) -> Bool {
         calendar.isDate(sampleDate, inSameDayAs: now) && !isFromThisApp && !alreadySyncedToday
+    }
+}
+
+/// Three complete local calendar days without food entries; a new account is not a return.
+enum ReturnExperience {
+    static func isEligible(
+        lastLoggedDate: Date?, today: Date, hasFoodToday: Bool,
+        historyLoaded: Bool, calendar: Calendar = .current
+    ) -> Bool {
+        guard historyLoaded, !hasFoodToday, let lastLoggedDate else { return false }
+        let distance = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: lastLoggedDate),
+            to: calendar.startOfDay(for: today)
+        ).day ?? 0
+        return distance >= 4
     }
 }

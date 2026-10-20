@@ -3,6 +3,7 @@ import Network
 import Observation
 
 enum SyncFailureStage: String {
+    case mealNoteUpload = "meal note upload"
     case foodUpload = "food upload"
     case waterUpload = "water upload"
     case workoutUpload = "workout upload"
@@ -118,7 +119,7 @@ final class SyncEngine {
     }
 
     func refreshPendingCount() {
-        pendingCount = (try? LocalStore.shared.pendingCount()) ?? 0
+        pendingCount = ((try? LocalStore.shared.pendingCount()) ?? 0) + MealNoteStore.shared.pendingCount
     }
 
     // Set when a push is requested while one is already running. The request used to be
@@ -146,6 +147,7 @@ final class SyncEngine {
         lastSyncAttemptAt = .now
 
         let results: [(SyncFailureStage, Bool)] = [
+            (.mealNoteUpload, await MealNoteStore.shared.sync()),
             (.foodUpload, await pushPendingFoodLogs()),
             (.waterUpload, await pushPendingWaterLogs()),
             // Pull before workout upload so an existing server-side HealthKit row can
@@ -191,6 +193,7 @@ final class SyncEngine {
         lastSyncAttemptAt = .now
 
         let results: [(SyncFailureStage, Bool)] = [
+            (.mealNoteUpload, await MealNoteStore.shared.sync()),
             (.foodUpload, await pushPendingFoodLogs()),
             (.waterUpload, await pushPendingWaterLogs()),
             (.workoutUpload, await pushPendingWorkoutLogs()),
@@ -213,7 +216,8 @@ final class SyncEngine {
             needsAnotherPush = false
             isSyncing = true
             let results: [(SyncFailureStage, Bool)] = [
-                (.foodUpload, await pushPendingFoodLogs()),
+                (.mealNoteUpload, await MealNoteStore.shared.sync()),
+            (.foodUpload, await pushPendingFoodLogs()),
                 (.waterUpload, await pushPendingWaterLogs()),
                 (.workoutUpload, await pushPendingWorkoutLogs()),
             ]

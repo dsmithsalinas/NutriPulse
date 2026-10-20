@@ -108,7 +108,6 @@ enum ProgressDateRangeFormatter {
 
 enum ProgressMarkState: Equatable {
     case met
-    case below
     case logged
     case unknown
 }
@@ -121,12 +120,13 @@ struct ProgressMetrics {
     var hasGoal: Bool { (proteinGoal ?? 0) > 0 }
     var metCount: Int {
         guard let proteinGoal, proteinGoal > 0 else { return 0 }
-        return logged.filter { $0.proteinG >= proteinGoal }.count
+        return logged.filter { $0.proteinFloorHit(target: proteinGoal) == true }.count
     }
     var missingCount: Int { max(summaries.count - logged.count, 0) }
+    var unknownGoalCount: Int { max(summaries.count - metCount, 0) }
     var completion: Double {
         guard !logged.isEmpty else { return 0 }
-        if hasGoal { return Double(metCount) / Double(logged.count) }
+        if hasGoal { return Double(metCount) / Double(max(summaries.count, 1)) }
         return Double(logged.count) / Double(max(summaries.count, 1))
     }
     var summaryReady: Bool { logged.count >= 3 }
@@ -138,7 +138,7 @@ struct ProgressMetrics {
     func state(for summary: DailySummary) -> ProgressMarkState {
         guard summary.hasData else { return .unknown }
         guard let proteinGoal, proteinGoal > 0 else { return .logged }
-        return summary.proteinG >= proteinGoal ? .met : .below
+        return summary.proteinFloorHit(target: proteinGoal) == true ? .met : .unknown
     }
 }
 
@@ -156,14 +156,14 @@ struct ProgressWeekInterval: Identifiable, Equatable {
     var fraction: Double {
         guard measuredDays > 0 else { return 0 }
         return hasGoal
-            ? Double(metDays) / Double(measuredDays)
+            ? Double(metDays) / Double(max(expectedDays, 1))
             : Double(measuredDays) / Double(max(expectedDays, 1))
     }
 
     var accessibilityText: String {
         let range = ProgressDateRangeFormatter.text(from: start, through: end)
         guard hasEnoughData else { return "\(range), not enough measured data" }
-        if hasGoal { return "\(range), protein floor met on \(metDays) of \(measuredDays) measured days" }
+        if hasGoal { return "\(range), protein floor confirmed on \(metDays) days; other days are unassessed" }
         return "\(range), nutrition logged on \(measuredDays) of \(expectedDays) days"
     }
 }
@@ -314,10 +314,9 @@ enum ProgressTryThisBuilder {
             return "Log nutrition on a few more days and a suggestion will show up here."
         }
         if metrics.averageProtein < goal {
-            let gap = Int((goal - metrics.averageProtein).rounded())
-            return "You're averaging \(gap)g under your floor. Stage one protein-dense option the night before."
+            return "Your entries may cover only part of each day. Start with today — no need to catch up."
         }
-        return "You're clearing your floor most days — keep repeating what's working."
+        return "Your entries confirm protein-floor wins — keep repeating what’s working."
     }
 }
 

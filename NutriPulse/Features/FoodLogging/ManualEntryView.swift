@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ManualEntryView: View {
+    @Environment(\.foodSaveUndo) private var undo
     // SWIFT CONCEPT — @Bindable lets a view that RECEIVES an @Observable object
     // (rather than owning it with @State) create two-way bindings via $vm.property.
     // Think of it as the SwiftUI equivalent of passing a ref to a React child component.
@@ -63,7 +64,7 @@ struct ManualEntryView: View {
         Button {
             Task {
                 do {
-                    try await vm.logManualFood(on: date)
+                    try await FoodSaveUndo.$current.withValue(undo) { try await vm.logManualFood(on: date) }
                     onLogged(.manual)
                 } catch {
                     vm.errorMessage = error.localizedDescription

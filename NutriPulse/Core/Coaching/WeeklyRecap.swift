@@ -84,8 +84,7 @@ enum WeeklyRecapDigest {
         let weekMovement = movement.filter { $0.date >= interval.start && $0.date <= interval.end }
 
         func floorHit(_ day: DailySummary) -> Bool? {
-            guard let goal = proteinGoal, goal > 0, day.hasData else { return nil }
-            return day.proteinG >= goal
+            day.proteinFloorHit(target: proteinGoal)
         }
         func average(_ days: [DailySummary], _ value: (DailySummary) -> Double) -> Int? {
             let logged = days.filter(\.hasData)

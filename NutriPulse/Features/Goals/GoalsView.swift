@@ -718,7 +718,7 @@ private struct ProteinFloorCard: View {
                     HStack(spacing: 6) {
                         Image(systemName: "flame.fill")
                             .foregroundStyle(Color(hex: 0xFB923C))
-                        Text("\(summary.currentStreak) \(summary.currentStreak == 1 ? "day" : "days") in a row")
+                        Text("\(summary.currentStreak) confirmed floor days")
                             .font(Theme.Fonts.body(15, .bold))
                             .foregroundStyle(Theme.Colors.textPrimary)
                     }
@@ -797,9 +797,8 @@ private struct ProteinFloorCard: View {
     // "days without logs are no data, never below", spelled out the same way for accessibility.
     private var gridAccessibilitySummary: String {
         let met = summary.days.filter { $0.state == .met }.count
-        let below = summary.days.filter { $0.state == .notMet }.count
         let noData = summary.days.filter { $0.state == .missing }.count
-        return "Last \(summary.days.count) days: \(met) met the floor, \(below) below the floor, \(noData) with no data."
+        return "Last \(summary.days.count) days: \(met) met the floor, \(noData) unassessed; partial logs cannot confirm a missed floor."
     }
 }
 

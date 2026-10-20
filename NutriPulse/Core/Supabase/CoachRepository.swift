@@ -8,7 +8,8 @@ struct CoachRepository {
     func fetchHistory(limit: Int = 30, before: Date? = nil) async throws -> [CoachMessage] {
         // Filters must be applied before .order(): PostgrestFilterBuilder narrows to a
         // PostgrestTransformBuilder, which has no .lt.
-        var query = supabase.from("coach_messages").select()
+        let owner = try await supabase.auth.session.user.id
+        var query = supabase.from("coach_messages").select().eq("user_id", value: owner)
         if let before {
             // Fractional seconds matter: created_at is timestamptz (microseconds), and
             // whole-second ISO8601Format() truncates the boundary down, excluding every
@@ -22,11 +23,13 @@ struct CoachRepository {
             .limit(limit)
             .execute()
             .value
-        return results.reversed()
+        guard supabase.auth.currentSession?.user.id == owner else { throw URLError(.userAuthenticationRequired) }
+        return results.filter { $0.userId == owner }.reversed()
     }
 
     func save(_ message: NewCoachMessage) async throws -> CoachMessage {
-        try await supabase
+        guard supabase.auth.currentSession?.user.id == message.userId else { throw URLError(.userAuthenticationRequired) }
+        return try await supabase
             .from("coach_messages")
             .insert(message)
             .select()

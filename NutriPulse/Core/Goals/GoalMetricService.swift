@@ -34,13 +34,13 @@ struct GoalMetricService {
         }
         let values: [GoalDailyValue]
         if source == .protein {
-            // A protein goal is met or missed against today's target; the grams stay for display.
+            // Logged protein can confirm a floor hit, but never a miss: a diary may be partial.
             let goal = try? await GoalRepository().fetchGoal(for: today)
             guard let proteinTarget = goal?.proteinG else {
                 return qualityEvaluation(values: [], dates: dates, source: source, measurement: measurement, today: today)
             }
             values = raw.compactMap { value in
-                guard let grams = value.number else { return nil }
+                guard let grams = value.number, grams >= proteinTarget else { return nil }
                 return GoalDailyValue(
                     date: value.date,
                     boolean: grams >= proteinTarget,

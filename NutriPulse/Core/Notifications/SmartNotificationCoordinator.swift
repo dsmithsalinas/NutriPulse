@@ -11,6 +11,15 @@ final class SmartNotificationCoordinator {
         guard UserDefaults.standard.bool(forKey: NotificationManager.smartCoachingEnabledKey),
               let userId = try? await supabase.auth.session.user.id else { return }
 
+        PulseAttentionStore.shared.setAccount(userId)
+        await PulseAttentionStore.shared.load()
+        guard PulseAttentionStore.shared.allowsProactive else { return }
+        TrackingPreferencesStore.shared.setAccount(userId)
+        await TrackingPreferencesStore.shared.load()
+        guard !TrackingPreferencesStore.shared.suppressesGoalPrompts else {
+            NotificationManager.shared.cancelSmartNotifications()
+            return
+        }
         async let workoutTask = HealthKitManager.shared.fetchWorkouts(for: now)
         let goal: DailyGoal?
         if let local = try? LocalStore.shared.fetchGoal(for: now, userId: userId) {

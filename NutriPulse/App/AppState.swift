@@ -86,7 +86,38 @@ final class AppState {
     // Profile is fetched before isLoading clears so RootView never flashes the wrong screen.
     func startObservingAuth() async {
         for await (event, session) in supabase.auth.authStateChanges {
+            if self.session?.user.id != session?.user.id {
+                // Do not render the next account with a previous profile or pending chat.
+                isLoading = true; profile = nil; profileLoadFailed = false
+                _pendingCoachPrompt = nil; pendingConsentPrompt = nil; showPulseConsentSheet = false
+                pendingStrongWeekReminder = false; pendingSmartNotificationRoute = nil
+                FavoritesStore.shared.reset()
+                SmartNotificationHistoryStore.clear()
+            }
             self.session = session
+            #if DEBUG
+            if !DebugLaunch.tour {
+                MealNoteStore.shared.setAccount(session?.user.id)
+                UsualMealStore.shared.setAccount(session?.user.id)
+            }
+            #else
+            MealNoteStore.shared.setAccount(session?.user.id)
+            UsualMealStore.shared.setAccount(session?.user.id)
+            #endif
+            #if DEBUG
+            if DebugLaunch.tour && ProcessInfo.processInfo.arguments.contains("--lighter-preview") {
+                TrackingPreferencesStore.shared.preview()
+            } else {
+                TrackingPreferencesStore.shared.setAccount(session?.user.id)
+            }
+            #else
+            TrackingPreferencesStore.shared.setAccount(session?.user.id)
+            #endif
+            PulseProfileStore.shared.setAccount(session?.user.id)
+            PulseMemoryStore.shared.setAccount(session?.user.id)
+            EverydayToolsStore.shared.setAccount(session?.user.id)
+            PulseAttentionStore.shared.setAccount(session?.user.id)
+            BreakfastCheckinStore.shared.setAccount(session?.user.id)
             NotificationManager.shared.setWeeklyReminderAccount(session?.user.id)
 
             if event == .passwordRecovery {
@@ -100,6 +131,8 @@ final class AppState {
             if event == .signedOut {
                 handleSignedOut()
             } else if session != nil {
+                await PulseAttentionStore.shared.load()
+                await TrackingPreferencesStore.shared.load()
                 await fetchProfile()
             } else {
                 profile = nil

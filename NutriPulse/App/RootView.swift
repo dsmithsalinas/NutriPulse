@@ -5,11 +5,18 @@ import SwiftUI
 // The type (AppState.self) acts as the key that uniquely identifies which value to pull.
 
 struct RootView: View {
+    @State private var showOfflineNotes = false
     @Environment(AppState.self) private var appState
 
     var body: some View {
         Group {
-            if AppStoreScreenshotMode.active {
+            if isEverydayToolsPreview {
+                everydayToolsPreview
+            } else if isOffScriptPreview {
+                offScriptPreview
+            } else if isPulseWeekPreview {
+                pulseWeekPreview
+            } else if AppStoreScreenshotMode.active {
                 storeScreenshotPreview
             } else if isStrongWeekPreview {
                 strongWeekPreview
@@ -35,8 +42,12 @@ struct RootView: View {
             } else if isProgressPreview {
                 MainTabView()
             } else if appState.isLoading {
-                ProgressView("Loading...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: Theme.Spacing.md) {
+                    ProgressView("Loading...")
+                    if appState.isAuthenticated && !SyncEngine.shared.isOnline {
+                        Button("Open notes offline") { showOfflineNotes = true }.frame(minHeight: 44)
+                    }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if appState.isPasswordRecoveryFlow {
                 ResetPasswordView()
             } else if !appState.isAuthenticated {
@@ -49,15 +60,64 @@ struct RootView: View {
             } else if appState.needsOnboarding {
                 OnboardingView()
             } else {
-                MainTabView()
+                MainTabView().id(appState.session?.user.id)
             }
         }
+        .sheet(isPresented: $showOfflineNotes) { OfflineMealNotesView() }
+        .onChange(of: appState.session?.user.id) { _, _ in showOfflineNotes = false }
         // SWIFT CONCEPT — .task{} is like useEffect in React. It runs an async block
         // when the view appears and automatically cancels it when the view disappears.
         // No manual cleanup needed — Swift's structured concurrency handles it.
         .task {
-            if !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
+            if !isEverydayToolsPreview && !isOffScriptPreview && !isPulseWeekPreview && !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
         }
+    }
+
+    private var isEverydayToolsPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview")
+        #else
+        false
+        #endif
+    }
+    @ViewBuilder private var everydayToolsPreview: some View {
+        #if DEBUG
+        EverydayToolsView(userId: AppStoreScreenshotPreview.sampleUser, onAskPulse: { _ in })
+            .allowsHitTesting(false)
+        #else
+        EmptyView()
+        #endif
+    }
+
+    private var isOffScriptPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--off-script-preview")
+        #else
+        false
+        #endif
+    }
+    @ViewBuilder private var offScriptPreview: some View {
+        #if DEBUG
+        OffScriptSheet(userId: AppStoreScreenshotPreview.sampleUser, date: .now, onAskPulse: { _ in }, onSaved: {})
+            .allowsHitTesting(false)
+        #else
+        EmptyView()
+        #endif
+    }
+
+    private var isPulseWeekPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--pulse-week-preview")
+        #else
+        false
+        #endif
+    }
+    @ViewBuilder private var pulseWeekPreview: some View {
+        #if DEBUG
+        PulseWeekPreview()
+        #else
+        EmptyView()
+        #endif
     }
 
     @ViewBuilder private var storeScreenshotPreview: some View {
@@ -222,6 +282,7 @@ struct RootView: View {
 private struct ProfileLoadFailedView: View {
     @Environment(AppState.self) private var appState
     @State private var isRetrying = false
+    @State private var showOfflineNotes = false
 
     var body: some View {
         VStack(spacing: Theme.Spacing.md) {
@@ -245,6 +306,8 @@ private struct ProfileLoadFailedView: View {
             .buttonStyle(.borderedProminent)
             .disabled(isRetrying)
 
+            Button("Open meal notes") { showOfflineNotes = true }.frame(minHeight: 44)
+
             Button("Sign Out") {
                 Task { try? await supabase.auth.signOut() }
             }
@@ -252,5 +315,6 @@ private struct ProfileLoadFailedView: View {
         }
         .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sheet(isPresented: $showOfflineNotes) { OfflineMealNotesView() }
     }
 }

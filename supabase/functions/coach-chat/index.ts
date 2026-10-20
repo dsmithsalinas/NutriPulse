@@ -1,4 +1,4 @@
-import { sanitizeContext, buildSystemBlocks, guardFrom } from '../_shared/pulse-context.ts'
+import { sanitizeContext, buildSystemBlocks, guardFrom, trackingContextFromRow, approvedMemoriesFromRows, breakfastCheckinsFromRows } from '../_shared/pulse-context.ts'
 import { generatePulse, selectProvider } from '../_shared/pulse-provider.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
@@ -127,7 +127,36 @@ Deno.serve(async (req) => {
     const { conversation, recentPulseMessages } = splitHistory(cleanHistory)
 
     // Rebuild the context from a strict allowlist before it ever reaches the prompt.
-    const safeContext = sanitizeContext(context)
+    const safeContext = sanitizeContext(context) ?? {}
+    // Account state overrides client input, including older clients that don't know this mode.
+    // A failed lookup is unknown, never evidence that goal pressure should resume.
+    let lighterTracking: Record<string, unknown> = { available: false, active: false }
+    try {
+      const { data, error } = await supabase.from('tracking_preferences')
+        .select('enabled, reason, started_at, ends_at').eq('user_id', user.id).maybeSingle()
+      if (!error) lighterTracking = trackingContextFromRow(data)
+    } catch { /* Keep the unavailable state. */ }
+    safeContext.lighterTracking = lighterTracking
+    // Use only the caller's JWT (never service-role) and verified owner. There is no
+    // cross-request conversation/memory cache, and client memory keys are not allowlisted.
+    safeContext.approvedMemories = []
+    safeContext.memoriesAvailable = false
+    safeContext.breakfastCheckins = []
+    try {
+      const { data, error } = await supabase.from('pulse_memories')
+        .select('user_id, content, approved_at').eq('user_id', user.id)
+        .order('approved_at', { ascending: false }).limit(30)
+      if (!error) {
+        safeContext.approvedMemories = approvedMemoriesFromRows(data, user.id)
+        safeContext.memoriesAvailable = true
+      }
+    } catch { /* A failed lookup never falls back to client or another request. */ }
+    try {
+      const { data, error } = await supabase.from('breakfast_checkins')
+        .select('user_id, local_day, name').eq('user_id', user.id)
+        .order('local_day', { ascending: false }).limit(14)
+      if (!error) safeContext.breakfastCheckins = breakfastCheckinsFromRows(data, user.id)
+    } catch { /* Qualitative context is optional. */ }
     const systemPrompt = buildSystemBlocks(safeContext, messageType, recentPulseMessages)
 
     const apiMessages = [

@@ -6,8 +6,8 @@ struct MainTabView: View {
         ? .progress : ProcessInfo.processInfo.arguments.contains("--pulse-preview") ? .pulse : .today
     // Owned here so the tab bar's Log action can log to the exact day Today is showing.
     @State private var todayVM = Self.makeTodayViewModel()
-    @State private var showLogger = false
-    @State private var loggerInitialTab: FoodLoggingViewModel.LogTab = .talk
+    @State private var showLogger = ProcessInfo.processInfo.arguments.contains("--logging-preview") || ProcessInfo.processInfo.arguments.contains("--meal-note-preview")
+    @State private var loggerInitialTab: FoodLoggingViewModel.LogTab? = nil
     @State private var tabBarHeight: CGFloat = 0
     @State private var tabBarCompact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -17,7 +17,12 @@ struct MainTabView: View {
 
     private static func makeTodayViewModel() -> TodayViewModel {
         #if DEBUG
-        if DebugLaunch.tour { return AppStoreScreenshotPreview.todayModel() }
+        if DebugLaunch.tour {
+            let vm = AppStoreScreenshotPreview.todayModel()
+            if ProcessInfo.processInfo.arguments.contains("--return-preview") { vm.previewReturnExperience() }
+            if ProcessInfo.processInfo.arguments.contains("--lighter-preview") { TrackingPreferencesStore.shared.preview() }
+            return vm
+        }
         #endif
         return TodayViewModel()
     }
@@ -75,7 +80,7 @@ struct MainTabView: View {
         .onChange(of: selectedTab) { _, _ in setTabBarCompact(false) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             MainTabBar(selected: $selectedTab, showsPulse: pulseStore.pulseEnabled, compact: tabBarCompact, onLog: {
-                loggerInitialTab = .talk
+                loggerInitialTab = nil
                 showLogger = true
             })
         }
@@ -154,22 +159,43 @@ struct MainTabView: View {
             handleQuickAction()
             handleSmartNotificationRoute()
             handleWeeklyReminderRoute()
+            await PulseAttentionStore.shared.load()
             await NotificationManager.shared.reconcileWeeklyReminder()
             #if DEBUG
-            if DebugLaunch.tour { appState.profile = ProfileView.tourProfile }
+            if DebugLaunch.tour {
+                appState.profile = ProfileView.tourProfile
+                if ProcessInfo.processInfo.arguments.contains("--lighter-preview") {
+                    TrackingPreferencesStore.shared.preview()
+                    return
+                }
+            }
             #endif
             await pulseStore.load()
+            await TrackingPreferencesStore.shared.load()
         }
         .onReceive(NotificationCenter.default.publisher(for: .strongWeekReminderOpened)) { _ in
             handleWeeklyReminderRoute()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
-            Task { await NotificationManager.shared.reconcileWeeklyReminder() }
+            Task {
+                TrackingPreferencesStore.shared.refreshTiming()
+                await TrackingPreferencesStore.shared.load()
+                await PulseAttentionStore.shared.load()
+                await NotificationManager.shared.reconcileWeeklyReminder()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             handleQuickAction()
             handleSmartNotificationRoute()
             handleWeeklyReminderRoute()
+            Task {
+                TrackingPreferencesStore.shared.refreshTiming()
+                await TrackingPreferencesStore.shared.load()
+                await PulseAttentionStore.shared.load()
+                await NotificationManager.shared.reconcileWeeklyReminder()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .trackingModeChanged)) { _ in
             Task { await NotificationManager.shared.reconcileWeeklyReminder() }
         }
         // Another surface (Profile's toggles, the consent sheet) changed a Pulse setting —
@@ -223,12 +249,17 @@ struct MainTabView: View {
             showLogger = true
         case .logDose:
             appState.pendingQuickAction = .logDose
+        case .offScript:
+            todayVM.goToToday()
+            appState.pendingQuickAction = .offScript
         }
     }
 
     private func handleSmartNotificationRoute() {
         guard let route = SmartNotificationRouteStore.consume() else { return }
         selectedTab = .today
+        if TrackingPreferencesStore.shared.suppressesGoalPrompts,
+           route.action == .closeProtein || route.action == .viewPreparation { return }
         switch route.action {
         case .addWater:
             // The user's usual amount, always on today (not whichever day Today is showing).

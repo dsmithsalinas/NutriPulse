@@ -5,10 +5,13 @@ import SwiftUI
 // logging the parsed items would bring today's protein up to goal. The parse/confirm/save flow
 // itself is unchanged from before the redesign; only the chrome around it moved.
 struct TalkToLogView: View {
+    @Environment(\.foodSaveUndo) private var undo
     @Bindable var vm: TalkToLogViewModel
     let date: Date
     let headerMeal: Meal
     let onLogged: (LogSource) -> Void
+    var familiarFoods: [FoodLog] = []
+    var onSelectFamiliar: (FoodLog) -> Void = { _ in }
 
     @State private var dictation = DictationRecognizer()
     // What was already in the field when dictation started, so speech appends rather than
@@ -77,9 +80,29 @@ struct TalkToLogView: View {
             micHero
             dividerRow
             typeBox
+            UsualMealsSection(date: date, meal: headerMeal) { onLogged(.favorite) }
+            familiarSection
             tryChips
         }
         .popIn(order: 0)
+    }
+
+    @ViewBuilder private var familiarSection: some View {
+            if !familiarFoods.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Something familiar?").font(Theme.Fonts.body(16, .bold))
+                    ForEach(familiarFoods) { food in
+                        Button { onSelectFamiliar(food) } label: {
+                            HStack {
+                                Text(food.displayName).lineLimit(1)
+                                Spacer()
+                                Text(Date.fromISODateString(food.logDate)?.formatted(.dateTime.month(.abbreviated).day().year()) ?? food.logDate).font(Theme.Fonts.body(12))
+                                Image(systemName: "chevron.right")
+                            }.font(Theme.Fonts.body(14)).frame(minHeight: 44)
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
     }
 
     private var micHero: some View {
@@ -238,7 +261,7 @@ struct TalkToLogView: View {
                     .popIn(order: index)
             }
 
-            if vm.wouldClearProteinFloor {
+            if vm.wouldClearProteinFloor && !TrackingPreferencesStore.shared.suppressesGoalPrompts {
                 clearsFloorTile
                     .popIn(order: vm.rows.count)
             }
@@ -309,7 +332,7 @@ struct TalkToLogView: View {
                         do {
                             // The sheet header owns the meal; Talk logs wherever it says.
                             vm.selectedMeal = headerMeal
-                            try await vm.logAll(on: date)
+                            try await FoodSaveUndo.$current.withValue(undo) { try await vm.logAll(on: date) }
                             onLogged(.talk)
                         } catch {
                             vm.errorMessage = "Couldn't save that log. Try again."
