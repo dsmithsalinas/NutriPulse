@@ -1,0 +1,9 @@
+{
+  "finalStoryboards": 3,
+  "imagesHaveAltText": true,
+  "localLinksAndAnchorsResolve": true,
+  "nativeOutputHashesMatch": true,
+  "browserRenderVerified": false,
+  "browserLimit": "In-app browser policy blocks local file URLs; no workaround attempted. Files and references checked directly.",
+  "productionOnboardingChanged": false
+}

@@ -141,7 +141,7 @@ struct MainTabView: View {
         }) {
             PulseConsentSheet(
                 onAgree: {
-                    try? await pulseStore.recordConsent(agreed: true)
+                    try await pulseStore.recordConsent(agreed: true)
                     appState.showPulseConsentSheet = false
                     if let prompt = appState.pendingConsentPrompt {
                         appState.pendingConsentPrompt = nil
@@ -149,7 +149,7 @@ struct MainTabView: View {
                     }
                 },
                 onDecline: {
-                    try? await pulseStore.recordConsent(agreed: false)
+                    try await pulseStore.recordConsent(agreed: false)
                     appState.pendingConsentPrompt = nil
                     appState.showPulseConsentSheet = false
                 }

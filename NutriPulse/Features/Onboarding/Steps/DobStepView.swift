@@ -4,11 +4,11 @@ struct DobStepView: View {
     @Bindable var vm: OnboardingViewModel
     let onContinue: () -> Void
 
-    // Limit picker to ages 13–120
+    // Limit picker to ages 18–120
     private var dobRange: ClosedRange<Date> {
         let cal = Calendar.current
         let oldest  = cal.date(byAdding: .year, value: -120, to: .now) ?? .now
-        let youngest = cal.date(byAdding: .year, value: -13, to: .now) ?? .now
+        let youngest = cal.date(byAdding: .year, value: -18, to: .now) ?? .now
         return oldest...youngest
     }
 

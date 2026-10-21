@@ -1,0 +1,18 @@
+Use case: precise-object-edit / ui-mockup. Revise the supplied "Start with what matters" storyboard, using the second supplied storyboard "Try one small thing" only as reference for the OPTIONAL SETUP ROWS on its fourth screen. Preserve the selected first storyboard's title, five-screen sequence, first four screens, current living-dot Footing wordmark, Daylight colors and typography, generous spacing, mature Cove identity and exact approved reference poses. This is a slight refinement of the selected flow, not a new direction.
+
+CHANGE THE FIFTH SCREEN ONLY:
+Keep heading "A starting point that’s yours." Keep the user's focus quote "Keep meals simple and protect my muscle." Keep explicit approval separate from AI permission.
+Below the quote add a compact white grouped section with exactly these three tappable rows, separated by fine dividers, not three floating cards:
+"Set nutrition targets" with smaller secondary "130g protein · 2,000 kcal" and a right chevron. This is review/edit of the estimates already set in setup, not another required task.
+"Tell Pulse what matters" with smaller secondary "Review your focus" and a right chevron. This opens the current draft so it can be edited; it is NOT already permanently saved.
+"Connect Apple Health" with smaller secondary "Optional · Connect when you’re ready" and a right chevron.
+Section label "Make it yours" above the group. Do not use completion checkmarks that imply a draft focus is already saved or Health is already connected.
+Keep a brief line "Your focus is saved only if you choose below."
+Retain primary "Save focus & start" and secondary "Start without saving focus".
+Reduce or omit the large Cove on this fifth screen to make room without crowding; Cove is already present on screen one. Do not place character art over text or buttons.
+No duplicated targets card: replace the existing two-column protein/energy card with the three setup rows, incorporating its example targets as secondary text in the first row.
+All five screens remain at natural 390x844 proportions in the existing wide storyboard. At least 15px body text in UI coordinates. Do not add any screens, mandatory tasks, rings, obsolete logos, confetti, chat bubbles, or new character poses. No OS status bars, device hardware or browser chrome.
+Update the small subtitle outside the screens to "Focus first. Finish the rest when you’re ready." Preserve the other first-four-screen UI text.
+Use the third input image, the current approved living-dot wordmark, as the sole product logo. Retired ring logos on the original Cove board are not product assets to use.
+Character invariant: use attached original approved Cove board for identity, not its old branding. Preserve compact continuous warm-white matte sculptural body, tiny navy eyes and restrained mouth, broad asymmetrical rear-attached indigo-to-pale-lime crest and existing supports. Never mirror, add anatomy, turn Cove into the coach, add face to Pulse, or redesign Cove. Existing current approved v2.1 pose asset is attached; leave the first-screen character unchanged.
+Requested output: one revised selected-flow storyboard, same dimensions/aspect as first image. Mark "Concept mockup · Example data" outside frames.

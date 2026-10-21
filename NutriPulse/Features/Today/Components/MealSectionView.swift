@@ -5,30 +5,51 @@ struct MealSectionView: View {
     let logs: [FoodLog]
     var onEdit: (FoodLog) -> Void = { _ in }
     var onDelete: (FoodLog) -> Void = { _ in }
+    var onSaveUsualMeal: (() -> Void)? = nil
 
     private var mealCalories: Double { logs.reduce(0) { $0 + $1.totalCalories } }
     private var mealProtein: Double { logs.reduce(0) { $0 + $1.totalProteinG } }
+
+    private var mealTotals: some View {
+        HStack(spacing: Theme.Spacing.sm) {
+            Text("\(Int(mealProtein.rounded()))g")
+                .font(Theme.Fonts.body(14, .bold))
+                .foregroundStyle(Theme.Colors.primaryText)
+            Text("\(Int(mealCalories.rounded())) kcal")
+                .font(Theme.Fonts.body(13, .medium))
+                .foregroundStyle(Theme.Colors.textFaint)
+        }
+        .monospacedDigit()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Section header: the meal as a tile label, its protein first (the number that
             // matters here), calories after.
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
-                TileEyebrow(meal.displayName)
-                Spacer()
-                // .rounded() everywhere. Int(Double) truncates toward zero, and the header
-                // truncated the SUM while rows truncated each item: two 99.6 kcal rows showed
-                // "99" and "99" under a header reading "199". Quantity steps by 0.25, so
-                // fractional totals are routine — and the rings, which already used .rounded(),
-                // then disagreed with both.
-                Text("\(Int(mealProtein.rounded()))g")
-                    .font(Theme.Fonts.body(14, .bold))
-                    .foregroundStyle(Theme.Colors.primaryText)
-                    .monospacedDigit()
-                Text("\(Int(mealCalories.rounded())) kcal")
-                    .font(Theme.Fonts.body(13, .medium))
-                    .foregroundStyle(Theme.Colors.textFaint)
-                    .monospacedDigit()
+            HStack(alignment: .center, spacing: 2) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
+                        TileEyebrow(meal.displayName).fixedSize()
+                        Spacer(minLength: 4)
+                        mealTotals.fixedSize()
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        TileEyebrow(meal.displayName)
+                        mealTotals
+                    }
+                }
+                if let onSaveUsualMeal {
+                    Button(action: onSaveUsualMeal) {
+                        Image(systemName: "bookmark.badge.plus")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Save \(meal.displayName.lowercased()) as a usual meal")
+                    .accessibilityHint("Saves all foods in this meal together for next time")
+                }
             }
             .padding(.horizontal, Theme.Spacing.md)
             .padding(.top, 14)

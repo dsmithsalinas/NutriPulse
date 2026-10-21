@@ -74,6 +74,13 @@ final class PulseProfileStore {
         static let pending = "pulse.pendingPreferences"
     }
 
+    func purgeAccount(_ id: UUID) {
+        for key in [Key.enabled, Key.onToday, Key.consent, Key.pending] {
+            defaults.removeObject(forKey: "\(key).\(id.uuidString)")
+        }
+        if accountId == id { setAccount(nil) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         pulseEnabled = false
@@ -178,7 +185,9 @@ final class PulseProfileStore {
             try validate(id, request, saved: saved)
             apply(saved)
         } else {
-            try await saveSetting("pulse_enabled", false)
+            let saved = try await repo.upsert(["ai_consent_at": .null, "pulse_enabled": .bool(false)], userId: id)
+            try validate(id, request, saved: saved)
+            apply(saved)
         }
         NotificationCenter.default.post(name: .pulseProfileChanged, object: nil)
     }
@@ -187,6 +196,12 @@ final class PulseProfileStore {
     /// backs out, nothing else sends); the change notice reloads the rest from the server.
     func serverReportedPulseOff() {
         pulseEnabled = false
+        cacheSettings()
+        NotificationCenter.default.post(name: .pulseProfileChanged, object: nil)
+    }
+
+    func serverReportedConsentRequired() {
+        aiConsentAt = nil
         cacheSettings()
         NotificationCenter.default.post(name: .pulseProfileChanged, object: nil)
     }

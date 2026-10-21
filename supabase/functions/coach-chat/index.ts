@@ -1,8 +1,9 @@
 import { sanitizeContext, buildSystemBlocks, guardFrom, trackingContextFromRow, approvedMemoriesFromRows, breakfastCheckinsFromRows } from '../_shared/pulse-context.ts'
 import { generatePulse, selectProvider } from '../_shared/pulse-provider.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0'
 import { corsHeaders } from '../_shared/cors.ts'
 import { checkRateLimit } from '../_shared/ratelimit.ts'
+import { requireAIConsent } from '../_shared/ai-consent.ts'
 
 // Per-user cap. Covers manual chats plus the automatic check-in / weekly-summary calls, so it's
 // generous — real use is a handful an hour; this only bites a script looping the endpoint.
@@ -62,18 +63,11 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Pulse off is an account setting (pulse_profiles), so it holds on every device and for app
-    // versions that predate the switch. Read with the caller's own JWT under RLS. If the row or
-    // table isn't there, nothing was turned off; don't block on a lookup failure either.
-    try {
-      const { data: settings } = await supabase.from('pulse_profiles').select('pulse_enabled').maybeSingle()
-      if (settings?.pulse_enabled === false) {
-        return new Response(JSON.stringify({ error: 'Pulse is turned off. You can turn it back on in Profile.', code: 'pulse_off' }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-    } catch { /* lookup unavailable: fall through */ }
+    const consent = await requireAIConsent(() => supabase.from('pulse_profiles')
+      .select('user_id,pulse_enabled,ai_consent_at').eq('user_id', user.id).maybeSingle(), user.id, 'pulse')
+    if (consent) return new Response(JSON.stringify(consent), {
+      status: consent.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
 
     const { message, messageType = 'chat', history = [], context } = await req.json()
 

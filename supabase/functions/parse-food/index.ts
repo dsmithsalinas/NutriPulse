@@ -1,4 +1,5 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireAIConsent } from '../_shared/ai-consent.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0'
 import { corsHeaders } from '../_shared/cors.ts'
 import { fatSecretGet, asArray } from '../_shared/fatsecret.ts'
 import { checkRateLimit } from '../_shared/ratelimit.ts'
@@ -233,7 +234,13 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Rate-limit before parsing/spending. Counts every authenticated call, malformed included.
+    const consent = await requireAIConsent(() => supabase.from('pulse_profiles')
+      .select('user_id,food_ai_consent_at').eq('user_id', user.id).maybeSingle(), user.id, 'food')
+    if (consent) return new Response(JSON.stringify(consent), {
+      status: consent.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+
+    // Rate-limit before parsing/spending. Counts every consented call, malformed included.
     if (!await checkRateLimit(user.id, 'parse-food', RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS)) {
       return new Response(
         JSON.stringify({ error: "You're logging fast — give it a minute and try again." }),

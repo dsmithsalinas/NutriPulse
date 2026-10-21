@@ -82,6 +82,11 @@ final class TalkToLogViewModel {
     // `date` is the day being logged to (usually today, but Today can log to a past day) —
     // the protein context for "This clears your floor" is fetched for that same day.
     func parse(for date: Date) async {
+        guard FoodAIConsentStore.shared.isAllowed,
+              let owner = supabase.auth.currentSession?.user.id else {
+            errorMessage = "Allow AI food logging before parsing a meal. Search and manual logging are still available."
+            return
+        }
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         isParsing = true
@@ -93,6 +98,8 @@ final class TalkToLogViewModel {
         do {
             let items = try await client.parse(text: text)
             _ = await context
+            guard supabase.auth.currentSession?.user.id == owner,
+                  FoodAIConsentStore.shared.isAllowed else { return }
             rows = items.map {
                 ConfirmRow(
                     name: $0.name, brand: $0.brand, servingDesc: $0.servingDesc,

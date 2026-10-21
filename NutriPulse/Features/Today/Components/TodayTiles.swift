@@ -293,22 +293,27 @@ struct CaloriesTile: View {
                         caloriesValue
                     }
                 }
-                if hasFoodLogs, let goal, goal.calories > 0 {
-                    MeterBar(progress: calories / goal.calories, color: Theme.NutrientColor.calories, height: 8)
+                if let goal, goal.calories > 0 {
+                    Text("Goal \(Int(goal.calories.rounded()).formatted()) kcal")
+                        .font(Theme.Fonts.body(12, .medium))
+                        .foregroundStyle(Theme.Colors.textSecondary)
+                    if hasFoodLogs {
+                        MeterBar(progress: calories / goal.calories, color: Theme.NutrientColor.calories, height: 8)
+                    }
                 }
             }
             Spacer(minLength: 0)
-            if hasFoodLogs {
+            Text("Logged / daily goal")
+                .font(Theme.Fonts.body(11, .medium))
+                .foregroundStyle(Theme.Colors.textSecondary)
+            Group {
                 macro("Carbs", carbsG, goal?.carbsG, Theme.NutrientColor.carbs)
                 macro("Fat", fatG, goal?.fatG, Theme.NutrientColor.fat)
                 macro("Fiber", fiberG, goal?.fiberG, Theme.NutrientColor.fiber)
-            } else {
+            }
+            if !hasFoodLogs {
                 Text("No food logged today")
-                    .font(Theme.Fonts.body(15, .semibold))
-                    .foregroundStyle(Theme.Colors.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Totals appear as you add food.")
-                    .font(Theme.Fonts.body(13))
+                    .font(Theme.Fonts.body(12, .medium))
                     .foregroundStyle(Theme.Colors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -326,28 +331,32 @@ struct CaloriesTile: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
                 Spacer(minLength: 4)
                 HStack(spacing: 0) {
-                    Text("\(Int(value.rounded()))")
+                    Text(hasFoodLogs ? "\(Int(value.rounded()))" : "—")
                         .font(Theme.Fonts.body(12, .bold))
                         .foregroundStyle(Theme.Colors.textPrimary)
-                    Text("g logged")
+                    Text(target.map { $0 > 0 ? " / \(Int($0.rounded()))g" : "g" } ?? "g")
                         .font(Theme.Fonts.body(12, .medium))
                         .foregroundStyle(Theme.Colors.textFaint)
                 }
                 .monospacedDigit()
             }
-            if let target, target > 0 {
+            if hasFoodLogs, let target, target > 0 {
                 MeterBar(progress: value / target, color: color, height: 5, delay: 0.6)
             }
         }
     }
 
     private var accessibilitySummary: String {
-        guard hasFoodLogs else { return "No food logged. Calorie and macro intake unknown." }
-        let cal = "Calories \(caloriesLine.value) \(caloriesLine.unit). Diary may be partial"
-        func part(_ name: String, _ v: Double, _ t: Double?) -> String {
-            "\(name) \(Int(v.rounded())) grams logged"
+        let calGoal = goal.flatMap { $0.calories > 0 ? " Daily goal \(Int($0.calories.rounded())) kilocalories." : nil } ?? ""
+        let cal = hasFoodLogs
+            ? "Calories \(caloriesLine.value) kilocalories logged. Diary may be partial."
+            : "No food logged. Calorie and macro intake unknown."
+        func part(_ name: String, _ value: Double, _ target: Double?) -> String {
+            let logged = hasFoodLogs ? "\(Int(value.rounded())) grams logged" : "not logged"
+            let targetText = target.flatMap { $0 > 0 ? ", daily goal \(Int($0.rounded())) grams" : nil } ?? ""
+            return "\(name) \(logged)\(targetText)"
         }
-        return [cal, part("carbs", carbsG, goal?.carbsG), part("fat", fatG, goal?.fatG), part("fiber", fiberG, goal?.fiberG)]
+        return [cal + calGoal, part("Carbs", carbsG, goal?.carbsG), part("Fat", fatG, goal?.fatG), part("Fiber", fiberG, goal?.fiberG)]
             .joined(separator: ". ")
     }
 }

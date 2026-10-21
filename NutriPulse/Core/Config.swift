@@ -31,10 +31,8 @@ enum Config {
         return value
     }()
 
-    // Live on GitHub Pages. The gh-pages snapshot publishes the contents of `marketing/`
-    // at the site root, so the path here is /privacy.html — NOT /marketing/privacy.html,
-    // which 404s. App Review fetches this URL, so a wrong path is a rejection.
-    static let privacyPolicyURL = URL(string: "https://dsmithsalinas.github.io/NutriPulse/privacy.html")!
+    // Canonical policy; old released builds remain supported by the legacy Pages redirect.
+    static let privacyPolicyURL = URL(string: "https://tryfooting.app/privacy")!
 
     // Apple's Standard License Agreement (LAEULA) — the EULA Apple applies to any app that
     // doesn't ship its own. It's a complete, accepted Terms of Use for a free app, which is

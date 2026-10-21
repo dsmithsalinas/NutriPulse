@@ -8,6 +8,7 @@ struct AuthView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var vm = AuthViewModel()
     @State private var showForgotPassword = false
+    @AppStorage("appleDisconnectHelpNeeded") private var appleDisconnectHelpNeeded = false
     @FocusState private var focusedField: Field?
 
     private enum Field { case email, password }
@@ -15,6 +16,16 @@ struct AuthView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Theme.Spacing.lg) {
+                if appleDisconnectHelpNeeded {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Your Footing account was deleted.").font(Theme.Fonts.body(16, .bold))
+                        Text("Finish by disconnecting Footing from Sign in with Apple in your Apple Account settings.")
+                            .font(Theme.Fonts.body(14))
+                        Link("Open Apple’s instructions", destination: URL(string: "https://support.apple.com/en-us/102571")!)
+                        Button("Done") { appleDisconnectHelpNeeded = false }
+                    }
+                    .foregroundStyle(Theme.Colors.textPrimary).tile()
+                }
                 Spacer(minLength: 40)
 
                 VStack(spacing: 4) {

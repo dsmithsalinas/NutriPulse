@@ -114,6 +114,7 @@ final class AppState {
             TrackingPreferencesStore.shared.setAccount(session?.user.id)
             #endif
             PulseProfileStore.shared.setAccount(session?.user.id)
+            FoodAIConsentStore.shared.setAccount(session?.user.id)
             PulseMemoryStore.shared.setAccount(session?.user.id)
             EverydayToolsStore.shared.setAccount(session?.user.id)
             PulseAttentionStore.shared.setAccount(session?.user.id)

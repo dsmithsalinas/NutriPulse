@@ -10,12 +10,15 @@ import SwiftUI
 // neutral ground, a lime primary action.
 struct PulseConsentSheet: View {
     /// Turns Pulse on and records consent. `nil` for the read-only presentation (already agreed).
-    var onAgree: (() async -> Void)? = nil
+    var onAgree: (() async throws -> Void)? = nil
     /// Declines — turns Pulse off. `nil` outside the forced first-ask (see `title`).
-    var onDecline: (() async -> Void)? = nil
+    var onDecline: (() async throws -> Void)? = nil
+    var onRevoke: (() async throws -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var isWorking = false
+    @State private var errorMessage: String?
+    @State private var owner = PulseProfileStore.shared.accountId
 
     // "Not now" only exists on the forced first-ask (declining there is a real decision — it
     // turns Pulse off). Reopened from Profile there's nothing to decline: it's either read-only
@@ -34,12 +37,13 @@ struct PulseConsentSheet: View {
                         .foregroundStyle(Theme.Colors.textPrimary)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        bullet("Your name and goals")
-                        bullet("Your food logs and recent history")
+                        bullet("Your first name, units, goals, and weight trend")
+                        bullet("Your food logs, recent history, meal notes, and qualitative breakfast check-ins")
                         bullet("Shot-cycle and dose info")
                         bullet("Health summaries — sleep, heart-rate variability, and workouts, when connected")
                         bullet("What you say in the Pulse tab")
                         bullet("What you've told Pulse about yourself — allergies, food preferences, and the rest of \u{201c}What Pulse knows\u{201d}")
+                        bullet("Practical memories you approved, lighter-tracking context you chose, and your goals, experiments, or Strong Week answers when relevant")
                     }
                 }
                 .tile()
@@ -48,7 +52,7 @@ struct PulseConsentSheet: View {
                     .font(Theme.Fonts.body(14))
                     .foregroundStyle(Theme.Colors.textSecondary)
 
-                Text("Talk to Log's food parsing also uses AI to read what you type or say. That's separate from this setting and keeps working either way.")
+                Text("AI food logging asks for its own permission before sending a food description to Anthropic. You can manage it separately in Profile → AI food logging.")
                     .font(Theme.Fonts.body(13))
                     .foregroundStyle(Theme.Colors.textFaint)
 
@@ -56,11 +60,21 @@ struct PulseConsentSheet: View {
                     .font(Theme.Fonts.body(14, .semibold))
                     .foregroundStyle(Theme.Colors.primary)
 
+                if let errorMessage {
+                    Text(errorMessage).font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.danger)
+                }
                 if onAgree != nil || onDecline != nil {
                     VStack(spacing: Theme.Spacing.sm) {
                         if let onAgree { agreeButton(action: onAgree) }
                         if let onDecline { declineButton(action: onDecline) }
                     }
+                }
+                if let onRevoke {
+                    Button("Withdraw Pulse AI permission", role: .destructive) {
+                        perform(onRevoke)
+                    }
+                    .font(Theme.Fonts.body(15, .semibold))
+                    .disabled(isWorking)
                 }
             }
             .padding(Theme.Spacing.page)
@@ -68,6 +82,7 @@ struct PulseConsentSheet: View {
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .interactiveDismissDisabled(isWorking)
+        .onChange(of: PulseProfileStore.shared.accountId) { _, _ in dismiss() }
     }
 
     private func bullet(_ text: String) -> some View {
@@ -84,13 +99,19 @@ struct PulseConsentSheet: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func agreeButton(action: @escaping () async -> Void) -> some View {
+    private func perform(_ action: @escaping () async throws -> Void) {
+        guard owner != nil, owner == PulseProfileStore.shared.accountId else { dismiss(); return }
+        isWorking = true; errorMessage = nil
+        Task {
+            defer { isWorking = false }
+            do { try await action() }
+            catch { errorMessage = "Couldn’t save your choice. Check your connection and try again." }
+        }
+    }
+
+    private func agreeButton(action: @escaping () async throws -> Void) -> some View {
         Button {
-            Task {
-                isWorking = true
-                await action()
-                isWorking = false
-            }
+            perform(action)
         } label: {
             Group {
                 if isWorking {
@@ -110,13 +131,9 @@ struct PulseConsentSheet: View {
         .accessibilityHint("Sends your Footing data to Anthropic so Pulse can reply")
     }
 
-    private func declineButton(action: @escaping () async -> Void) -> some View {
+    private func declineButton(action: @escaping () async throws -> Void) -> some View {
         Button {
-            Task {
-                isWorking = true
-                await action()
-                isWorking = false
-            }
+            perform(action)
         } label: {
             Text("Not now")
                 .font(Theme.Fonts.body(15, .semibold))

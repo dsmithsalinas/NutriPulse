@@ -24,4 +24,10 @@ enum EdgeFunctionError {
         struct Body: Decodable { let code: String? }
         return (try? JSONDecoder().decode(Body.self, from: data))?.code == "pulse_off"
     }
+
+    static func isAIConsentRequired(_ error: Error) -> Bool {
+        guard case let FunctionsError.httpError(code, data) = error, code == 403 else { return false }
+        struct Body: Decodable { let code: String? }
+        return (try? JSONDecoder().decode(Body.self, from: data))?.code == "ai_consent_required"
+    }
 }

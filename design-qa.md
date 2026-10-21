@@ -216,3 +216,9 @@ final result: passed
 - No actionable P0, P1, or P2 differences remain.
 
 final result: passed
+
+# Onboarding — October 21, 2026
+
+The approved “Start with what matters” implementation was compared with native simulator captures in `marketing/onboarding-review-2026-10-20/implemented/comparison-final.jpg`. Corrections and scope are recorded in `marketing/onboarding-review-2026-10-20/implemented/design-qa.md`. Five-screen navigation, target/focus editing, optional setup shortcuts, privacy disclosure, skip paths and largest-text layout were exercised. Final review found no unresolved P0/P1/P2 issues in these captured states. Real signed-in writes and physical-device Health authorization are not claimed.
+
+final result: passed

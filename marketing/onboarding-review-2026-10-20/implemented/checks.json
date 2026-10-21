@@ -1,0 +1,79 @@
+{
+  "date": "2026-10-21",
+  "source": "../mockups/02-start-with-what-matters-revised.png",
+  "testResult": "/private/tmp/footing-onboarding-accessibility-final.xcresult",
+  "files": {
+    "01-support.png": {
+      "sha256": "7d553ee769c7d5b99af29b36c3c4f2a227ab4d3c82ba28baf2b8c53ebcd51bbf",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    },
+    "02-focus.png": {
+      "sha256": "d8a0630bda34aa6c7f722d72e1b78f9e42ffb5e9b3667051fb7428794ed61613",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    },
+    "03-basics.png": {
+      "sha256": "4c84cbfd29d9f0cb88493998117401af66e283ed609e8a195c3502aaf064645f",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    },
+    "04-permission.png": {
+      "sha256": "8d9d62dded1b8b54cd3ca26c01c0739df9b38e94c347d56d791893025b029471",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    },
+    "05-ready.png": {
+      "sha256": "679f31fbff259b2a8e26b534b16d4ee1bf296cfc1861910167bd96232027e9a7",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    },
+    "06-edit-targets.png": {
+      "sha256": "bcda44831d6b25aa1837bdbccef03bfd489b16c008b44365ecd1f4cc521314f8",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    },
+    "07-no-pulse.png": {
+      "sha256": "b3a26565aa18b6920a10f19a77855ada8989eae413e125e52da0750c8e5a9972",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    },
+    "08-focus-keyboard.png": {
+      "sha256": "58da7bb067c53dbba3fe6734bf399a5453b1c07496d8707521c5801d3faf5523",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    },
+    "09-large-text-permission.png": {
+      "sha256": "004239a29ef3c66ec1c5cbd500e611095cdad08abfa5e8cc9d233a33bc09abd9",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    },
+    "10-privacy-disclosure.png": {
+      "sha256": "44b7f2639b46c637e4c103390fc6785b2537eba933ab0f36bc15a138fbb853cd",
+      "dimensions": [
+        1206,
+        2622
+      ]
+    }
+  },
+  "coveAssetSHA256": "78b2d4ea095c9f6f9ef03c8bc69d0b9d762e546f40ba91547bdc4562b4390858",
+  "coveSourceSHA256": "78b2d4ea095c9f6f9ef03c8bc69d0b9d762e546f40ba91547bdc4562b4390858"
+}

@@ -2,6 +2,7 @@ import Observation
 import Foundation
 import Supabase
 import UserNotifications
+import AuthenticationServices
 
 @Observable
 @MainActor
@@ -19,6 +20,9 @@ final class ProfileViewModel {
     var isLoading                = false
     var errorMessage: String?    = nil
     var isDeletingAccount        = false
+    var showManualAppleDeletionConfirm = false
+    private var verifiedAppleLink = false
+    var isAppleLinked: Bool { verifiedAppleLink || supabase.auth.currentSession?.user.identities?.contains(where: { $0.provider == "apple" }) == true }
 
     // Shot-day reminders
     var remindersOn              = false
@@ -50,6 +54,7 @@ final class ProfileViewModel {
     private let glp1Repo = GLP1Repository()
     private let feedbackRepo = FeedbackRepository()
     private let accountRepo = AccountRepository()
+    private let appleDeletionAuth = AppleDeletionAuthorization()
 
     // MARK: - Computed
 
@@ -365,14 +370,21 @@ final class ProfileViewModel {
 
     // MARK: - Account deletion
 
-    func deleteAccount() async {
+    func deleteAccount(disconnectAppleManually: Bool = false) async {
+        guard !isDeletingAccount else { return }
         isDeletingAccount = true
         defer { isDeletingAccount = false }
+        let expectedOwner = supabase.auth.currentSession?.user.id
         do {
-            try await accountRepo.deleteAccount()
-            try? await supabase.auth.signOut()
+            let user = try await supabase.auth.user()
+            guard user.id == expectedOwner, supabase.auth.currentSession?.user.id == expectedOwner else { throw URLError(.userAuthenticationRequired) }
+            let isAppleLinked = user.identities?.contains(where: { $0.provider == "apple" }) == true
+            verifiedAppleLink = isAppleLinked
+            let code = isAppleLinked && !disconnectAppleManually ? try await appleDeletionAuth.authorizationCode() : nil
+            try await accountRepo.deleteAccount(expectedUserId: user.id, appleAuthorizationCode: code, manualAppleRevocation: disconnectAppleManually)
         } catch {
-            errorMessage = error.localizedDescription
+            if (error as? ASAuthorizationError)?.code == .canceled { return }
+            errorMessage = EdgeFunctionError.message(from: error, fallback: "Couldn’t delete your account. Check your connection and try again.")
         }
     }
 

@@ -24,6 +24,7 @@ struct ProfileView: View {
     @State private var showSmartNotificationExplainer = false
     @State private var showPulseOffConfirm = false
     @State private var showAIDataSharingInfo = false
+    @State private var showFoodAIDataSharing = false
     @State private var isSavingPulseSetting = false
     @Environment(\.scenePhase) private var scenePhase
     // The device-cached Pulse settings singleton (see PulseProfileStore). Read directly, like
@@ -280,9 +281,20 @@ struct ProfileView: View {
                 Button("Delete Account", role: .destructive) {
                     Task { await vm.deleteAccount() }
                 }
+                if vm.isAppleLinked {
+                    Button("Apple confirmation unavailable?") { vm.showManualAppleDeletionConfirm = true }
+                }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("This permanently deletes your account and all your data — logs, goals, weight history, and chat history. This cannot be undone.")
+                Text("This permanently deletes your account and all your Footing data. This cannot be undone. If you linked Apple, you’ll confirm with Apple first so Footing can revoke that connection. Records already saved in Apple Health stay there.")
+            }
+            .confirmationDialog("Delete Footing and disconnect Apple manually?", isPresented: $vm.showManualAppleDeletionConfirm, titleVisibility: .visible) {
+                Button("Delete Footing account", role: .destructive) {
+                    Task { await vm.deleteAccount(disconnectAppleManually: true) }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Your Footing account and data will be permanently deleted. You’ll then need to disconnect Footing from Sign in with Apple in your Apple Account settings. We’ll show Apple’s instructions after deletion. This cannot be undone.")
             }
     }
 
@@ -822,6 +834,17 @@ struct ProfileView: View {
                 showAIDataSharingInfo = true
             }
             hairline
+            actionRow(icon: "text.bubble", title: "AI food logging", showChevron: true) {
+                Task {
+                    await FoodAIConsentStore.shared.load()
+                    if FoodAIConsentStore.shared.loadFailed {
+                        vm.errorMessage = "Couldn’t load AI food logging. Check your connection and try again."
+                    } else {
+                        showFoodAIDataSharing = true
+                    }
+                }
+            }
+            hairline
             actionRow(icon: "trash", title: "Clear chat history", tint: Theme.Colors.danger) {
                 showClearHistoryConfirm = true
             }
@@ -840,14 +863,18 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showAIDataSharingInfo) {
             if pulseStore.aiConsentAt != nil {
-                PulseConsentSheet()
+                PulseConsentSheet(onRevoke: {
+                    try await pulseStore.recordConsent(agreed: false)
+                    showAIDataSharingInfo = false
+                })
             } else {
                 PulseConsentSheet(onAgree: {
-                    await savePulseSetting { try await pulseStore.recordConsent(agreed: true) }
+                    try await pulseStore.recordConsent(agreed: true)
                     showAIDataSharingInfo = false
                 })
             }
         }
+        .sheet(isPresented: $showFoodAIDataSharing) { FoodAIConsentSheet() }
     }
 
     /// Optimistic saves already live in PulseProfileStore; this just surfaces a failure the

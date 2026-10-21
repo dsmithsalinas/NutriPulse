@@ -135,14 +135,12 @@ struct TodayView: View {
                     meal: meal,
                     logs: logs,
                     onEdit: { editingLog = $0 },
-                    onDelete: { log in Task { await vm.deleteLog(id: log.id) } }
+                    onDelete: { log in Task { await vm.deleteLog(id: log.id) } },
+                    onSaveUsualMeal: { usualMealFoods = logs; showSaveUsualMeal = true }
                 )
                 .popIn(order: 7)
                 // Only on the first meal shown, so the tip points at one row.
                 .popoverTip(MealRowTip(), arrowEdge: .bottom, when: meal == firstLoggedMeal)
-                Button("Save \(meal.displayName.lowercased()) as a usual meal") {
-                    usualMealFoods = logs; showSaveUsualMeal = true
-                }.font(Theme.Fonts.body(14, .semibold)).frame(minHeight: 44)
             }
         }
     }

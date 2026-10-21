@@ -14,6 +14,8 @@ struct TalkToLogView: View {
     var onSelectFamiliar: (FoodLog) -> Void = { _ in }
 
     @State private var dictation = DictationRecognizer()
+    @State private var showFoodAIConsent = false
+    @State private var checkingConsent = false
     // What was already in the field when dictation started, so speech appends rather than
     // clobbers anything the user had typed.
     @State private var dictationBase = ""
@@ -82,6 +84,9 @@ struct TalkToLogView: View {
             }
         }
         .onDisappear { dictation.stop() }
+        .sheet(isPresented: $showFoodAIConsent) {
+            FoodAIConsentSheet(onAllowed: { await vm.parse(for: date) })
+        }
         .alert("Error", isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
@@ -189,7 +194,7 @@ struct TalkToLogView: View {
                 .focused($isTyping)
                 .accessibilityLabel("Describe what you ate")
             Button {
-                Task { await vm.parse(for: date) }
+                requestParse()
             } label: {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 18, weight: .bold))
@@ -389,7 +394,7 @@ struct TalkToLogView: View {
 
                 Button {
                     dictation.stop()
-                    Task { await vm.parse(for: date) }
+                    requestParse()
                 } label: {
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(Theme.Colors.listeningAction)
@@ -401,6 +406,25 @@ struct TalkToLogView: View {
                 .accessibilityLabel("Stop listening and log")
 
                 Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func requestParse() {
+        guard !checkingConsent else { return }
+        checkingConsent = true
+        Task {
+            defer { checkingConsent = false }
+            let store = FoodAIConsentStore.shared
+            let owner = store.accountId
+            await store.load()
+            guard owner != nil, store.accountId == owner else { return }
+            if store.loadFailed {
+                vm.errorMessage = "Couldn’t verify AI permission. Check your connection, or search or add food manually."
+            } else if store.isAllowed {
+                await vm.parse(for: date)
+            } else if store.accountId != nil {
+                showFoodAIConsent = true
             }
         }
     }

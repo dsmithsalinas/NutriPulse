@@ -17,6 +17,8 @@ before(async () => {
   grant usage on schema public,auth to anon,authenticated;insert into auth.users values('${owner}'),('${other}');`);
   await db.exec(migration);
   await db.exec(migration); // re-runnable
+  const foodConsent = readFileSync(new URL('../supabase/migrations/20261021171951_food_ai_consent.sql', import.meta.url), 'utf8');
+  await db.exec(foodConsent); await db.exec(foodConsent);
 });
 afterEach(async () => db.exec('reset role'));
 after(async () => db.close());
@@ -28,7 +30,25 @@ test('a new profile defaults to Pulse on, on Today, no consent yet, and nothing 
   assert.equal(row.pulse_enabled, true);
   assert.equal(row.pulse_on_today, true);
   assert.equal(row.ai_consent_at, null);
+  assert.equal(row.food_ai_consent_at, null);
   assert.deepEqual(row.allergies, []);
+});
+
+test('food AI grant and revocation are independent, owner-only, and cascade on deletion', async () => {
+  await asUser(other);
+  await db.exec(`insert into pulse_profiles(user_id,food_ai_consent_at) values('${other}',now())`);
+  let row = (await db.query<any>('select * from pulse_profiles')).rows[0];
+  assert.ok(row.food_ai_consent_at); assert.equal(row.ai_consent_at, null);
+  await asUser(owner);
+  assert.equal((await db.query(`update pulse_profiles set food_ai_consent_at=null where user_id='${other}' returning user_id`)).rows.length, 0);
+  await asUser(other);
+  await db.exec('update pulse_profiles set food_ai_consent_at=null');
+  row = (await db.query<any>('select * from pulse_profiles')).rows[0];
+  assert.equal(row.food_ai_consent_at, null);
+  await db.exec('reset role');
+  await db.exec(`delete from auth.users where id='${other}'`);
+  assert.equal((await db.query(`select * from pulse_profiles where user_id='${other}'`)).rows.length, 0);
+  await db.exec(`insert into auth.users values('${other}')`);
 });
 
 test('owner saves allergies, patterns, loves and avoids, and turns Pulse off', async () => {

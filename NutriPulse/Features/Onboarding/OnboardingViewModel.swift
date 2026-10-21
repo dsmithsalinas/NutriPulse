@@ -109,12 +109,12 @@ enum WeightGoal: String, CaseIterable, Identifiable {
 // ─── Calculated result ───────────────────────────────────────────────────────
 
 struct CalculatedGoals {
-    let calories: Double
-    let proteinG: Double
-    let carbsG: Double
-    let fatG: Double
-    let fiberG: Double
-    let waterMlTarget: Double
+    var calories: Double
+    var proteinG: Double
+    var carbsG: Double
+    var fatG: Double
+    var fiberG: Double
+    var waterMlTarget: Double
 }
 
 // ─── ViewModel ───────────────────────────────────────────────────────────────
@@ -122,10 +122,76 @@ struct CalculatedGoals {
 @Observable
 @MainActor
 final class OnboardingViewModel {
+    var support: OnboardingSupport = .strength
+    var adultConfirmed = false
+    var focusDraft = ""
+    var customGoals: CalculatedGoals?
+    // Fixture-only permission; production always reads account-scoped persisted consent.
+    var previewPulseAllowed = false
+    var trimmedFocus: String { focusDraft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var isFocusValid: Bool { focusDraft.unicodeScalars.count <= 300 }
+    var selectedGoals: CalculatedGoals { customGoals ?? calculatedGoals }
+    var adultDOBRange: ClosedRange<Date> {
+        let calendar = Calendar.current
+        return (calendar.date(byAdding: .year, value: -120, to: .now) ?? .now)...(calendar.date(byAdding: .year, value: -18, to: .now) ?? .now)
+    }
+    var canContinueBasics: Bool {
+        canContinueName && adultConfirmed && adultDOBRange.contains(dob)
+        && heightCm.isFinite && (100...250).contains(heightCm)
+        && weightKg.isFinite && (30...300).contains(weightKg)
+    }
+    var areTargetsValid: Bool {
+        let g = selectedGoals
+        return g.calories.isFinite && (800...10000).contains(g.calories)
+        && [g.proteinG, g.carbsG, g.fatG, g.fiberG].allSatisfy { $0.isFinite && (0...1500).contains($0) }
+        && g.waterMlTarget.isFinite && (250...10000).contains(g.waterMlTarget)
+    }
+    func pulseAllowed(preview: Bool = false) -> Bool {
+        preview ? previewPulseAllowed : PulseProfileStore.shared.pulseActive
+    }
+    func canSaveFocus(preview: Bool = false) -> Bool {
+        pulseAllowed(preview: preview) && isFocusValid && !trimmedFocus.isEmpty
+    }
+    /// Stable ID makes a repeated finish tap converge on one explicitly approved memory.
+    private let focusMemoryId = UUID()
+    private var savedFocus: PulseMemory?
+    private let focusRepository: any PulseMemoryRepositoryProtocol
+    func focusMemory(userId: UUID, requested: Bool, allowed: Bool) -> PulseMemory? {
+        guard requested, allowed, isFocusValid, !trimmedFocus.isEmpty else { return nil }
+        return PulseMemory(id: focusMemoryId, userId: userId, content: trimmedFocus)
+    }
+
+    /// Reconcile with server state so a restart after a partial save cannot create a
+    /// duplicate-content conflict. Never delete a memory that predates this setup attempt.
+    func persistFocus(userId: UUID, requested: Bool, allowed: Bool) async throws {
+        if let memory = focusMemory(userId: userId, requested: requested, allowed: allowed) {
+            let existing = try await focusRepository.fetch(userId: userId)
+            let match = existing.first {
+                $0.userId == userId && $0.isValid && $0.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .caseInsensitiveCompare(memory.content) == .orderedSame
+            }
+            if let match, match.id != memory.id {
+                if let previous = savedFocus {
+                    try await focusRepository.delete(previous)
+                    savedFocus = nil
+                }
+                return
+            }
+            try await focusRepository.save(memory)
+            savedFocus = memory
+        } else if let previous = savedFocus {
+            // A prior finish saved focus but failed to commit the profile. A later skip
+            // must remove that attempt's memory, and a deletion failure must remain retryable.
+            try await focusRepository.delete(previous)
+            savedFocus = nil
+        }
+    }
+
     // Step 1 – Name
     var fullName = ""
 
-    init() {
+    init(focusRepository: (any PulseMemoryRepositoryProtocol)? = nil) {
+        self.focusRepository = focusRepository ?? PulseMemoryRepository()
         // Sign in with Apple surrenders the user's name exactly once, on first authorization.
         // AuthViewModel stashes it; use it to pre-fill rather than asking for what we know.
         if let appleName = UserDefaults.standard.string(forKey: AuthViewModel.pendingAppleFullNameKey) {
@@ -171,7 +237,7 @@ final class OnboardingViewModel {
     var isLoading = false
     var errorMessage: String? = nil
 
-    var canContinueName: Bool { !fullName.trimmingCharacters(in: .whitespaces).isEmpty }
+    var canContinueName: Bool { !fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     // ── Mifflin-St Jeor BMR ──────────────────────────────────────────────────
     // Male:   BMR = 10W + 6.25H − 5A + 5
@@ -209,7 +275,7 @@ final class OnboardingViewModel {
     private let initialGLP1LogId    = UUID()
 
     @discardableResult
-    func save(userId: UUID) async throws -> UserProfile {
+    func save(userId: UUID, saveFocus: Bool = false) async throws -> UserProfile {
         isLoading = true
         defer { isLoading = false }
 
@@ -229,7 +295,8 @@ final class OnboardingViewModel {
         }
         if existingProfile.fullName != nil { return existingProfile }
 
-        let goals = calculatedGoals
+        guard canContinueBasics, areTargetsValid, isFocusValid else { throw OnboardingSaveError.invalidSetup }
+        let goals = selectedGoals
 
         // 1. Record starting weight (idempotent on the client-generated id)
         try await supabase
@@ -306,13 +373,19 @@ final class OnboardingViewModel {
             .eq("id", value: userId)
             .execute()
 
+        // An explicit choice is required independently of AI consent. No provider is called.
+        guard supabase.auth.currentSession?.user.id == userId,
+              PulseProfileStore.shared.accountId == userId else { throw OnboardingSaveError.sessionExpired }
+        try await persistFocus(userId: userId, requested: saveFocus, allowed: pulseAllowed())
+        guard supabase.auth.currentSession?.user.id == userId else { throw OnboardingSaveError.sessionExpired }
+
         // 4. Commit the profile last — this is what marks onboarding complete.
         //    Returning the saved row lets the caller update AppState without a
         //    second network round trip that could fail and strand the user.
         let savedProfile: UserProfile = try await supabase
             .from("profiles")
             .update(UpdateProfile(
-                fullName: fullName.trimmingCharacters(in: .whitespaces),
+                fullName: fullName.trimmingCharacters(in: .whitespacesAndNewlines),
                 dob: dob.isoDateString,
                 sex: sex.rawValue,
                 heightCm: heightCm,
@@ -339,11 +412,14 @@ final class OnboardingViewModel {
 enum OnboardingSaveError: LocalizedError {
     case sessionExpired
     case profileUnavailable
+    case invalidSetup
 
     var errorDescription: String? {
         switch self {
         case .sessionExpired:
             "Your session changed. Please sign in again."
+        case .invalidSetup:
+            "Please review your profile details, focus length, and nutrition targets before starting."
         case .profileUnavailable:
             "We couldn't securely load your account. No setup changes were saved. Please try signing in again."
         }

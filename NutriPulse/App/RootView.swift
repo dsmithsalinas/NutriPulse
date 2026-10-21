@@ -5,6 +5,7 @@ import SwiftUI
 // The type (AppState.self) acts as the key that uniquely identifies which value to pull.
 
 struct RootView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showOfflineNotes = false
     @Environment(AppState.self) private var appState
 
@@ -43,6 +44,7 @@ struct RootView: View {
                 MainTabView()
             } else if appState.isLoading {
                 VStack(spacing: Theme.Spacing.md) {
+                    Image(colorScheme == .dark ? "FootingWordmark-dark" : "FootingWordmark").resizable().scaledToFit().frame(width: 180, height: 72).accessibilityLabel("Footing")
                     ProgressView("Loading...")
                     if appState.isAuthenticated && !SyncEngine.shared.isOnline {
                         Button("Open notes offline") { showOfflineNotes = true }.frame(minHeight: 44)
@@ -58,7 +60,7 @@ struct RootView: View {
                 // data. Ask to retry instead.
                 ProfileLoadFailedView()
             } else if appState.needsOnboarding {
-                OnboardingView()
+                OnboardingView().id(appState.session?.user.id)
             } else {
                 MainTabView().id(appState.session?.user.id)
             }
@@ -69,7 +71,7 @@ struct RootView: View {
         // when the view appears and automatically cancels it when the view disappears.
         // No manual cleanup needed — Swift's structured concurrency handles it.
         .task {
-            if !isEverydayToolsPreview && !isOffScriptPreview && !isPulseWeekPreview && !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
+            if !isOnboardingPreview && !isEverydayToolsPreview && !isOffScriptPreview && !isPulseWeekPreview && !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
         }
     }
 
