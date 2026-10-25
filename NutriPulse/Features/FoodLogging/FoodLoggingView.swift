@@ -15,6 +15,8 @@ struct FoodLoggingView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var vm = FoodLoggingViewModel()
     @State private var searchVM = FoodSearchViewModel()
+    @State private var searchIsFocused = false
+    private var compactSearch: Bool { vm.selectedTab == .search && searchIsFocused }
     @State private var talkVM = TalkToLogViewModel()
     @State private var favoritesVM = FavoritesViewModel()
     @State private var showManualEntry = false
@@ -33,7 +35,13 @@ struct FoodLoggingView: View {
         _vm = State(initialValue: FoodLoggingViewModel(selectedTab: initialTab ?? LogMethodPreference.read(userId: supabase.auth.currentSession?.user.id)))
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--log-preview") {
-            _vm = State(initialValue: FoodLoggingViewModel(selectedTab: .talk))
+            _vm = State(initialValue: FoodLoggingViewModel(selectedTab: ProcessInfo.processInfo.arguments.contains("--search-preview") ? .search : .talk))
+            if ProcessInfo.processInfo.arguments.contains("--search-preview") {
+                let search = FoodSearchViewModel()
+                search.searchQuery = "Kodiak"
+                search.results = (1...12).map { index in FoodSearchResult(id: String(index), name: "Protein pancakes \(index)", brand: "Kodiak Cakes", description: "Per 1 serving - Calories: 220kcal | Fat: 4g | Carbs: 30g | Protein: 15g") }
+                _searchVM = State(initialValue: search)
+            }
             let preview = TalkToLogViewModel()
             preview.isParsing = ProcessInfo.processInfo.arguments.contains("--ring-parsing-preview")
             _talkVM = State(initialValue: preview)
@@ -45,13 +53,13 @@ struct FoodLoggingView: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: compactSearch ? 8 : 14) {
             Capsule()
                 .fill(Theme.Colors.hairline)
                 .frame(width: 40, height: 5)
                 .padding(.top, 8)
 
-            LogSheetHeader(meal: $vm.selectedMeal, onClose: { dismiss() })
+            LogSheetHeader(meal: $vm.selectedMeal, onClose: { dismiss() }, compact: compactSearch)
 
             if saved {
                 VStack(spacing: 16) {
@@ -77,11 +85,13 @@ struct FoodLoggingView: View {
                         .font(Theme.Fonts.body(16, .semibold)).frame(minHeight: 44)
                 }.padding(Theme.Spacing.md).frame(maxHeight: .infinity)
             } else {
+            if !compactSearch {
             Button { showMealNote = true } label: {
                 Label("Just leave a meal note", systemImage: "square.and.pencil")
                     .font(Theme.Fonts.body(15, .semibold)).frame(minHeight: 44)
             }
             LogTabBar(selection: $vm.selectedTab)
+            }
 
             Group {
                 switch vm.selectedTab {
@@ -93,7 +103,8 @@ struct FoodLoggingView: View {
                     FoodSearchView(
                         vm: searchVM, date: selectedDate, headerMeal: vm.selectedMeal,
                         onLogged: handleLogged,
-                        onEnterManually: { showManualEntry = true }
+                        onEnterManually: { showManualEntry = true },
+                        onFocusChanged: { searchIsFocused = $0 }
                     )
                 case .scan:
                     BarcodeScanView(vm: searchVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: { source in

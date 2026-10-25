@@ -30,10 +30,10 @@ struct ProteinRescueSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("Close the floor")
+                        Text("Something familiar after movement")
                             .font(Theme.Fonts.display(24, .bold, relativeTo: .title))
                             .foregroundStyle(Theme.Colors.textPrimary)
-                        Text("You're about \(proteinGap)g short. These use foods you already trust and log the whole option in one tap.")
+                        Text("Your entries are \(proteinGap)g below your protein target. Your diary may be partial; include anything else you’ve had before choosing more. These options use your favorites and log the displayed food when you choose it.")
                             .font(Theme.Fonts.body(14))
                             .foregroundStyle(Theme.Colors.textSecondary)
                     }

@@ -36,6 +36,7 @@ struct TodayView: View {
     @State private var rememberingNote: MealNote?
     @State private var showOffScript = false
     @State private var showEverydayTools = false
+    @AppStorage("shortSleepSupportDismissal") private var shortSleepDismissal = ""
     @State private var offScriptOwner: UUID?
     @State private var offScriptPrompt: String?
 
@@ -850,7 +851,7 @@ struct TodayView: View {
                     )
                     .popIn(order: 3)
                     if showsShotCycle, let cycleDay {
-                        ShotCycleTile(cycleDay: cycleDay, cycleLength: shotCycleLength) {
+                        ShotCycleTile(cycleDay: cycleDay, cycleLength: shotCycleLength, hasCheckIn: vm.todayShotCycleCheckIn != nil) {
                             showShotCycleCheckIn = true
                         }
                         .popIn(order: 4)
@@ -953,6 +954,11 @@ struct TodayView: View {
                 onLogFood: { appState.pendingOpenTalkToLog = true },
                 onRecentMeal: { showRecentMeals = true }
             )
+        } else if vm.shouldOfferGentlerDay,
+                  shortSleepDismissal != "\(currentAccountId ?? "")-\(Date.now.isoDateString)" {
+            GentlerDayCard(onFamiliar: { showRecentMeals = true },
+                onLighter: { showLighterTracking = true },
+                onDismiss: { shortSleepDismissal = "\(currentAccountId ?? "")-\(Date.now.isoDateString)" })
         } else if let recovery = vm.recoveryOpportunity {
             // Not Pulse: a general recovery card, and "Close Xg gap" opens the local protein
             // rescue sheet rather than handing anything to the coach. Nothing here to gate.
@@ -962,6 +968,7 @@ struct TodayView: View {
                     Telemetry.recoveryActionUsed(action: "closeProteinGap")
                     showProteinRescue = true
                 },
+                onReviewWater: { showWaterPicker = true },
                 onAddWater: { ml in
                     Telemetry.recoveryActionUsed(action: "addWater")
                     Task { await vm.addWater(ml) }

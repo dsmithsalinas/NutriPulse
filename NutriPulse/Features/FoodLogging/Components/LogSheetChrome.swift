@@ -8,13 +8,14 @@ import SwiftUI
 struct LogSheetHeader: View {
     @Binding var meal: Meal
     let onClose: () -> Void
+    var compact = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Adding to")
+                if !compact { Text("Adding to")
                     .font(Theme.Fonts.body(14, .semibold))
-                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .foregroundStyle(Theme.Colors.textSecondary) }
                 Menu {
                     ForEach(Meal.allCases.sorted { $0.sortOrder < $1.sortOrder }, id: \.self) { option in
                         Button {
@@ -29,9 +30,10 @@ struct LogSheetHeader: View {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 15, weight: .heavy))
                     }
-                    .font(Theme.Fonts.display(28, .extraBold, relativeTo: .title))
+                    .font(Theme.Fonts.display(compact ? 20 : 28, .extraBold, relativeTo: .title))
                     .foregroundStyle(Theme.Colors.textPrimary)
                 }
+                .frame(minHeight: compact ? 44 : 0)
                 .accessibilityLabel("Meal: \(meal.displayName)")
                 .accessibilityHint("Double tap to change which meal you're adding to")
             }

@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct MealSectionView: View {
+    // Use an available SF Symbol: bookmark.badge.plus does not render on iOS.
+    static let saveUsualMealSymbol = "bookmark"
     let meal: Meal
     let logs: [FoodLog]
     var onEdit: (FoodLog) -> Void = { _ in }
@@ -40,9 +42,9 @@ struct MealSectionView: View {
                 }
                 if let onSaveUsualMeal {
                     Button(action: onSaveUsualMeal) {
-                        Image(systemName: "bookmark.badge.plus")
+                        Image(systemName: Self.saveUsualMealSymbol)
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(Theme.Colors.textSecondary)
+                            .foregroundStyle(Theme.Colors.primary)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }

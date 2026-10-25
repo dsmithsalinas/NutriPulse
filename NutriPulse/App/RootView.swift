@@ -11,7 +11,11 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if isEverydayToolsPreview {
+            if isPulseHealthPreview {
+                pulseHealthPreview
+            } else if isHealthPatternsPreview {
+                healthPatternsPreview
+            } else if isEverydayToolsPreview {
                 everydayToolsPreview
             } else if isOffScriptPreview {
                 offScriptPreview
@@ -71,7 +75,7 @@ struct RootView: View {
         // when the view appears and automatically cancels it when the view disappears.
         // No manual cleanup needed — Swift's structured concurrency handles it.
         .task {
-            if !isOnboardingPreview && !isEverydayToolsPreview && !isOffScriptPreview && !isPulseWeekPreview && !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
+            if !isPulseHealthPreview && !isHealthPatternsPreview && !isOnboardingPreview && !isEverydayToolsPreview && !isOffScriptPreview && !isPulseWeekPreview && !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
         }
     }
 
@@ -82,10 +86,35 @@ struct RootView: View {
         false
         #endif
     }
+    private var isPulseHealthPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--pulse-health-preview")
+        #else
+        false
+        #endif
+    }
+    @ViewBuilder private var pulseHealthPreview: some View {
+        #if DEBUG
+        PulseHealthPreviewScreen()
+        #endif
+    }
+
+    private var isHealthPatternsPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--health-patterns-preview")
+        #else
+        false
+        #endif
+    }
+    @ViewBuilder private var healthPatternsPreview: some View {
+        #if DEBUG
+        HealthPatternsPreviewPage()
+        #endif
+    }
+
     @ViewBuilder private var everydayToolsPreview: some View {
         #if DEBUG
         EverydayToolsView(userId: AppStoreScreenshotPreview.sampleUser, onAskPulse: { _ in })
-            .allowsHitTesting(false)
         #else
         EmptyView()
         #endif

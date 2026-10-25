@@ -36,4 +36,76 @@ final class ProfileRenderingTests: XCTestCase {
         }
     }
 
+    func testUsualMealActionHasARealSymbolAndRendersInBothAppearances() throws {
+        XCTAssertNotNil(UIImage(systemName: MealSectionView.saveUsualMealSymbol),
+                        "A missing SF Symbol leaves an invisible but tappable meal action.")
+        for scheme in [ColorScheme.light, .dark] {
+            let card = MealSectionView(meal: .breakfast, logs: [], onSaveUsualMeal: {})
+                .frame(width: 350).padding(20)
+                .background(Theme.Colors.ground)
+                .environment(\.colorScheme, scheme)
+            let renderer = ImageRenderer(content: card)
+            renderer.scale = 3
+            let image = try XCTUnwrap(renderer.uiImage)
+            let capture = XCTAttachment(image: image)
+            capture.name = "usual-meal-bookmark-\(scheme)"
+            capture.lifetime = .keepAlways
+            add(capture)
+        }
+    }
+
+    func testShotCycleSavedStatusUsesTodaysCheckInAndRenders() throws {
+        let vm = TodayViewModel()
+        XCTAssertNil(vm.todayShotCycleCheckIn)
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: .now)!
+        func checkIn(_ date: Date) -> ShotCycleCheckIn {
+            ShotCycleCheckIn(id: UUID(), userId: UUID(), checkinDate: date.isoDateString, cycleDay: 0,
+                appetite: 3, fullness: 3, nausea: 1, energy: 3, digestion: 3, note: nil, createdAt: date)
+        }
+        vm.shotCycleCheckIns = [checkIn(yesterday)]
+        XCTAssertNil(vm.todayShotCycleCheckIn, "Yesterday’s entry must not mark today as saved.")
+        vm.shotCycleCheckIns.insert(checkIn(.now), at: 0)
+        XCTAssertNotNil(vm.todayShotCycleCheckIn)
+        for saved in [false, true] {
+            let tile = ShotCycleTile(cycleDay: 0, hasCheckIn: saved, onTap: {})
+                .frame(width: 170).padding(16).background(Theme.Colors.ground)
+            let renderer = ImageRenderer(content: tile)
+            renderer.scale = 3
+            let image = try XCTUnwrap(renderer.uiImage)
+            let attachment = XCTAttachment(image: image)
+            attachment.name = saved ? "shot-cycle-saved" : "shot-cycle-not-saved"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        vm.selectedDate = yesterday
+        XCTAssertNil(vm.todayShotCycleCheckIn, "The Today-only status must not leak into another date.")
+    }
+
+    func testHealthSupportCardsRenderWithLargeText() throws {
+        let recovery = RecoveryOpportunity(workoutName: "Strength", durationMinutes: 30, proteinGap: 40, waterGapMl: 500, finishedAt: .now)
+        let cards = VStack(spacing: 16) {
+            GentlerDayCard(onFamiliar: {}, onLighter: {}, onDismiss: {})
+            RecoveryCoachCard(opportunity: recovery, onCloseGap: {}, onReviewWater: {}, onAddWater: { _ in })
+        }.frame(width: 350).padding(20).background(Theme.Colors.ground)
+            .environment(\.sizeCategory, .accessibilityExtraExtraExtraLarge)
+        let renderer = ImageRenderer(content: cards)
+        renderer.scale = 2
+        let image = try XCTUnwrap(renderer.uiImage)
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "health-support-large-text"; attachment.lifetime = .keepAlways; add(attachment)
+    }
+
+    func testHealthSupportCardsReviewCapture() throws {
+        let recovery = RecoveryOpportunity(workoutName: "Strength", durationMinutes: 30, proteinGap: 40, waterGapMl: 500, finishedAt: .now)
+        let cards = VStack(alignment: .leading, spacing: 20) {
+            GentlerDayCard(onFamiliar: {}, onLighter: {}, onDismiss: {})
+            RecoveryCoachCard(opportunity: recovery, onCloseGap: {}, onReviewWater: {}, onAddWater: { _ in })
+        }.frame(width: 350).padding(20).background(Theme.Colors.ground)
+            .environment(\.colorScheme, .light)
+        let renderer = ImageRenderer(content: cards)
+        renderer.scale = 3
+        let attachment = XCTAttachment(image: try XCTUnwrap(renderer.uiImage))
+        attachment.name = "gentler-day-and-recovery"; attachment.lifetime = .keepAlways; add(attachment)
+    }
+
 }

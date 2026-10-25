@@ -4,7 +4,7 @@ import Observation
 struct TinyObservation: Codable, Equatable {
     let day: String
     var tried: Bool
-    var rating: Int
+    var rating: Int?
 }
 
 struct TinyExperiment: Codable, Identifiable, Equatable {
@@ -14,16 +14,23 @@ struct TinyExperiment: Codable, Identifiable, Equatable {
     var startedOn: String
     var paused = false
     var completedOn: String?
+    var parentExperimentId: UUID?
+    var reflection: ExperimentReflection?
+    var healthOutcome: Bool?
+    var healthLink: ExperimentHealthLink?
     var observations: [TinyObservation] = []
 
     var summary: String {
-        let tried = observations.filter { $0.tried }
-        let other = observations.filter { !$0.tried }
-        guard tried.count >= 3, other.count >= 3 else {
-            return "Tried: \(tried.count) · Didn’t try: \(other.count). Not enough observations to compare yet. Blank days stay unknown."
+        if healthOutcome == true {
+            return "You confirmed tried on \(observations.filter { $0.tried }.count) days and not tried on \(observations.filter { !$0.tried }.count) days. Available following-night sleep is compared separately; missing nights stay unknown."
         }
-        let a = Double(tried.reduce(0) { $0 + $1.rating }) / Double(tried.count)
-        let b = Double(other.reduce(0) { $0 + $1.rating }) / Double(other.count)
+        let tried = observations.filter { $0.tried && $0.rating != nil }
+        let other = observations.filter { !$0.tried && $0.rating != nil }
+        guard tried.count >= 3, other.count >= 3 else {
+            return "Tried: \(observations.filter { $0.tried }.count) · Didn’t try: \(observations.filter { !$0.tried }.count). Not enough rated observations to compare yet. Blank days stay unknown."
+        }
+        let a = Double(tried.reduce(0) { $0 + ($1.rating ?? 0) }) / Double(tried.count)
+        let b = Double(other.reduce(0) { $0 + ($1.rating ?? 0) }) / Double(other.count)
         return String(format: "Your %@ rating averaged %.1f/5 on %d tried days and %.1f/5 on %d explicitly not-tried days. This describes your observations; it does not show cause. Sleep, stress and other circumstances may differ.", outcome, a, tried.count, b, other.count)
     }
 }
@@ -59,6 +66,7 @@ struct EverydayToolData: Codable, Equatable {
     var experiments: [TinyExperiment] = []
     var leftovers: [SavedLeftover] = []
     var constraints: [String: String] = [:]
+    var cycleFeedback: [CycleFitFeedback]?
 }
 
 /// Device-only drafts and observations. Separate protected files per account; none of this
@@ -124,8 +132,12 @@ final class EverydayToolsStore {
     }
 
     #if DEBUG
-    func preview() {
+    func preview(empty: Bool = false) {
         accountId = AppStoreScreenshotPreview.sampleUser; generation = UUID(); error = nil
+        if ProcessInfo.processInfo.arguments.contains("--tools-health") || ProcessInfo.processInfo.arguments.contains("--pulse-health-preview") {
+            data = .init(experiments: [HealthExperiencePreview.experiment()]); return
+        }
+        if empty { data = .init(); return }
         data = .init(experiments: [.init(action: "A short walk after lunch", outcome: "Afternoon energy", startedOn: "2026-10-17",
             observations: [.init(day: "2026-10-17", tried: true, rating: 4), .init(day: "2026-10-18", tried: false, rating: 3)])],
             leftovers: [.init(name: "Chicken and rice bowl", savedOn: "2026-10-19", meal: .lunch, initialNoteSaved: true)],

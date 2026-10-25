@@ -11,9 +11,11 @@ struct FoodSearchView: View {
     let onLogged: (LogSource, _ keepOpen: Bool) -> Void
     @Environment(\.foodSaveUndo) private var undo
     let onEnterManually: () -> Void
+    var onFocusChanged: (Bool) -> Void = { _ in }
+    @FocusState private var searchIsFocused: Bool
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.tileGap) {
+        VStack(spacing: searchIsFocused ? 8 : Theme.Spacing.tileGap) {
             searchField
             filterChips
 
@@ -30,14 +32,24 @@ struct FoodSearchView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            enterManuallyButton
+            if vm.filteredResults.isEmpty { enterManuallyButton }
             FatSecretAttribution()
         }
-        .task { await vm.loadFavoritedExternalIds() }
+        .onChange(of: searchIsFocused) { _, focused in onFocusChanged(focused) }
+        .onDisappear { onFocusChanged(false) }
+        .task {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--search-preview") { return }
+            #endif
+            await vm.loadFavoritedExternalIds()
+        }
         // SWIFT CONCEPT — .task(id:) re-runs the async block whenever `id` changes,
         // and cancels the previous run. Combined with Task.sleep this gives us
         // debounce without Combine — identical to useEffect with a cleanup fn in React.
         .task(id: vm.searchQuery) {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--search-preview") { return }
+            #endif
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
             await vm.search()
@@ -73,6 +85,8 @@ struct FoodSearchView: View {
                 .font(Theme.Fonts.body(16, .semibold))
                 .autocorrectionDisabled()
                 .submitLabel(.search)
+                .focused($searchIsFocused)
+                .onSubmit { searchIsFocused = false }
                 .accessibilityLabel("Search foods")
             if !vm.searchQuery.isEmpty {
                 Button { vm.searchQuery = "" } label: {
@@ -153,9 +167,12 @@ struct FoodSearchView: View {
                 if vm.isLoadingMoreResults {
                     ProgressView().frame(maxWidth: .infinity)
                 }
+                enterManuallyButton
             }
             .padding(.bottom, 4)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .accessibilityIdentifier("Food search results")
     }
 
     private func placeholder(icon: String, text: String) -> some View {

@@ -5,6 +5,15 @@ import SwiftUI
 // (SheetHeader, ground background) plus a Daylight settings-style Form for the create flow.
 struct ExperimentsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+    @State private var showSmallTools = false
+    @State private var smallToolsPrompt: String?
+    private var smallToolsOwner: UUID? {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--pulse-health-preview") { return AppStoreScreenshotPreview.sampleUser }
+        #endif
+        return appState.session?.user.id
+    }
     let activeGoals: [GoalCardState]
     /// DEBUG preview only (`--goals-preview`/`--tour`): experiments to show instead of fetching.
     var previewExperiments: [PersonalExperiment] = []
@@ -20,6 +29,17 @@ struct ExperimentsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
                 header
+                if let owner = smallToolsOwner, EverydayToolsStore.shared.accountId == owner {
+                    let linked = EverydayToolsStore.shared.data.experiments.filter { $0.healthLink != nil }
+                    if !linked.isEmpty {
+                        TileEyebrow("Your small changes")
+                        ForEach(linked) { experiment in
+                            Text(experiment.action).font(Theme.Fonts.body(17, .bold))
+                            ExperimentHealthCard(experiment: experiment, owner: owner)
+                        }
+                        Button("Manage small experiments") { showSmallTools = true }.frame(minHeight: 44)
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 14) {
                     Image(systemName: "flask.fill")
@@ -61,6 +81,18 @@ struct ExperimentsView: View {
         .background(Theme.Colors.ground.ignoresSafeArea())
         .presentationDragIndicator(.visible)
         .task { await load() }
+        .task(id: appState.session?.user.id) {
+            if let owner = smallToolsOwner { EverydayToolsStore.shared.setAccount(owner) }
+        }
+        .onChange(of: appState.session?.user.id) { _, _ in showSmallTools = false; smallToolsPrompt = nil }
+        .sheet(isPresented: $showSmallTools, onDismiss: {
+            if let prompt = smallToolsPrompt, smallToolsOwner == appState.session?.user.id { appState.askPulse(prompt) }
+            smallToolsPrompt = nil
+        }) {
+            if let owner = smallToolsOwner {
+                EverydayToolsView(userId: owner, onAskPulse: { smallToolsPrompt = $0 }, startWithExperiments: true)
+            }
+        }
         .task { await loadSuggestions() }
         .sheet(isPresented: $showCreate) {
             CreateExperimentView(activeGoals: activeGoals) {
@@ -182,6 +214,7 @@ struct ExperimentsView: View {
 
     private func loadSuggestions() async {
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--pulse-health-preview") { suggestions = []; return }
         if DebugLaunch.has("--goals-preview") || DebugLaunch.has("--progress-preview") {
             suggestions = [ExperimentSuggestion(
                 id: "preview-protein-dip",
@@ -240,6 +273,7 @@ struct ExperimentsView: View {
 
     private func load() async {
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--pulse-health-preview") { experiments = []; isLoading = false; return }
         if DebugLaunch.has("--goals-preview") || DebugLaunch.has("--progress-preview") {
             experiments = previewExperiments
             errorMessage = nil

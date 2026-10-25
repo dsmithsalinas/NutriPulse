@@ -187,6 +187,13 @@ final class TodayViewModel {
     var baselineHRV: Double? = nil
     var baselineSleepHours: Double? = nil
     private var recoveryBaselineDay = ""
+    private var sleepSupportComparable = false
+
+    var shouldOfferGentlerDay: Bool {
+        isToday && sleepSupportComparable && !TrackingPreferencesStore.shared.suppressesGoalPrompts &&
+        strongWeekContext?.needsTailoredSuggestions != true && !showsReturnExperience &&
+        HealthPatternInsights.shorterSleep(hours: sleepHours, baseline: baselineSleepHours)
+    }
 
     var recoveryContext: RecoveryContext? {
         guard isToday else { return nil }
@@ -1015,7 +1022,7 @@ final class TodayViewModel {
         async let cal    = hk.fetchActiveCalories(for: selectedDate)
         async let hr     = hk.fetchRestingHeartRate(for: selectedDate)
         async let hrvVal = hk.fetchHRV(for: selectedDate)
-        async let sleep  = hk.fetchSleepHours(for: selectedDate)
+        async let sleep  = HealthExperienceReader.sleepHours(selectedDate)
         let (calories, heartRate, heartRateVar, sleepTime) = await (cal, hr, hrvVal, sleep)
         activeCalories   = calories
         restingHeartRate = heartRate
@@ -1031,7 +1038,7 @@ final class TodayViewModel {
                 guard let date = Calendar.current.date(byAdding: .day, value: -offset, to: selectedDate) else { continue }
                 async let priorHR = hk.fetchRestingHeartRate(for: date)
                 async let priorHRV = hk.fetchHRV(for: date)
-                async let priorSleep = hk.fetchSleepHours(for: date)
+                async let priorSleep = HealthExperienceReader.sleepHours(date)
                 let values = await (priorHR, priorHRV, priorSleep)
                 if let value = values.0 { restingValues.append(value) }
                 if let value = values.1 { hrvValues.append(value) }
@@ -1040,6 +1047,12 @@ final class TodayViewModel {
             baselineRestingHeartRate = Self.average(restingValues)
             baselineHRV = Self.average(hrvValues)
             baselineSleepHours = Self.average(sleepValues)
+            let dates = (0...7).compactMap { Calendar.current.date(byAdding: .day, value: -$0, to: selectedDate) }
+            let sourceRows = await hk.fetchQualityObservations(metric: .sleepDuration, dates: dates)
+            let quality = HealthDataQualityEngine.assess(metric: .sleepDuration, observations: sourceRows, expectedDates: dates)
+            sleepSupportComparable = sleepValues.count >= 3 && !quality.issues.contains {
+                [.sourceChanged, .conflictingSources, .implausibleValue, .abruptChange, .inconsistentWear].contains($0.code)
+            }
         }
     }
 

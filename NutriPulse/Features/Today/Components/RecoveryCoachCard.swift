@@ -3,10 +3,12 @@ import SwiftUI
 struct RecoveryCoachCard: View {
     let opportunity: RecoveryOpportunity
     let onCloseGap: () -> Void
+    var onReviewWater: (() -> Void)? = nil
     let onAddWater: (Double) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            TileEyebrow("Recovery", color: Theme.Colors.primaryText)
             HStack(alignment: .top, spacing: Theme.Spacing.sm) {
                 Image(systemName: "figure.strengthtraining.traditional")
                     .font(.system(size: 18, weight: .semibold))
@@ -15,15 +17,14 @@ struct RecoveryCoachCard: View {
                     .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(opportunity.hasGap ? "Feed the work" : "Recovery covered")
+                    Text(opportunity.hasGap ? "Feed the work" : "Your logged basics")
                         .font(Theme.Fonts.body(17, .bold))
                         .foregroundStyle(Theme.Colors.textPrimary)
                     Text("\(opportunity.workoutName) \u{00B7} \(opportunity.durationMinutes) min")
                         .font(Theme.Fonts.body(13))
                         .foregroundStyle(Theme.Colors.textSecondary)
                 }
-                Spacer()
-                TileEyebrow("Recovery", color: Theme.Colors.primaryText)
+                Spacer(minLength: 0)
             }
 
             Text(detail)
@@ -32,21 +33,24 @@ struct RecoveryCoachCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if opportunity.hasGap {
-                HStack(spacing: Theme.Spacing.sm) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     if opportunity.proteinGap > 0 {
-                        Button("Review protein options", action: onCloseGap)
+                        Button("Find a familiar protein option", action: onCloseGap)
                             .font(Theme.Fonts.body(14, .semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 14)
-                            .frame(height: 44)
+                            .frame(minHeight: 44)
                             .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
                     }
                     if opportunity.waterGapMl > 0 {
-                        Button("+ Water") { onAddWater(min(Double(opportunity.waterGapMl), 500)) }
+                        Button("Log water") {
+                            if let onReviewWater { onReviewWater() }
+                            else { onAddWater(min(Double(opportunity.waterGapMl), 500)) }
+                        }
                             .font(Theme.Fonts.body(14, .semibold))
                             .foregroundStyle(Theme.Colors.skyAction)
                             .padding(.horizontal, 14)
-                            .frame(height: 44)
+                            .frame(minHeight: 44)
                             .background(Theme.Colors.sky, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
                     }
                 }
@@ -57,7 +61,7 @@ struct RecoveryCoachCard: View {
 
     private var detail: String {
         if !opportunity.hasGap {
-            return "Your protein floor and hydration are already handled. The session has what it needs."
+            return "Your entries meet your current protein and water targets. How you feel still matters; these totals don’t assess recovery."
         }
         let protein = opportunity.proteinGap > 0 ? "\(opportunity.proteinGap)g protein" : nil
         let water = opportunity.waterGapMl > 0 ? "\(opportunity.waterGapMl) ml water" : nil

@@ -77,6 +77,8 @@ struct PulseMemoryEditor: View {
     var existing: PulseMemory? = nil
     var proposed: String = ""
     var expectedOwner: UUID? = nil
+    var readOnlyPreview = false
+    var onApproved: ((String) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var content = ""
     @State private var owner: UUID?
@@ -85,35 +87,57 @@ struct PulseMemoryEditor: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                SheetHeader(title: existing == nil ? "Remember what helps" : "Edit memory", onClose: { dismiss() })
-                Text("A routine, preference, or practical experience you want Pulse to remember.")
-                    .font(Theme.Fonts.body(16))
-                TextField("For travel, a familiar breakfast makes mornings easier.", text: $content, axis: .vertical)
-                    .font(Theme.Fonts.body(17)).lineLimit(3...8).textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("Memory for Pulse")
-                Text("\(content.unicodeScalars.count)/300 · Only saved when you approve.")
-                    .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+                SheetHeader(title: existing == nil ? "Review for Pulse" : "Edit memory", onClose: { dismiss() })
+                VStack(alignment: .leading, spacing: 10) {
+                    TileEyebrow("Keep what helps", color: Theme.Colors.violetLabel)
+                    Text(existing == nil ? "A little context for next time." : "Make it sound like you.")
+                        .font(Theme.Fonts.display(28, .bold, relativeTo: .title)).fixedSize(horizontal: false, vertical: true)
+                    Text("Choose the words you want Pulse to remember.")
+                        .font(Theme.Fonts.body(15)).foregroundStyle(Theme.Colors.textSecondary)
+                }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.Colors.violet, in: RoundedRectangle(cornerRadius: Theme.Radius.tile))
+                VStack(alignment: .leading, spacing: 12) {
+                    TileEyebrow("Exact wording")
+                    TextField("For travel, a familiar breakfast makes mornings easier.", text: $content, axis: .vertical)
+                        .font(Theme.Fonts.body(17)).lineLimit(3...7)
+                        .padding(14).background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 14))
+                        .accessibilityLabel("Memory for Pulse").disabled(saving)
+                    HStack {
+                        Text("Edit anything before approving.")
+                        Spacer(minLength: 8)
+                        Text("\(content.unicodeScalars.count)/300").monospacedDigit()
+                    }.font(Theme.Fonts.body(12)).foregroundStyle(content.unicodeScalars.count > 300 ? Theme.Colors.danger : Theme.Colors.textSecondary)
+                }.tile()
                 if let error { Text(error).foregroundStyle(Theme.Colors.danger) }
+                if readOnlyPreview { Text("Preview only · approval is disabled here.").font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary) }
                 Button(saving ? "Saving…" : "Approve and remember") {
+                    guard !readOnlyPreview else { return }
+                    let approvedText = content.trimmingCharacters(in: .whitespacesAndNewlines)
                     saving = true
                     Task {
                         defer { saving = false }
                         do {
                             if var memory = existing {
-                                memory.content = content.trimmingCharacters(in: .whitespacesAndNewlines)
+                                memory.content = approvedText
                                 try await PulseMemoryStore.shared.save(memory)
                             } else {
                                 guard let owner else { throw URLError(.userAuthenticationRequired) }
-                                try await PulseMemoryStore.shared.approve(content, for: owner)
+                                try await PulseMemoryStore.shared.approve(approvedText, for: owner)
                             }
+                            let savedText = PulseMemoryStore.shared.memories.first {
+                                $0.userId == owner && $0.content.caseInsensitiveCompare(approvedText) == .orderedSame
+                            }?.content ?? approvedText
+                            onApproved?(savedText)
                             dismiss()
                         } catch PulseMemoryStore.SaveError.capacity {
                             self.error = "Pulse can keep 30 practical memories. Edit or forget one to make room."
                         } catch { self.error = "Couldn’t save this memory. Check your connection and try again." }
                     }
-                }.buttonStyle(.brandPrimary).disabled(saving || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || content.unicodeScalars.count > 300)
+                }.buttonStyle(.brandPrimary).disabled(readOnlyPreview || saving || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || content.unicodeScalars.count > 300)
+                Text("Only remembered after you approve. You can edit or forget it in What Pulse knows.")
+                    .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
             }.padding(Theme.Spacing.page)
-        }.background(Theme.Colors.ground).tint(Theme.Colors.primary).interactiveDismissDisabled(saving)
+        }.background(Theme.Colors.ground).tint(Theme.Colors.primary).interactiveDismissDisabled(saving).scrollDismissesKeyboard(.interactively)
             .onAppear { content = existing?.content ?? proposed; owner = expectedOwner ?? PulseMemoryStore.shared.accountId }
     }
 }

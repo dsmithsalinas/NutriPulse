@@ -18,6 +18,10 @@ struct CoachView: View {
     @State private var inConversation = false
     @State private var showExperiment: PersonalExperiment?
     @State private var showAboutYou = false
+    @State private var healthInsights = PulseHealthInsightsModel()
+    @State private var healthDestination: PulseHealthDestination?
+    @State private var showSmallExperiments = false
+    @State private var experimentGoals = GoalsViewModel()
 
     // The Daylight tab bar floats over content, and SwiftUI doesn't inset this pinned composer
     // by it (with the keyboard up it also rides the keyboard and lands on the composer), so the
@@ -81,7 +85,7 @@ struct CoachView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             guard isActive else { return }
             returnToStartIfIdle()
-            Task { await vm.refreshStartSuggestions() }
+            Task { await vm.refreshStartSuggestions(); await healthInsights.load(force: true) }
         }
         .onChange(of: appState.pendingCoachPrompt) { _, prompt in
             guard isActive, prompt != nil else { return }
@@ -90,6 +94,39 @@ struct CoachView: View {
         .onChange(of: vm.isLoading) { _, loading in
             guard isActive, !loading else { return }
             Task { await consumePendingPrompt() }
+        }
+        .task(id: appState.session?.user.id) {
+            healthInsights.configure(owner: appState.session?.user.id)
+            if isActive { await healthInsights.load() }
+        }
+        .onChange(of: appState.session?.user.id) { _, owner in
+            healthDestination = nil; showSmallExperiments = false
+            experimentGoals = GoalsViewModel()
+            healthInsights.configure(owner: owner)
+        }
+        .sheet(item: $healthDestination, onDismiss: {
+            healthInsights.refreshLocalExperiment()
+            Task { await healthInsights.load(force: true) }
+        }) { destination in
+            if destination == .experiment, let experiment = healthInsights.experiment, let owner = healthInsights.owner {
+                ExperimentHealthDetailView(experiment: experiment, owner: owner, onManage: {
+                    let expectedOwner = healthInsights.owner
+                    healthDestination = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        guard healthInsights.owner == expectedOwner,
+                              healthInsights.isPreview || appState.session?.user.id == expectedOwner else { return }
+                        showSmallExperiments = true
+                    }
+                })
+            } else {
+                HealthPatternsView(model: healthInsights, kind: destination)
+            }
+        }
+        .sheet(isPresented: $showSmallExperiments, onDismiss: {
+            Task { await healthInsights.load(force: true) }
+        }) {
+            ExperimentsView(activeGoals: experimentGoals.active)
+                .task { if !healthInsights.isPreview { await experimentGoals.load() } }
         }
         .onChange(of: chatHistoryVersion) {
             inConversation = false
@@ -122,6 +159,8 @@ struct CoachView: View {
     private func activate() {
         returnToStartIfIdle()
         Task {
+            healthInsights.configure(owner: appState.session?.user.id)
+            await healthInsights.load()
             // The first load builds the start screen itself; later visits refresh it, since
             // the protein gap and shot day move through the day.
             if !(await vm.loadIfNeeded()) {
@@ -285,6 +324,8 @@ struct CoachView: View {
                 .padding(.top, 6)
                 .popIn(order: 1)
 
+                healthSummaryCards
+
                 if !vm.startSuggestions.isEmpty {
                     sectionLabel("Suggested for right now")
                         .popIn(order: 2)
@@ -308,6 +349,54 @@ struct CoachView: View {
             .padding(.bottom, 16)
         }
         .scrollDismissesKeyboard(.immediately)
+    }
+
+    @ViewBuilder private var healthSummaryCards: some View {
+        if healthInsights.ownsScreen {
+            let hasExperiment = healthInsights.experiment != nil
+            let hasCycle = !healthInsights.cycle.isEmpty && currentCycleFit != .notUseful
+            let hasWeek = !healthInsights.weekly.isEmpty
+            if currentCycleFit == .notUseful {
+                Button("Show shot-cycle card again") { restoreCycleCard() }.font(Theme.Fonts.body(14, .semibold)).frame(minHeight: 44)
+            }
+            if hasExperiment || hasCycle || hasWeek {
+                sectionLabel("Worth a look")
+                if let experiment = healthInsights.experiment {
+                    HealthSummaryCard(title: "Your small experiment",
+                        headline: healthInsights.experimentDays.isEmpty ? "Keep noticing what helps." : "\(healthInsights.experimentDays.count) \(experiment.healthLink?.metric == .sleep ? "nights" : "walking days") recorded.",
+                        detail: experiment.action, symbol: "leaf", featured: true) { healthDestination = .experiment }
+                }
+                if hasCycle {
+                    HealthSummaryCard(title: "Your shot-cycle picture", headline: currentCycleFit == .different ? "Today comes first." : "A snapshot of cycle day \(healthInsights.cycleDay ?? 0).",
+                        detail: "Your earlier check-ins, with available Health context.", symbol: "circle.grid.2x2", featured: !hasExperiment) { healthDestination = .cycle }
+                }
+                if hasWeek {
+                    HealthSummaryCard(title: "Beyond the scale", headline: weeklyHealthHeadline,
+                        detail: "Movement, rest & how you feel.", symbol: "figure.walk", featured: !hasExperiment && !hasCycle) { healthDestination = .week }
+                }
+                Text("On-device observations · Tap to explore").font(Theme.Fonts.body(12)).foregroundStyle(Theme.Colors.textSecondary).padding(.horizontal, 4)
+            } else if !healthInsights.loading {
+                Button("Explore Health observations") { healthDestination = .week }
+                    .font(Theme.Fonts.body(14, .semibold)).frame(minHeight: 44)
+            }
+        }
+    }
+    private var currentCycleFit: CycleFitChoice? {
+        guard let day = healthInsights.cycleDay, healthInsights.owner == EverydayToolsStore.shared.accountId else { return nil }
+        return EverydayToolsStore.shared.data.cycleFit(on: Date.now.isoDateString, cycleDay: day)
+    }
+    private func restoreCycleCard() {
+        guard let owner = healthInsights.owner, owner == appState.session?.user.id, let day = healthInsights.cycleDay else { return }
+        let store = EverydayToolsStore.shared
+        do { try store.update(owner: owner, generation: store.generation) { $0.setCycleFit(nil, day: Date.now.isoDateString, cycleDay: day) } }
+        catch { vm.error = "Couldn’t restore the card. Please try again." }
+    }
+
+    private var weeklyHealthHeadline: String {
+        let metrics = healthInsights.weekly.flatMap(\.metrics)
+        if let strength = metrics.first(where: { $0.id == "strength" }) { return "\(strength.value) strength sessions recorded." }
+        if let sleep = metrics.first(where: { $0.id == "sleep" }) { return "\(sleep.value) hours of sleep per observed night." }
+        return "A little more of your week."
     }
 
     private func sectionLabel(_ text: String) -> some View {

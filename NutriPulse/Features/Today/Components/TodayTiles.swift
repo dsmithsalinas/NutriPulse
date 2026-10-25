@@ -368,6 +368,7 @@ struct ShotCycleTile: View {
     let cycleDay: Int
     /// Days between shots, from the dose schedule (weekly for every current medication).
     var cycleLength: Int = 7
+    var hasCheckIn = false
     let onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -389,6 +390,10 @@ struct ShotCycleTile: View {
                     .foregroundStyle(Theme.Colors.limeInk)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                Label(hasCheckIn ? "Check-in saved" : "Check in", systemImage: hasCheckIn ? "checkmark.circle.fill" : "plus.circle")
+                    .font(Theme.Fonts.body(12, .semibold))
+                    .foregroundStyle(Theme.Colors.limeInk)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 5) {
                     ForEach(1...cycleLength, id: \.self) { day in
                         dot(day)
@@ -399,8 +404,8 @@ struct ShotCycleTile: View {
             .tile(Theme.Colors.lime, radius: Theme.Radius.tile, padding: 14, shadow: false)
         }
         .buttonStyle(PressableStyle(scale: 0.97))
-        .accessibilityLabel("Shot cycle, \(title)")
-        .accessibilityHint("Opens your shot cycle check-in")
+        .accessibilityLabel("Shot cycle, \(title), \(hasCheckIn ? "check-in saved" : "check in")")
+        .accessibilityHint(hasCheckIn ? "Review or edit your saved check-in" : "Opens your shot cycle check-in")
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) { pulsing = true }
