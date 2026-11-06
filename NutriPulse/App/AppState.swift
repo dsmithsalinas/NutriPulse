@@ -95,6 +95,7 @@ final class AppState {
                 SmartNotificationHistoryStore.clear()
             }
             self.session = session
+            MedicationStore.shared.setAccount(session?.user.id)
             #if DEBUG
             if !DebugLaunch.tour {
                 MealNoteStore.shared.setAccount(session?.user.id)
@@ -164,6 +165,7 @@ final class AppState {
         FavoritesStore.shared.reset()
         SyncEngine.shared.clearFailure()
         GLP1TrackingStore.shared.reset()
+        MedicationNotificationRoute.clear()
 
         for key in Self.accountScopedDefaultsKeys {
             UserDefaults.standard.removeObject(forKey: key)

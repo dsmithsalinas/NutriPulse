@@ -26,6 +26,10 @@ final class TalkToLogViewModel {
         var fiberG: Double
         var source: String       // "fatsecret" | "estimated" — drives the confirm-card badge
         var externalId: String?
+        var matchKind: String? = nil
+        var servingOptions: [FoodServing] = []
+        var selectedServingID: String? = nil
+        var initialServingID: String? = nil
         let initialQuantity: Double   // snapshot at parse time, to detect edits
 
         var totalCalories: Double { calories * quantity }
@@ -36,10 +40,12 @@ final class TalkToLogViewModel {
 
         // The confirm-card trust proxy (Phase 1C): did the user have to correct
         // this row, or was Claude/FatSecret's parse good enough to accept as-is?
-        var wasEdited: Bool { !isIncluded || quantity != initialQuantity }
+        var wasEdited: Bool { !isIncluded || quantity != initialQuantity || selectedServingID != initialServingID }
     }
 
-    var inputText = ""
+    var inputText = "" {
+        didSet { if oldValue != inputText { foodContext.textChanged(); invalidateDraft() } }
+    }
     var isParsing = false
     var rows: [ConfirmRow] = []
     var selectedMeal: Meal = .current
@@ -53,7 +59,44 @@ final class TalkToLogViewModel {
     private(set) var todayProteinG: Double = 0
     private(set) var proteinGoalG: Double? = nil
 
-    private let client = TalkToLogClient()
+    var foodContext = FoodLoggingContext()
+    var clarification: RestaurantClarification?
+    var dishes: [GuidedMealDish] = []
+    var compositionConfirmed = false
+    var acceptsEstimates = false
+    private var requestID = UUID()
+    private var activeContextRevision: Int?
+    func contextChanged() {
+        if activeContextRevision != foodContext.revision { invalidateDraft() }
+    }
+    private let client: any GuidedFoodParsing
+    private let currentOwner: @MainActor () -> UUID?
+    private let hasAIConsent: @MainActor () -> Bool
+    init(client: (any GuidedFoodParsing)? = nil,
+         currentOwner: @escaping @MainActor () -> UUID? = { supabase.auth.currentSession?.user.id },
+         hasAIConsent: @escaping @MainActor () -> Bool = { FoodAIConsentStore.shared.isAllowed }) {
+        self.client = client ?? TalkToLogClient(); self.currentOwner = currentOwner; self.hasAIConsent = hasAIConsent
+    }
+    var needsComposition: Bool { !dishes.isEmpty && !compositionConfirmed }
+    var hasSavedRows: Bool { rows.contains { $0.isSaved } }
+    var estimatesNeedConfirmation: Bool { pendingRows.contains { $0.source == "estimated" } && !acceptsEstimates }
+    func invalidateDraft() {
+        requestID = UUID(); isParsing = false; activeContextRevision = nil
+        rows.removeAll { !$0.isSaved }; clarification = nil; dishes = []; compositionConfirmed = false; acceptsEstimates = false
+    }
+    func selectInterpretation(_ choice: RestaurantClarification.Choice) {
+        if let name = choice.restaurant { foodContext.select(name, origin: "confirmed") }
+        else { foodContext.clear(asIngredient: true) }
+        invalidateDraft()
+    }
+    func backToComposition() { requestID = UUID(); isParsing = false; activeContextRevision = nil; rows.removeAll { !$0.isSaved }; compositionConfirmed = false; acceptsEstimates = false }
+    func selectServing(rowID: UUID, serving: FoodServing) {
+        guard let index = rows.firstIndex(where: { $0.id == rowID && !$0.isSaved }) else { return }
+        rows[index].selectedServingID = serving.id; rows[index].servingDesc = serving.description
+        rows[index].grams = serving.grams; rows[index].calories = serving.calories
+        rows[index].proteinG = serving.proteinG; rows[index].carbsG = serving.carbsG
+        rows[index].fatG = serving.fatG; rows[index].fiberG = serving.fiberG
+    }
 
     var hasParsed: Bool { !rows.isEmpty }
     var includedCount: Int { rows.filter(\.isIncluded).count }
@@ -82,25 +125,43 @@ final class TalkToLogViewModel {
     // `date` is the day being logged to (usually today, but Today can log to a past day) —
     // the protein context for "This clears your floor" is fetched for that same day.
     func parse(for date: Date) async {
-        guard FoodAIConsentStore.shared.isAllowed,
-              let owner = supabase.auth.currentSession?.user.id else {
+        guard hasAIConsent(),
+              let owner = currentOwner() else {
             errorMessage = "Allow AI food logging before parsing a meal. Search and manual logging are still available."
             return
         }
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        let token = UUID(); requestID = token
+        let revision = foodContext.revision
+        activeContextRevision = revision
+        let dishSnapshot = dishes
+        let draft = foodContext.draftID
         isParsing = true
         errorMessage = nil
-        defer { isParsing = false }
+        defer { if requestID == token { isParsing = false } }
 
         async let context: Void = loadProteinContext(for: date)
 
         do {
-            let items = try await client.parse(text: text)
+            let response = try await client.parse(.init(text: text, draftId: draft, draftRevision: revision,
+                restaurant: foodContext.restaurant, interpretation: foodContext.interpretation,
+                compositionConfirmed: compositionConfirmed, dishes: compositionConfirmed ? dishes : nil))
             _ = await context
-            guard supabase.auth.currentSession?.user.id == owner,
-                  FoodAIConsentStore.shared.isAllowed else { return }
-            rows = items.map {
+            guard requestID == token, foodContext.revision == revision, dishes == dishSnapshot,
+                  currentOwner() == owner, hasAIConsent() else { return }
+            guard response.schemaVersion == 2, response.draftId == draft, response.draftRevision == revision else {
+                errorMessage = "Guided food logging is not available yet. Try Search or manual entry."
+                return
+            }
+            foodContext.acceptDetected(response.restaurant)
+            clarification = response.clarification
+            if response.status == "needs_restaurant" { return }
+            if response.status == "needs_ingredients" {
+                dishes = response.dishes ?? []; compositionConfirmed = false; return
+            }
+            guard response.status == "ready" else { errorMessage = "Couldn’t read this meal. Try again."; return }
+            rows = response.items.map {
                 ConfirmRow(
                     name: $0.name, brand: $0.brand, servingDesc: $0.servingDesc,
                     grams: $0.grams, quantity: $0.quantity,
@@ -110,10 +171,20 @@ final class TalkToLogViewModel {
                     initialQuantity: $0.quantity
                 )
             }
+            for index in rows.indices {
+                let item = response.items[index]
+                rows[index].matchKind = item.matchKind
+                rows[index].servingOptions = item.servings ?? []
+                rows[index].selectedServingID = item.selectedServingId
+                rows[index].initialServingID = item.selectedServingId
+            }
+            acceptsEstimates = false
             if rows.isEmpty {
                 errorMessage = "Couldn't find anything to log in that — try rephrasing."
             }
         } catch {
+            guard requestID == token, foodContext.revision == revision else { return }
+            if !dishes.isEmpty { compositionConfirmed = false }
             // Show the server's reason when present (e.g. the 429 rate-limit copy); otherwise
             // the generic parse-failure message.
             errorMessage = EdgeFunctionError.message(
@@ -124,6 +195,7 @@ final class TalkToLogViewModel {
     }
 
     func reset() {
+        invalidateDraft()
         inputText = ""
         correctionText = ""
         rows = []
@@ -185,7 +257,7 @@ final class TalkToLogViewModel {
     // foods are in the day twice.
     func logAll(on date: Date) async throws {
         let pending = pendingRows
-        guard !pending.isEmpty else { return }
+        guard !pending.isEmpty, !estimatesNeedConfirmation else { return }
         isLogging = true
         defer { isLogging = false }
 

@@ -3,6 +3,7 @@ import Network
 import Observation
 
 enum SyncFailureStage: String {
+    case medicationUpload = "medication sync"
     case mealNoteUpload = "meal note upload"
     case foodUpload = "food upload"
     case waterUpload = "water upload"
@@ -119,7 +120,7 @@ final class SyncEngine {
     }
 
     func refreshPendingCount() {
-        pendingCount = ((try? LocalStore.shared.pendingCount()) ?? 0) + MealNoteStore.shared.pendingCount
+        pendingCount = ((try? LocalStore.shared.pendingCount()) ?? 0) + MealNoteStore.shared.pendingCount + MedicationStore.shared.pendingCount
     }
 
     // Set when a push is requested while one is already running. The request used to be
@@ -147,6 +148,7 @@ final class SyncEngine {
         lastSyncAttemptAt = .now
 
         let results: [(SyncFailureStage, Bool)] = [
+            (.medicationUpload, await MedicationStore.shared.sync(refresh: true)),
             (.mealNoteUpload, await MealNoteStore.shared.sync()),
             (.foodUpload, await pushPendingFoodLogs()),
             (.waterUpload, await pushPendingWaterLogs()),
@@ -193,6 +195,7 @@ final class SyncEngine {
         lastSyncAttemptAt = .now
 
         let results: [(SyncFailureStage, Bool)] = [
+            (.medicationUpload, await MedicationStore.shared.sync()),
             (.mealNoteUpload, await MealNoteStore.shared.sync()),
             (.foodUpload, await pushPendingFoodLogs()),
             (.waterUpload, await pushPendingWaterLogs()),
@@ -216,8 +219,9 @@ final class SyncEngine {
             needsAnotherPush = false
             isSyncing = true
             let results: [(SyncFailureStage, Bool)] = [
+                (.medicationUpload, await MedicationStore.shared.sync()),
                 (.mealNoteUpload, await MealNoteStore.shared.sync()),
-            (.foodUpload, await pushPendingFoodLogs()),
+                (.foodUpload, await pushPendingFoodLogs()),
                 (.waterUpload, await pushPendingWaterLogs()),
                 (.workoutUpload, await pushPendingWorkoutLogs()),
             ]

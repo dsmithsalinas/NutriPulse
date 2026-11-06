@@ -13,6 +13,7 @@ struct ProfileView: View {
     @AppStorage("chatHistoryVersion") private var chatHistoryVersion = 0
     @State private var showClearHistoryConfirm = false
     @State private var showLighterTracking = false
+    @State private var showMedications = false
     @State private var showDeleteAccountConfirm = false
     @State private var showGLP1Tracker = false
     @State private var showGLP1PauseOptions = false
@@ -80,6 +81,13 @@ struct ProfileView: View {
 
     private var profileHealth: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            SettingsTile(eyebrow: "Medications & supplements") {
+                actionRow(icon: "pills", title: "Medications & supplements", showChevron: true) { showMedications = true }
+                    .accessibilityIdentifier("profileMedications")
+                Text(MedicationStore.shared.enabled ? "Shown on Today. Manage items, reminders, and history." : "Off · Set up your routine and choose whether to show it on Today.")
+                    .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+                    .padding(.horizontal, 16).padding(.bottom, 14)
+            }
             glp1DetailsTile.popIn(order: 4)
             healthKitDetailsTile.popIn(order: 4)
             bodyStatsTile.popIn(order: 5)
@@ -125,6 +133,7 @@ struct ProfileView: View {
                 await vm.loadData(profile: appState.profile)
             }
             .sheet(isPresented: $showLighterTracking) { LighterTrackingSheet() }
+            .sheet(isPresented: $showMedications) { MedicationSettingsView() }
             .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
                 Task { await vm.loadData(profile: appState.profile) }
             }

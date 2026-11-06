@@ -12,6 +12,14 @@ struct FatSecretClient {
     // Must match maxResults in supabase/functions/search-food. A full page is how the
     // caller knows to offer "load more".
     static let pageSize = 25
+    struct SearchPage: Decodable {
+        var results: [FoodSearchResult]
+        var hasMore: Bool?
+    }
+    func searchPage(query: String, page: Int = 0, restaurant: String? = nil) async throws -> SearchPage {
+        struct Payload: Encodable { let query: String; let page: Int; let restaurant: String? }
+        return try await supabase.functions.invoke("search-food", options: .init(body: Payload(query: query, page: page, restaurant: restaurant)))
+    }
 
     func search(query: String, page: Int = 0) async throws -> [FoodSearchResult] {
         struct Payload: Encodable { let query: String; let page: Int }

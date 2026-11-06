@@ -11,6 +11,8 @@ struct MainTabView: View {
     @State private var tabBarHeight: CGFloat = 0
     @State private var tabBarCompact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var medicationRoute: MedicationNotificationRoute.Route?
     // Read directly rather than through @Environment: it's a device-cached singleton (like
     // SyncEngine), not something a preview or test needs to substitute per-view.
     private var pulseStore: PulseProfileStore { PulseProfileStore.shared }
@@ -156,6 +158,7 @@ struct MainTabView: View {
             )
         }
         .task {
+            handleMedicationRoute()
             handleQuickAction()
             handleSmartNotificationRoute()
             handleWeeklyReminderRoute()
@@ -176,7 +179,28 @@ struct MainTabView: View {
         .onReceive(NotificationCenter.default.publisher(for: .strongWeekReminderOpened)) { _ in
             handleWeeklyReminderRoute()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .medicationNotificationOpened)) { _ in
+            handleMedicationRoute()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                handleMedicationRoute()
+                Task { await MedicationStore.shared.sync(refresh: true); await MedicationNotificationScheduler.shared.reconcile() }
+            }
+        }
+        .sheet(item: $medicationRoute) { route in
+            NavigationStack {
+                MedicationHistoryView(initialDate: Date.fromISODateString(route.day) ?? .now, showsDone: true, focusedDoseID: route.occurrenceID)
+                    .safeAreaInset(edge: .top) {
+                        if route.needsReview {
+                            Text("This notification couldn’t update the dose. Review the entry to record it.")
+                                .font(Theme.Fonts.body(14)).padding().background(Theme.Colors.primarySoft)
+                        }
+                    }
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            Task { await MedicationNotificationScheduler.shared.reconcile() }
             Task {
                 TrackingPreferencesStore.shared.refreshTiming()
                 await TrackingPreferencesStore.shared.load()
@@ -213,6 +237,13 @@ struct MainTabView: View {
         appState.pendingConsentPrompt = nil
         appState.showPulseConsentSheet = false
         if let prompt { appState.pendingCoachPrompt = prompt }
+    }
+
+    private func handleMedicationRoute() {
+        guard let owner = appState.session?.user.id,
+              let route = MedicationNotificationRoute.consume(owner: owner) else { return }
+        selectedTab = .today
+        medicationRoute = route
     }
 
     private func setTabBarCompact(_ compact: Bool) {

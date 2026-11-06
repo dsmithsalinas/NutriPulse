@@ -18,4 +18,7 @@ struct ParsedFoodItem: Codable {
     let fiberG: Double
     let source: String        // "fatsecret" | "estimated"
     let externalId: String?
+    var matchKind: String? = nil
+    var selectedServingId: String? = nil
+    var servings: [FoodServing]? = nil
 }

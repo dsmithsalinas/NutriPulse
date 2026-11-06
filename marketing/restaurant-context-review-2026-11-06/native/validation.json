@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-06",
+  "backendContractTests": {
+    "passed": 13,
+    "failed": 0
+  },
+  "nativeStateTests": {
+    "passed": 6,
+    "failed": 0
+  },
+  "keyboardUITests": {
+    "iPhone17Pro_iOS26_5": {
+      "passed": 2,
+      "failed": 0
+    },
+    "iPhoneSE3_iOS26_5": {
+      "passed": 2,
+      "failed": 0
+    },
+    "assertions": [
+      "actual space key visible",
+      "active field above keyboard",
+      "primary action above keyboard and hittable",
+      "custom ingredient add above keyboard"
+    ]
+  },
+  "hosted": {
+    "project": "dcabdzuhuixlcgwavtsc",
+    "statuses": {
+      "denied": 403,
+      "ambiguous": 200,
+      "search": 200,
+      "checklist": 200,
+      "resolved": 200,
+      "legacy": 200,
+      "roadhouse": 200
+    },
+    "parseFoodVersion": 19,
+    "searchFoodVersion": 15,
+    "jwtVerification": true,
+    "disposableAccountDeleted": true,
+    "roadhouseQuantity": 1
+  },
+  "limits": [
+    "typed Talk UI input; physical microphone recognition not automated",
+    "physical-device keyboard variants still require smoke test",
+    "provider coverage and AI extraction can vary; user review required"
+  ]
+}

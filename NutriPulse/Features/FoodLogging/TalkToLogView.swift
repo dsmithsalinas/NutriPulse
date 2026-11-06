@@ -12,6 +12,7 @@ struct TalkToLogView: View {
     let onLogged: (LogSource) -> Void
     var familiarFoods: [FoodLog] = []
     var onSelectFamiliar: (FoodLog) -> Void = { _ in }
+    var onFocusChanged: (Bool) -> Void = { _ in }
 
     @State private var dictation = DictationRecognizer()
     @State private var showFoodAIConsent = false
@@ -53,9 +54,21 @@ struct TalkToLogView: View {
     }
 
     private var content: some View {
+        Group {
+        if vm.needsComposition && !vm.isParsing {
+            RestaurantIngredientChecklist(vm: vm, onReview: {
+                vm.compositionConfirmed = true
+                Task { await vm.parse(for: date) }
+            }, onBack: { vm.invalidateDraft() }, onFocusChanged: onFocusChanged)
+        } else {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
-                if vm.hasParsed {
+                if let clarification = vm.clarification, !vm.isParsing {
+                    RestaurantClarificationView(clarification: clarification, onChoose: { choice in
+                        vm.selectInterpretation(choice)
+                        Task { await vm.parse(for: date) }
+                    }, onStartOver: { vm.invalidateDraft() })
+                } else if vm.hasParsed {
                     parsedContent
                 } else if vm.isParsing {
                     parsingTile
@@ -70,6 +83,16 @@ struct TalkToLogView: View {
         }
         .scrollDismissesKeyboard(.immediately)
         .safeAreaInset(edge: .bottom) { actionBar }
+        }
+        }
+        .toolbar {
+            if !vm.needsComposition {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer(); Button("Done") { isTyping = false }.accessibilityIdentifier("talkKeyboardDone")
+                }
+            }
+        }
+        .onChange(of: isTyping) { _, focused in onFocusChanged(focused) }
         .onChange(of: dictation.transcript) { _, text in
             if dictation.isListening { vm.inputText = dictationBase + text }
         }
@@ -83,7 +106,7 @@ struct TalkToLogView: View {
                 break
             }
         }
-        .onDisappear { dictation.stop() }
+        .onDisappear { dictation.stop(); onFocusChanged(false) }
         .sheet(isPresented: $showFoodAIConsent) {
             FoodAIConsentSheet(onAllowed: { await vm.parse(for: date) })
         }
@@ -289,9 +312,17 @@ struct TalkToLogView: View {
                     .popIn(order: vm.rows.count)
             }
 
+            if vm.pendingRows.contains(where: { $0.source == "estimated" }) {
+                Toggle("Use these estimates", isOn: $vm.acceptsEstimates)
+                    .font(Theme.Fonts.body(15, .semibold)).padding(12)
+                    .accessibilityIdentifier("talkAcceptEstimates")
+            }
+            if !vm.dishes.isEmpty && !vm.hasSavedRows {
+                Button("Edit ingredients") { vm.backToComposition() }.frame(minHeight: 44)
+            }
             correctionField
 
-            Button("Start Over") { vm.reset() }
+            Button("Start Over") { vm.reset(); vm.foodContext.reset() }
                 .font(Theme.Fonts.body(13, .semibold))
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .padding(.top, Theme.Spacing.xs)
@@ -331,8 +362,8 @@ struct TalkToLogView: View {
             TextField("Actually, half the rice…", text: $vm.correctionText)
                 .textInputAutocapitalization(.never)
                 .submitLabel(.done)
-                .onSubmit { vm.applyCorrection() }
-                .font(Theme.Fonts.body(15))
+                .onSubmit { vm.applyCorrection(); isTyping = false }
+                .font(Theme.Fonts.body(15)).focused($isTyping)
             Button("Apply") { vm.applyCorrection() }
                 .font(Theme.Fonts.body(14, .bold))
                 .foregroundStyle(Theme.Colors.primaryText)
@@ -375,7 +406,7 @@ struct TalkToLogView: View {
                 .frame(height: 56)
                 .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .buttonStyle(.pressable)
-                .disabled(vm.isLogging || vm.pendingCount == 0)
+                .disabled(vm.isLogging || vm.pendingCount == 0 || vm.estimatesNeedConfirmation)
             }
         } else if captureActive {
             HStack(spacing: 10) {
@@ -456,6 +487,7 @@ private struct ConfirmRowView: View {
     @Binding var row: TalkToLogViewModel.ConfirmRow
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
         HStack(spacing: Theme.Spacing.sm) {
             Button {
                 row.isIncluded.toggle()
@@ -509,6 +541,22 @@ private struct ConfirmRowView: View {
                 .accessibilityLabel("\(row.quantity.formatted()) servings of \(row.name)")
             }
         }
+        if let kind = row.matchKind {
+            Text(kind == "restaurant" ? "Restaurant match" : kind == "generic" ? "Generic database match · review carefully" : "Estimated · review before logging")
+                .font(Theme.Fonts.body(12, .semibold)).foregroundStyle(Theme.Colors.textSecondary)
+        }
+        if !row.isSaved && row.servingOptions.count > 1 {
+            Picker("Serving", selection: Binding(get: { row.selectedServingID ?? "" }, set: { id in
+                guard let serving = row.servingOptions.first(where: { $0.id == id }) else { return }
+                row.selectedServingID = id; row.servingDesc = serving.description
+                row.grams = serving.grams; row.calories = serving.calories; row.proteinG = serving.proteinG
+                row.carbsG = serving.carbsG; row.fatG = serving.fatG; row.fiberG = serving.fiberG
+            })) {
+                ForEach(row.servingOptions) { Text($0.description).tag($0.id) }
+            }.font(Theme.Fonts.body(14))
+        }
+        }
+        .padding(.vertical, 8)
         .padding(.horizontal, 14)
         .frame(minHeight: 64)
         .tile(radius: Theme.Radius.row, padding: 0)

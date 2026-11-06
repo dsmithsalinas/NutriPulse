@@ -18,6 +18,10 @@ struct FoodSearchView: View {
         VStack(spacing: searchIsFocused ? 8 : Theme.Spacing.tileGap) {
             searchField
             filterChips
+            if let restaurant = vm.restaurantName {
+                Text("Searching for \(restaurant) matches. Other database matches are labeled below.")
+                    .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+            }
 
             Group {
                 if vm.searchQuery.isEmpty {
@@ -35,6 +39,12 @@ struct FoodSearchView: View {
             if vm.filteredResults.isEmpty { enterManuallyButton }
             FatSecretAttribution()
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { searchIsFocused = false }.accessibilityIdentifier("foodSearchKeyboardDone")
+            }
+        }
         .onChange(of: searchIsFocused) { _, focused in onFocusChanged(focused) }
         .onDisappear { onFocusChanged(false) }
         .task {
@@ -46,7 +56,7 @@ struct FoodSearchView: View {
         // SWIFT CONCEPT — .task(id:) re-runs the async block whenever `id` changes,
         // and cancels the previous run. Combined with Task.sleep this gives us
         // debounce without Combine — identical to useEffect with a cleanup fn in React.
-        .task(id: vm.searchQuery) {
+        .task(id: vm.searchTaskKey) {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--search-preview") { return }
             #endif
@@ -138,9 +148,15 @@ struct FoodSearchView: View {
     // MARK: - Results
 
     private var resultsList: some View {
-        ScrollView {
+        let results = vm.filteredResults
+        return ScrollView {
             LazyVStack(spacing: 8) {
-                ForEach(Array(vm.filteredResults.enumerated()), id: \.element.id) { index, result in
+                ForEach(Array(results.enumerated()), id: \.element.id) { index, result in
+                    if vm.restaurantName != nil && (index == 0 || results[index - 1].matchKind != result.matchKind) {
+                        Text(result.matchKind == "restaurant" ? "Restaurant matches" : "Other database matches")
+                            .font(Theme.Fonts.body(14, .semibold)).foregroundStyle(Theme.Colors.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+                    }
                     SearchResultRow(
                         result: result,
                         isFavorited: vm.favoritedExternalIds.contains(result.id),
@@ -284,6 +300,7 @@ private struct SearchResultRow: View {
 
     private var subtitle: String {
         var parts: [String] = [result.brand ?? "Generic"]
+        if let kind = result.matchKind { parts.append(kind == "restaurant" ? "Restaurant match" : "Other database match") }
         if let macros = FoodSearchMacros.parse(result.description) {
             parts.append("\(Int(macros.calories.rounded())) cal")
         }
@@ -373,6 +390,13 @@ struct FoodDetailSheet: View {
     @ViewBuilder
     private func detailForm(detail: FoodDetail) -> some View {
         Form {
+            if let restaurant = vm.restaurantName, let kind = result.matchKind {
+                Section {
+                    Text(restaurant).font(Theme.Fonts.body(16, .semibold))
+                    Text(kind == "restaurant" ? "Restaurant database match. Check the item and serving before logging." : "Other database match. This food is not verified as a match from this restaurant.")
+                        .font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
+                }.daylightSection()
+            }
             // ── Serving picker ────────────────────────────────────────────
             if detail.servings.count > 1 {
                 Section {

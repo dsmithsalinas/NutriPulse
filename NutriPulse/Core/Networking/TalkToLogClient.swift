@@ -6,7 +6,10 @@ import Supabase
 // nor FatSecret key ever reaches the app; it sends the user's JWT and a sentence.
 //
 // Setup (one-time): supabase functions deploy parse-food
-struct TalkToLogClient {
+struct TalkToLogClient: GuidedFoodParsing {
+    func parse(_ request: GuidedFoodRequest) async throws -> GuidedFoodResponse {
+        try await supabase.functions.invoke("parse-food", options: .init(body: request))
+    }
     func parse(text: String) async throws -> [ParsedFoodItem] {
         struct Payload: Encodable { let text: String }
         struct Response: Decodable { let items: [ParsedFoodItem] }

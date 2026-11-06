@@ -28,6 +28,8 @@ struct TodayView: View {
     @State private var showMovement = false
     @State private var showRecentMeals = false
     @State private var showLighterTracking = false
+    @State private var showMedicationSettings = false
+    @State private var showMedicationHistory = false
     @State private var showSaveUsualMeal = false
     @State private var usualMealFoods: [FoodLog] = []
     @State private var editingMealNote: MealNote?
@@ -398,6 +400,10 @@ struct TodayView: View {
                 )
             }
             .sheet(isPresented: $showLighterTracking) { LighterTrackingSheet() }
+            .sheet(isPresented: $showMedicationSettings) { MedicationSettingsView() }
+            .sheet(isPresented: $showMedicationHistory) {
+                NavigationStack { MedicationHistoryView(initialDate: vm.selectedDate, showsDone: true) }
+            }
             .sheet(isPresented: $showStrongWeek, onDismiss: { strongWeek.editing = false }) {
                 StrongWeekView(vm: strongWeek, profile: appState.profile)
             }
@@ -648,6 +654,8 @@ struct TodayView: View {
                         } else {
                             firstDayCard
                             tileGrid
+                            MedicationTodaySection(date: vm.selectedDate,
+                                onManage: { showMedicationSettings = true }, onHistory: { showMedicationHistory = true })
                             if vm.isToday { homeSupportActions }
                         }
 
@@ -793,6 +801,8 @@ struct TodayView: View {
                 .background(Theme.Colors.sky, in: RoundedRectangle(cornerRadius: Theme.Radius.tile))
             }
             .buttonStyle(.plain)
+            MedicationTodaySection(date: vm.selectedDate,
+                onManage: { showMedicationSettings = true }, onHistory: { showMedicationHistory = true })
             if vm.isToday { homeSupportActions }
             Text("Your food entries")
                 .font(Theme.Fonts.body(16, .semibold))

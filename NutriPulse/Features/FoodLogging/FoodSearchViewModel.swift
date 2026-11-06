@@ -6,6 +6,19 @@ import Supabase
 @MainActor
 final class FoodSearchViewModel {
     var searchQuery = ""
+    private var searchRequestID = UUID()
+    var restaurantName: String? {
+        didSet {
+            guard oldValue != restaurantName else { return }
+            invalidateSearch()
+        }
+    }
+    var searchTaskKey: String { searchQuery + "|" + (restaurantName ?? "") }
+    func invalidateSearch() {
+        searchRequestID = UUID(); results = []; searchPage = 0
+        canLoadMoreResults = false; isSearching = false; isLoadingMoreResults = false
+        detailRequestID = UUID(); selectedResult = nil; detail = nil; selectedServing = nil
+    }
     var results: [FoodSearchResult] = []
     var isSearching = false
     private(set) var canLoadMoreResults = false
@@ -47,7 +60,10 @@ final class FoodSearchViewModel {
     var filteredResults: [FoodSearchResult] {
         results
             .filter { matchesSelectedFilter($0) }
-            .sorted { favoritedExternalIds.contains($0.id) && !favoritedExternalIds.contains($1.id) }
+            .sorted {
+                if ($0.matchKind == "restaurant") != ($1.matchKind == "restaurant") { return $0.matchKind == "restaurant" }
+                return favoritedExternalIds.contains($0.id) && !favoritedExternalIds.contains($1.id)
+            }
     }
 
     private func matchesSelectedFilter(_ result: FoodSearchResult) -> Bool {
@@ -96,10 +112,17 @@ final class FoodSearchViewModel {
     /// instead, so the user picks one rather than logging a portion the row didn't show.
     /// Returns whether it logged.
     func quickLog(_ result: FoodSearchResult, meal: Meal, on date: Date) async -> Bool {
+        if restaurantName != nil {
+            selectedMeal = meal
+            await loadDetail(for: result)
+            return false
+        }
+        let contextToken = searchRequestID
         quickLoggingID = result.id
         defer { quickLoggingID = nil }
         do {
             let detail = try await client.getFood(id: result.id)
+            guard contextToken == searchRequestID, !Task.isCancelled else { return false }
             guard let serving = FoodSearchMacros.serving(matching: result.description, in: detail.servings) else {
                 guard !detail.servings.isEmpty else {
                     errorMessage = "Couldn't log \(result.name). Try again."
@@ -135,12 +158,16 @@ final class FoodSearchViewModel {
             canLoadMoreResults = false
             return
         }
-        isSearching = true
-        defer { isSearching = false }
+        let token = UUID(); searchRequestID = token
+        let restaurant = restaurantName
+        isSearching = true; isLoadingMoreResults = false
+        defer { if searchRequestID == token { isSearching = false } }
         do {
-            results = try await client.search(query: q)
+            let page = try await client.searchPage(query: q, restaurant: restaurant)
+            guard !Task.isCancelled, searchRequestID == token, searchQuery.trimmingCharacters(in: .whitespaces) == q, restaurantName == restaurant else { return }
+            results = page.results
             searchPage = 0
-            canLoadMoreResults = results.count == FatSecretClient.pageSize
+            canLoadMoreResults = page.hasMore ?? (results.count == FatSecretClient.pageSize)
         } catch {
             // The old comment claimed "the results list stays empty" — it didn't. On error
             // `results` kept the *previous* query's contents, so searching "banana" offline
@@ -149,7 +176,8 @@ final class FoodSearchViewModel {
             // Cancellation lands here too: .task(id:) cancels the in-flight request on every
             // keystroke and that propagates through URLSession. Clearing on cancellation
             // would make the list flicker on every character typed.
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, searchRequestID == token else { return }
+            errorMessage = "Couldn’t search foods. Check your connection and try again."
             results = []
             canLoadMoreResults = false
         }
@@ -163,20 +191,23 @@ final class FoodSearchViewModel {
         let q = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return }
 
+        let token = searchRequestID, restaurant = restaurantName
         isLoadingMoreResults = true
-        defer { isLoadingMoreResults = false }
+        defer { if searchRequestID == token { isLoadingMoreResults = false } }
 
         let nextPage = searchPage + 1
         do {
-            let more = try await client.search(query: q, page: nextPage)
-            guard !Task.isCancelled else { return }
+            let page = try await client.searchPage(query: q, page: nextPage, restaurant: restaurant)
+            guard !Task.isCancelled, searchRequestID == token, restaurantName == restaurant,
+                  searchQuery.trimmingCharacters(in: .whitespaces) == q else { return }
+            let more = page.results
             searchPage = nextPage
-            canLoadMoreResults = more.count == FatSecretClient.pageSize
+            canLoadMoreResults = page.hasMore ?? (more.count == FatSecretClient.pageSize)
             // The same food can surface on two pages; don't render it twice.
             let existingIds = Set(results.map(\.id))
             results.append(contentsOf: more.filter { !existingIds.contains($0.id) })
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, searchRequestID == token else { return }
             canLoadMoreResults = false
         }
     }

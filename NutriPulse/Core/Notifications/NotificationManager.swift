@@ -268,6 +268,7 @@ final class NotificationManager {
             options: []
         )
         center.setNotificationCategories([
+            MedicationNotificationScheduler.notificationCategory,
             UNNotificationCategory(
                 identifier: Self.recoveryCategory,
                 actions: [closeProtein, addWater, notToday],

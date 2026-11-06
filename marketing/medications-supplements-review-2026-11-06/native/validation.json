@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-06",
+  "project": "dcabdzuhuixlcgwavtsc",
+  "migration": "20261106170529_medications_tracking",
+  "simulator": {
+    "name": "Footing Medications QA",
+    "device": "iPhone 17 Pro",
+    "runtime": "iOS 26.5",
+    "signing": "ad hoc"
+  },
+  "core_native_tests": 13,
+  "hosted_sync_and_category_tests": 2,
+  "native_notification_queue_tests": 1,
+  "profile_rendering_tests": 2,
+  "full_ui_flow_passed": true,
+  "database_contract_tests": 4,
+  "hosted": {
+    "fourDoses": true,
+    "hostedRoundTrip": true,
+    "offlineRestart": true,
+    "otherAccountIsolated": true,
+    "staleDeviceConflict": true,
+    "trackingOffPreservedHistory": true,
+    "undoSynced": true
+  },
+  "notifications": {
+    "actionReachedCloud": true,
+    "historyPreserved": true,
+    "pendingAfterOn": 56,
+    "pendingBeforeOff": 56,
+    "pendingWhileOff": 0
+  },
+  "notification_delivery": "simctl-injected notification; actual OS action callback and hosted save verified",
+  "remaining_device_checks": [
+    "locked device",
+    "reboot",
+    "unattended local reminder delivery"
+  ]
+}

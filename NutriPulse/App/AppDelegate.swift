@@ -43,6 +43,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse
     ) async {
         let notificationID = response.notification.request.identifier
+        if notificationID.hasPrefix(MedicationNotificationScheduler.prefix)
+            || response.notification.request.content.categoryIdentifier == MedicationNotificationScheduler.category {
+            await MedicationNotificationScheduler.shared.handle(response)
+            return
+        }
         if notificationID.hasPrefix(NotificationManager.smartIdentifierPrefix) {
             let owner = response.notification.request.content.userInfo["userId"] as? String
             guard owner == supabase.auth.currentSession?.user.id.uuidString else { return }

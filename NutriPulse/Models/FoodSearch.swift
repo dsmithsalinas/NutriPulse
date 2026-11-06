@@ -6,6 +6,7 @@ struct FoodSearchResult: Codable, Identifiable, Equatable {
     let name: String
     let brand: String?
     let description: String  // e.g. "Per 100g - Calories: 61kcal | Fat: 3.25g | …"
+    var matchKind: String? = nil
 }
 
 // Full food detail returned by the get-food Edge Function.

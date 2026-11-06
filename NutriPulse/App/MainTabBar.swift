@@ -115,6 +115,7 @@ struct MainTabBar: View {
         }
         .buttonStyle(PressableStyle(scale: 0.94))
         .accessibilityLabel(label)
+        .accessibilityIdentifier("mainTab-\(label.lowercased())")
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 

@@ -3,6 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0'
 import { corsHeaders } from '../_shared/cors.ts'
 import { fatSecretGet, asArray } from '../_shared/fatsecret.ts'
 import { checkRateLimit } from '../_shared/ratelimit.ts'
+import { guidedFood } from '../_shared/guided-food.ts'
+import { guidedFoodModel } from '../_shared/guided-food-model.ts'
 
 // Per-user cap. Each parse can fan out to several Claude turns + FatSecret lookups, so this is
 // tighter than coach-chat. A heavy logger records ~10 meals/day — well under 40/hour.
@@ -248,7 +250,8 @@ Deno.serve(async (req) => {
       )
     }
 
-    const { text } = await req.json()
+    const body = await req.json()
+    const { text } = body
     if (typeof text !== 'string' || !text.trim()) {
       return new Response(JSON.stringify({ error: 'text required' }), {
         status: 400,
@@ -273,6 +276,19 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (body.schemaVersion === 2) {
+      try {
+        const response = await guidedFood(body, {food:fatSecretGet,model:(system,schema,input) => guidedFoodModel(apiKey,system,schema,input)})
+        return new Response(JSON.stringify(response), {headers:{...corsHeaders,'Content-Type':'application/json'}})
+      } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        const reason = /Meal interpretation unavailable \(\d+\)|FatSecret \d+/.exec(message)?.[0]
+          ?? ['Choose between one and sixteen foods to review.','Food search is unavailable. Please try again.','Describe up to six dishes at a time.','Invalid restaurant','Invalid meal draft','Invalid interpretation','Invalid restaurant origin','Invalid dish','Invalid dish ID','Invalid ingredient','Ingredient evidence missing','Unstated ingredient','Invalid ingredient ID','Meal interpretation incomplete','Food selection could not be verified. Please try again.','A whole dish cannot replace one ingredient. Try a more specific food.','Food details are unavailable. Please try again.','Food details could not be verified.','Choose a serving in Search; the suggested serving could not be verified.','Could not prepare a usable estimate. Try Search or manual entry.','Describe the ingredients in this customizable meal, rather than a whole dish.'].find(value => value === message)
+          ?? (error instanceof Error ? error.name : 'Unknown')
+        console.error('guided meal resolution failed', reason)
+        return new Response(JSON.stringify({error:'Couldn’t resolve this meal. Review the description and ingredients, or try Search.'}), {status:422,headers:{...corsHeaders,'Content-Type':'application/json'}})
+      }
+    }
     const messages: AnthropicMessage[] = [{ role: 'user', content: text.trim() }]
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {

@@ -19,6 +19,8 @@ struct AccountRepository {
         // Attempt every cleanup even if one file is unavailable. Never sign out a different
         // account that became active while the deletion request was in flight.
         var cleanupError: Error?
+        do { try await MedicationStore.shared.purgeAccount(id) } catch { cleanupError = error }
+        await MedicationNotificationScheduler.shared.purgePreferences(owner: id)
         do { try await EverydayToolsStore.shared.purgeAccount(id) } catch { cleanupError = error }
         do { try await MealNoteStore.shared.purgeAccount(id) } catch { cleanupError = error }
         do { try await UsualMealStore.shared.purgeAccount(id) } catch { cleanupError = error }

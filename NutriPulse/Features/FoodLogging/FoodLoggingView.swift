@@ -1,5 +1,6 @@
 import SwiftUI
 import Supabase
+import UIKit
 
 // Daylight Log sheet (docs/daylight-redesign.md): a header showing the meal everything logs to
 // ("Adding to Dinner ▾") plus a close button, and Talk / Search / Scan / Favorites tabs beneath
@@ -16,7 +17,10 @@ struct FoodLoggingView: View {
     @State private var vm = FoodLoggingViewModel()
     @State private var searchVM = FoodSearchViewModel()
     @State private var searchIsFocused = false
-    private var compactSearch: Bool { vm.selectedTab == .search && searchIsFocused }
+    @State private var foodContext = FoodLoggingContext()
+    @State private var showRestaurantPicker = false
+    @State private var talkIsFocused = false
+    private var compactInput: Bool { (vm.selectedTab == .search && searchIsFocused) || (vm.selectedTab == .talk && talkIsFocused) }
     @State private var talkVM = TalkToLogViewModel()
     @State private var favoritesVM = FavoritesViewModel()
     @State private var showManualEntry = false
@@ -44,6 +48,16 @@ struct FoodLoggingView: View {
             }
             let preview = TalkToLogViewModel()
             preview.isParsing = ProcessInfo.processInfo.arguments.contains("--ring-parsing-preview")
+            if ProcessInfo.processInfo.arguments.contains("--restaurant-checklist-preview") {
+                preview.inputText = "A chicken bowl from Chipotle"
+                preview.dishes = [.init(id: "bowl", name: "Chicken bowl", customizable: true, ingredients: [
+                    .init(id: "chicken", name: "Chicken", state: "included", quantity: 1, fromDescription: true, uncertain: false),
+                    .init(id: "rice", name: "White rice", state: "unspecified", quantity: 1, fromDescription: false, uncertain: false),
+                    .init(id: "beans", name: "Black beans", state: "unspecified", quantity: 1, fromDescription: false, uncertain: false)
+                ])]
+                let context = FoodLoggingContext(); context.acceptDetected(.init(name: "Chipotle"))
+                _foodContext = State(initialValue: context)
+            }
             _talkVM = State(initialValue: preview)
         }
         if AppStoreScreenshotMode.active {
@@ -53,13 +67,13 @@ struct FoodLoggingView: View {
     }
 
     var body: some View {
-        VStack(spacing: compactSearch ? 8 : 14) {
+        VStack(spacing: compactInput ? 8 : 14) {
             Capsule()
                 .fill(Theme.Colors.hairline)
                 .frame(width: 40, height: 5)
                 .padding(.top, 8)
 
-            LogSheetHeader(meal: $vm.selectedMeal, onClose: { dismiss() }, compact: compactSearch)
+            LogSheetHeader(meal: $vm.selectedMeal, onClose: { dismiss() }, compact: compactInput)
 
             if saved {
                 VStack(spacing: 16) {
@@ -75,22 +89,36 @@ struct FoodLoggingView: View {
                     }
                     if undo.canUndo {
                         Button(undo.isUndoing ? "Undoing…" : "Undo") {
-                            Task { if await undo.undo() { talkVM.reset(); searchVM.resetQuickLogState(); saved = false } }
+                            Task { if await undo.undo() { talkVM.reset(); foodContext.reset(); searchVM.resetQuickLogState(); saved = false } }
                         }.frame(minHeight: 44).disabled(undo.isUndoing)
                     }
                     if let error = undo.error { Text(error).foregroundStyle(Theme.Colors.danger) }
                     Button("Done") { dismiss() }.buttonStyle(.brandPrimary).disabled(undo.isUndoing)
-                    Button("Add something else") { undo.reset(); talkVM.reset(); searchVM.resetQuickLogState(); saved = false }
+                    if let restaurant = foodContext.restaurant {
+                        Button("Add more from \(restaurant.name)") {
+                            undo.reset(); talkVM.reset(); foodContext.reset(keepRestaurant: true)
+                            searchVM.resetQuickLogState(); saved = false
+                        }.font(Theme.Fonts.body(16, .semibold)).frame(minHeight: 44)
+                    }
+                    Button("Add something else") { undo.reset(); talkVM.reset(); foodContext.reset(); searchVM.resetQuickLogState(); saved = false }
                         .disabled(undo.isUndoing)
                         .font(Theme.Fonts.body(16, .semibold)).frame(minHeight: 44)
                 }.padding(Theme.Spacing.md).frame(maxHeight: .infinity)
             } else {
-            if !compactSearch {
+            if !compactInput {
             Button { showMealNote = true } label: {
                 Label("Just leave a meal note", systemImage: "square.and.pencil")
                     .font(Theme.Fonts.body(15, .semibold)).frame(minHeight: 44)
             }
             LogTabBar(selection: $vm.selectedTab)
+            }
+            if vm.selectedTab == .talk || vm.selectedTab == .search {
+                RestaurantContextBar(context: foodContext,
+                    locked: talkVM.hasSavedRows || talkVM.isLogging || searchVM.isLogging || searchVM.quickLoggingID != nil,
+                    onOpen: {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        showRestaurantPicker = true
+                    })
             }
 
             Group {
@@ -98,7 +126,7 @@ struct FoodLoggingView: View {
                 case .talk:
                     TalkToLogView(vm: talkVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: { source in
                         handleLogged(source, keepOpen: false)
-                    }, familiarFoods: familiar, onSelectFamiliar: { reviewFood = $0 })
+                    }, familiarFoods: familiar, onSelectFamiliar: { reviewFood = $0 }, onFocusChanged: { talkIsFocused = $0 })
                 case .search:
                     FoodSearchView(
                         vm: searchVM, date: selectedDate, headerMeal: vm.selectedMeal,
@@ -123,6 +151,14 @@ struct FoodLoggingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.ground.ignoresSafeArea())
         .tint(Theme.Colors.primary)
+        .sheet(isPresented: $showRestaurantPicker) { RestaurantPickerView(context: foodContext) }
+        .onChange(of: foodContext.revision) { _, _ in
+            talkVM.contextChanged(); searchVM.restaurantName = foodContext.restaurant?.name
+        }
+        .onChange(of: foodContext.restaurant?.name) { _, name in searchVM.restaurantName = name }
+        .onChange(of: supabase.auth.currentSession?.user.id) { _, _ in
+            foodContext.reset(); talkVM.reset(); searchVM.invalidateSearch(); searchVM.searchQuery = ""
+        }
         .sheet(isPresented: $showSaveUsual) { SaveUsualMealSheet(foods: undo.savedFoods) }
         .sheet(isPresented: $showMealNote) {
             MealNoteSheet(date: selectedDate, meal: vm.selectedMeal) { saved = true }.environment(\.foodSaveUndo, undo)
@@ -186,6 +222,8 @@ struct FoodLoggingView: View {
             LogMethodPreference.save(method, userId: supabase.auth.currentSession?.user.id)
         }
         .onAppear {
+            talkVM.foodContext = foodContext
+            searchVM.restaurantName = foodContext.restaurant?.name
             if !AppStoreScreenshotMode.active {
                 Telemetry.logIntentStarted(source: vm.selectedTab.telemetrySource)
             }
