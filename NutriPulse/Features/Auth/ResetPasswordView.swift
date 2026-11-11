@@ -5,6 +5,7 @@ struct ResetPasswordView: View {
     @State private var vm = PasswordRecoveryViewModel()
 
     var body: some View {
+        ScrollView {
         VStack(spacing: Theme.Spacing.lg) {
             Spacer()
 
@@ -74,6 +75,9 @@ struct ResetPasswordView: View {
             Spacer()
         }
         .padding(Theme.Spacing.page)
+        .daylightReadableWidth(600)
+        }
+        .scrollDismissesKeyboard(.interactively)
         .background(Theme.Colors.ground.ignoresSafeArea())
     }
 

@@ -39,6 +39,7 @@ struct ExperimentDetailView: View {
                 }
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .task { await load() }

@@ -52,6 +52,7 @@ enum DaylightChrome {
 struct DaylightFormStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
+            .daylightReadableWidth()
             .scrollContentBackground(.hidden)
             .background(Theme.Colors.ground.ignoresSafeArea())
             .font(Theme.Fonts.body(16))
@@ -104,6 +105,7 @@ struct DaylightSubpage: ViewModifier {
     let title: String
     func body(content: Content) -> some View {
         content
+            .daylightReadableWidth()
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -144,5 +146,109 @@ struct DaylightPageTitle: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Adaptive layout
+
+extension View {
+    /// Apply to a scroll view's content (after page padding), or to a sheet's canvas.
+    /// The outer frame keeps the scroll/safe-area surface full width. No size-based
+    /// branches or identity changes: drafts, navigation and focus survive a resize.
+    func daylightReadableWidth(_ maximum: CGFloat = 720) -> some View {
+        frame(maxWidth: maximum).frame(maxWidth: .infinity)
+    }
+}
+
+/// Equal-width tiles become a vertical list in narrow windows and at larger text sizes.
+/// Layout changes placement without replacing the children or their state.
+struct DaylightTileRow<Content: View>: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        DaylightTileLayout(stacked: typeSize >= .xxxLarge) { content }
+    }
+}
+
+struct DaylightTileLayout: Layout {
+    var stacked = false
+    var spacing: CGFloat = Theme.Spacing.tileGap
+
+    private func isVertical(_ width: CGFloat, count: Int) -> Bool {
+        stacked || width < CGFloat(count) * 160 + CGFloat(max(0, count - 1)) * spacing
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        let width = proposal.width ?? 720
+        let vertical = isVertical(width, count: subviews.count)
+        let gaps = CGFloat(subviews.count - 1) * spacing
+        let childWidth = vertical ? width : max(0, (width - gaps) / CGFloat(subviews.count))
+        let heights = subviews.map { $0.sizeThatFits(.init(width: childWidth, height: nil)).height }
+        return CGSize(width: width, height: vertical ? heights.reduce(0, +) + gaps : heights.max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !subviews.isEmpty else { return }
+        let vertical = isVertical(bounds.width, count: subviews.count)
+        let gaps = CGFloat(subviews.count - 1) * spacing
+        let width = vertical ? bounds.width : max(0, (bounds.width - gaps) / CGFloat(subviews.count))
+        var origin = bounds.origin
+        for view in subviews {
+            let childProposal = ProposedViewSize(width: width, height: nil)
+            view.place(at: origin, anchor: .topLeading, proposal: childProposal)
+            if vertical { origin.y += view.sizeThatFits(childProposal).height + spacing }
+            else { origin.x += width + spacing }
+        }
+    }
+}
+
+
+/// Dashboard groups share one scroll view. Wide windows place related groups in two
+/// lanes; narrow windows keep their original reading order and view identities.
+struct DaylightDashboard<Content: View>: View {
+    var lanes: [Int] = [0, 1]
+    var firstColumnFraction: CGFloat = 0.5
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        DaylightDashboardLayout(lanes: lanes, firstColumnFraction: firstColumnFraction, stacked: typeSize >= .xxxLarge) { content }
+    }
+}
+
+struct DaylightDashboardLayout: Layout {
+    var lanes: [Int]
+    var firstColumnFraction: CGFloat = 0.5
+    var stacked = false
+    var spacing: CGFloat = Theme.Spacing.tileGap
+
+    private func arrangement(width: CGFloat, subviews: Subviews) -> (CGSize, [CGRect]) {
+        let expanded = !stacked && width >= 600 + spacing
+        let fraction = min(0.7, max(0.3, firstColumnFraction))
+        let widths = expanded ? [(width - spacing) * fraction, (width - spacing) * (1 - fraction)] : [width, width]
+        var heights: [CGFloat] = [0, 0]
+        var frames: [CGRect] = []
+        for (index, child) in subviews.enumerated() {
+            let lane = expanded && lanes.indices.contains(index) ? min(1, max(0, lanes[index])) : 0
+            let childWidth = widths[lane]
+            let height = child.sizeThatFits(.init(width: childWidth, height: nil)).height
+            frames.append(CGRect(x: lane == 0 ? 0 : widths[0] + spacing, y: heights[lane], width: childWidth, height: height))
+            heights[lane] += height + spacing
+        }
+        return (CGSize(width: width, height: max(0, (heights.max() ?? 0) - spacing)), frames)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrangement(width: proposal.width ?? 1060, subviews: subviews).0
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let frames = arrangement(width: bounds.width, subviews: subviews).1
+        for (child, frame) in zip(subviews, frames) {
+            child.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                        anchor: .topLeading, proposal: .init(width: frame.width, height: frame.height))
+        }
     }
 }

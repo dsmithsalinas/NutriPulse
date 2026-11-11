@@ -5,6 +5,58 @@ import UIKit
 
 @MainActor
 final class ProfileRenderingTests: XCTestCase {
+    func testAdaptiveTileRowStacksForNarrowWindowsAndLargeText() {
+        let row = DaylightTileRow {
+            Color.red.frame(height: 80)
+            Color.blue.frame(height: 120)
+        }
+        let host = UIHostingController(rootView: row)
+        host.loadViewIfNeeded()
+        let narrow = host.sizeThatFits(in: CGSize(width: 280, height: 1000))
+        let expanded = host.sizeThatFits(in: CGSize(width: 700, height: 1000))
+        XCTAssertGreaterThan(narrow.height, 200)
+        XCTAssertEqual(expanded.height, 120, accuracy: 1)
+        // Resize the same host back down; layout must not cache the expanded arrangement.
+        XCTAssertEqual(host.sizeThatFits(in: CGSize(width: 280, height: 1000)).height,
+                       narrow.height, accuracy: 1)
+        let accessible = UIHostingController(rootView: row.environment(\.dynamicTypeSize, .accessibility3))
+        XCTAssertGreaterThan(accessible.sizeThatFits(in: CGSize(width: 700, height: 1000)).height, 200)
+    }
+
+    func testDashboardGroupsKeepCompactOrderAndExpandIntoLanes() {
+        let dashboard = DaylightDashboard(lanes: [0, 1, 0, 1]) {
+            Color.red.frame(height: 80)
+            Color.blue.frame(height: 120)
+            Color.green.frame(height: 60)
+            Color.orange.frame(height: 40)
+        }
+        let host = UIHostingController(rootView: dashboard)
+        host.loadViewIfNeeded()
+        let narrow = host.sizeThatFits(in: CGSize(width: 360, height: 1000))
+        let expanded = host.sizeThatFits(in: CGSize(width: 710, height: 1000))
+        XCTAssertEqual(narrow.height, 300 + 3 * Theme.Spacing.tileGap, accuracy: 1)
+        XCTAssertEqual(expanded.height, 160 + Theme.Spacing.tileGap, accuracy: 1)
+        XCTAssertEqual(host.sizeThatFits(in: CGSize(width: 360, height: 1000)).height, narrow.height, accuracy: 1)
+        let accessible = UIHostingController(rootView: dashboard.environment(\.dynamicTypeSize, .accessibility3))
+        XCTAssertEqual(accessible.sizeThatFits(in: CGSize(width: 710, height: 1000)).height, narrow.height, accuracy: 1)
+    }
+
+    func testOverviewKeepsPairedTilesAtExpandedRailWidth() {
+        let dashboard = DaylightDashboard(firstColumnFraction: 0.55) {
+            DaylightTileRow {
+                Color.red.frame(height: 80)
+                Color.blue.frame(height: 120)
+            }
+            Color.green.frame(height: 100)
+        }
+        let host = UIHostingController(rootView: dashboard)
+        host.loadViewIfNeeded()
+        // At this width equal dashboard columns would stack the two overview tiles.
+        XCTAssertEqual(host.sizeThatFits(in: CGSize(width: 642, height: 1000)).height, 120, accuracy: 1)
+        let accessible = UIHostingController(rootView: dashboard.environment(\.dynamicTypeSize, .accessibility3))
+        XCTAssertGreaterThan(accessible.sizeThatFits(in: CGSize(width: 642, height: 1000)).height, 300)
+    }
+
     func testProfileMetadataResolvesWithinDeviceStackBudget() async {
         let resolved = expectation(description: "Profile metadata resolved on a device-sized stack")
         // Type metadata resolution is thread-safe and needs no UIKit access. The phone’s

@@ -13,12 +13,47 @@ struct DayNudge {
 // hand-off into the coach.
 struct UnderEatingNudgeCard: View {
     let nudge: DayNudge
+    var compact = false
+    @Environment(\.dynamicTypeSize) private var typeSize
     // `nil` while Pulse can't actually take the hand-off (off, or not yet consented) — Today
     // hides the CTA rather than show an action that would silently do nothing. See PulseGate.
     let onAsk: (() -> Void)?
 
     // Quiet check-in geometry accompanies the optional hand-off into Pulse.
     var body: some View {
+        if compact && typeSize < .xxxLarge {
+            if let onAsk {
+                Button(action: onAsk) { compactContent }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Pulse check-in. \(nudge.headline). \(nudge.body). \(nudge.cta)")
+            } else {
+                compactContent
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Pulse check-in. \(nudge.headline). \(nudge.body)")
+            }
+        } else {
+            fullContent
+        }
+    }
+
+    private var compactContent: some View {
+        HStack(spacing: 8) {
+            PulseRing(state: .checkIn, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Pulse · Check-in").font(Theme.Fonts.body(11, .semibold)).foregroundStyle(Theme.Colors.textSecondary)
+                Text(nudge.headline).font(Theme.Fonts.body(13, .bold)).foregroundStyle(Theme.Colors.textPrimary).lineLimit(2)
+                if onAsk != nil {
+                    Text(nudge.cta + " →").font(Theme.Fonts.body(12, .semibold)).foregroundStyle(Theme.Colors.primaryText).lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var fullContent: some View {
         HStack(alignment: .top, spacing: 12) {
             PulseRing(state: .checkIn, size: 32)
 

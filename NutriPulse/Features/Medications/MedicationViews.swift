@@ -74,7 +74,7 @@ struct MedicationSettingsView: View {
                     MedicationReminderStatusView()
                     Text("Amounts are per dose. Times determine how often.")
                         .font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
-                }.padding(Theme.Spacing.page)
+                }.padding(Theme.Spacing.page).daylightReadableWidth()
             }
             .background(Theme.Colors.ground)
             .foregroundStyle(Theme.Colors.textPrimary)
@@ -196,7 +196,7 @@ struct MedicationEditorView: View {
                         Button("Archive item", role: .destructive) { confirmArchive = true }
                             .font(Theme.Fonts.body(16, .semibold)).frame(maxWidth: .infinity, minHeight: 44)
                     }
-                }.padding(20)
+                }.padding(20).daylightReadableWidth()
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Theme.Colors.ground).foregroundStyle(Theme.Colors.textPrimary).tint(Theme.Colors.primary)
@@ -461,7 +461,7 @@ private struct MedicationCorrectionView: View {
                         dismiss()
                     } catch { self.error = error.localizedDescription }
                 }.disabled(store.hasConflict)
-            }.font(Theme.Fonts.body(16)).tint(Theme.Colors.primary)
+            }.daylightForm()
                 .navigationTitle("Correct entry").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
                 .onAppear { status = dose.status == .notLogged ? .taken : dose.status; takenAt = dose.takenAt ?? min(dose.scheduledAt, .now) }
@@ -510,7 +510,7 @@ private struct MedicationConflictReviewView: View {
                     Button("Use synced version") { useThisPhone = false; confirm = true }.buttonStyle(.brandPrimary)
                     Button("Use this phone’s version") { useThisPhone = true; confirm = true }
                         .font(Theme.Fonts.body(16, .semibold)).frame(maxWidth: .infinity, minHeight: 44)
-                }.padding(20)
+                }.padding(20).daylightReadableWidth()
             }.background(Theme.Colors.ground).foregroundStyle(Theme.Colors.textPrimary).tint(Theme.Colors.primary)
                 .navigationTitle("Review sync conflict").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Decide later") { dismiss() } } }
@@ -578,3 +578,16 @@ private func medicationDaysSummary(_ days: Set<Int>) -> String {
     if days.count == 7 { return "Every day" }
     return days.sorted().map { MedicationCalendar.calendar.shortWeekdaySymbols[$0 - 1] }.joined(separator: ", ")
 }
+
+#if DEBUG
+struct MedicationAuditScreens: View {
+    let screen: String
+    @ViewBuilder var body: some View {
+        if screen == "medication-conflict" {
+            MedicationConflictReviewView(store: .shared)
+        } else {
+            MedicationCorrectionView(store: .shared, dose: .init(id: UUID().uuidString, scheduleID: UUID(), routineID: UUID(), localDay: Date.now.isoDateString, timeZoneID: TimeZone.current.identifier, scheduledAt: .now, minute: 480, name: "Morning supplement", amount: "1 tablet", takenAt: nil, recordedAt: nil))
+        }
+    }
+}
+#endif

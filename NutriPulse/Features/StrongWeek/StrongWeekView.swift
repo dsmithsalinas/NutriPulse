@@ -177,6 +177,7 @@ struct StrongWeekView: View {
                     }
                 }
                 .padding(Theme.Spacing.page)
+                .daylightReadableWidth()
                 .disabled(vm.isGenerating)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())

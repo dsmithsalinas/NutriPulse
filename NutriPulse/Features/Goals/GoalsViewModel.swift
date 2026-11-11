@@ -150,7 +150,7 @@ final class GoalsViewModel {
     }
 
     #if DEBUG
-    private static func previewStates() -> [GoalCardState] {
+    static func previewStates() -> [GoalCardState] {
         let userId = UUID()
         let calendar = Calendar.current
         func date(_ day: Int) -> Date {
@@ -243,7 +243,7 @@ final class GoalsViewModel {
     }
 
     // A couple of finished goals for the trophy shelf: one met, one honestly not.
-    private static func previewCompletedStates() -> [GoalCardState] {
+    static func previewCompletedStates() -> [GoalCardState] {
         let userId = UUID()
         let calendar = Calendar.current
         func date(_ y: Int, _ m: Int, _ d: Int) -> Date {

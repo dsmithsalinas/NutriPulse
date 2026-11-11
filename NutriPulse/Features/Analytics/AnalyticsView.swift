@@ -166,6 +166,7 @@ struct AnalyticsView: View {
                 .padding(.horizontal, Theme.Spacing.page)
             }
             .padding(.horizontal, -Theme.Spacing.page)
+            .accessibilityIdentifier("analyticsQuestions")
         }
     }
 

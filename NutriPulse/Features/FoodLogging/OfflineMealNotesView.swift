@@ -45,6 +45,7 @@ struct OfflineMealNotesView: View {
                         .font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
                 }
             }.padding(Theme.Spacing.page)
+            .daylightReadableWidth()
         }.background(Theme.Colors.ground)
             .sheet(isPresented: $creating) {
                 MealNoteSheet(date: date, meal: meal) {}.environment(\.foodSaveUndo, undo)

@@ -42,6 +42,12 @@ struct MainTabView: View {
     }
 
     var body: some View {
+        GeometryReader { geometry in
+            mainContent(usesRail: geometry.size.width >= 720 && geometry.size.width > geometry.size.height)
+        }
+    }
+
+    private func navigationContent(usesRail: Bool) -> some View {
         TabView(selection: $selectedTab) {
             TodayView(vm: todayVM, isFrontmost: todayIsFrontmost)
                 .tag(MainTab.today)
@@ -59,35 +65,53 @@ struct MainTabView: View {
                 .tag(MainTab.profile)
                 .toolbar(.hidden, for: .tabBar)
         }
-        // Hide the native bar and pin our custom one as a bottom safe-area inset so tab
-        // content is never obscured and each tab keeps its own state. The hide has to be on
+        // Keep the native bar hidden; portrait gets the custom bottom bar, while expanded
+        // landscape gets a reserved rail lane. The same tabs keep their state. The hide has to be on
         // each tab's content: on iOS 26, hiding it on the TabView alone leaves the Liquid Glass
         // bar drawn behind our floating one.
         // The bar floats over the page, and a TabView doesn't pass the safe-area inset on to
         // its tabs' scroll views, so every scrolling page gets that room at its end directly:
         // the last rows can always be scrolled clear of the bar. Pulse opts out (its composer
         // already clears the bar itself; see CoachView).
-        .contentMargins(.bottom, tabBarHeight, for: .scrollContent)
+        .contentMargins(.bottom, usesRail ? 0 : tabBarHeight, for: .scrollContent)
         // Scrolling down shrinks the bar; scrolling back up restores it. A drag, not scroll
         // offsets, so it works on every tab and iOS 17 without per-page plumbing. Simultaneous,
         // so it never takes a scroll or a tap from the page.
         .simultaneousGesture(
             DragGesture(minimumDistance: 20)
                 .onChanged { value in
-                    guard selectedTab != .pulse,
+                    guard !usesRail, selectedTab != .pulse,
                           abs(value.translation.height) > abs(value.translation.width) else { return }
                     setTabBarCompact(value.translation.height < 0)
                 }
         )
         .onChange(of: selectedTab) { _, _ in setTabBarCompact(false) }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            MainTabBar(selected: $selectedTab, showsPulse: pulseStore.pulseEnabled, compact: tabBarCompact, onLog: {
-                loggerInitialTab = nil
-                showLogger = true
-            })
+            if !usesRail {
+                MainTabBar(selected: $selectedTab, showsPulse: pulseStore.pulseEnabled, compact: tabBarCompact, onLog: {
+                    loggerInitialTab = nil
+                    showLogger = true
+                })
+            }
+        }
+        // Reserve real horizontal space; the rail never floats over a dashboard or composer.
+        .padding(.leading, usesRail ? 68 : 0)
+        .overlay(alignment: .leading) {
+            if usesRail {
+                MainNavigationRail(selected: $selectedTab, showsPulse: pulseStore.pulseEnabled) {
+                    loggerInitialTab = nil
+                    showLogger = true
+                }
+                .frame(width: 68)
+            }
         }
         .onPreferenceChange(TabBarHeightKey.self) { tabBarHeight = $0 }
-        .environment(\.tabBarHeight, tabBarHeight)
+        .environment(\.tabBarHeight, usesRail ? 0 : tabBarHeight)
+        .environment(\.usesNavigationRail, usesRail)
+    }
+
+    private func mainContent(usesRail: Bool) -> some View {
+        navigationContent(usesRail: usesRail)
         .sheet(isPresented: $showLogger, onDismiss: {
             Task { await todayVM.loadData() }
         }) {

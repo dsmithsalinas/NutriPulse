@@ -52,7 +52,7 @@ struct ExperimentWrapUpView: View {
                     Text("No success or failure label. Your reflection stays on this phone unless you choose to approve a memory.")
                         .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
                 }
-            }.padding(Theme.Spacing.page)
+            }.padding(Theme.Spacing.page).daylightReadableWidth()
         }.background(Theme.Colors.ground).tint(Theme.Colors.primary).scrollDismissesKeyboard(.interactively)
         .sheet(isPresented: $showRecipe) { EasierDayRecipeView(owner: owner, preview: preview, support: note) }
         .onChange(of: EverydayToolsStore.shared.accountId) { _, account in if !preview && account != owner { dismiss() } }

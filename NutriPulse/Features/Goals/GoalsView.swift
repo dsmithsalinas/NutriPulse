@@ -57,6 +57,7 @@ struct GoalsView: View {
             .padding(.horizontal, Theme.Spacing.page)
             .padding(.top, Theme.Spacing.sm)
             .padding(.bottom, Theme.Spacing.xl)
+            .daylightReadableWidth()
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         // No navigation bar, so cover the status bar or scrolled tiles slide under the clock
@@ -566,6 +567,7 @@ private struct GoalCompactRow: View {
 // MARK: - Completed goals
 
 private struct CompletedGoalsView: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let goals: [GoalCardState]
     let isLoading: Bool
     let onSelect: (UUID) -> Void
@@ -608,14 +610,15 @@ private struct CompletedGoalsView: View {
                         .foregroundStyle(.clear)
                         .frame(height: 0)
                         .accessibilityLabel(shelfAccessibilitySummary)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 148), spacing: 10)], spacing: 10) {
+                    LazyVGrid(columns: typeSize >= .xxxLarge ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 148), spacing: 10)], spacing: 10) {
                         ForEach(goals) { state in
-                            GoalTrophyTile(state: state) { onSelect(state.id) }
+                            GoalTrophyTile(state: state, fillsColumn: true) { onSelect(state.id) }
                         }
                     }
                 }
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
             .padding(.bottom, Theme.Spacing.xl)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
@@ -631,7 +634,9 @@ private struct CompletedGoalsView: View {
 // MARK: - Trophy shelf tile (a single completed goal)
 
 private struct GoalTrophyTile: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let state: GoalCardState
+    var fillsColumn = false
     let onTap: () -> Void
 
     private var wasMet: Bool { state.progress.status == .met }
@@ -642,7 +647,7 @@ private struct GoalTrophyTile: View {
                 Text(state.bundle.version.title)
                     .font(Theme.Fonts.body(14, .bold))
                     .foregroundStyle(wasMet ? Theme.Colors.limeInk : Theme.Colors.textPrimary)
-                    .lineLimit(2)
+                    .lineLimit(typeSize >= .xxxLarge ? nil : 2)
                 Text(endDateLabel)
                     .font(Theme.Fonts.body(11, .semibold))
                     .foregroundStyle(wasMet ? Theme.Colors.limeInk.opacity(0.7) : Theme.Colors.textSecondary)
@@ -650,11 +655,13 @@ private struct GoalTrophyTile: View {
                 Text(winLine)
                     .font(Theme.Fonts.body(12, .semibold))
                     .foregroundStyle(wasMet ? Theme.Colors.limeInk : Theme.Colors.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(typeSize >= .xxxLarge ? nil : 1)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(12)
-            .frame(width: 148, height: 100, alignment: .topLeading)
+            .frame(width: fillsColumn ? nil : 148)
+            .frame(maxWidth: fillsColumn ? .infinity : nil, minHeight: 100, alignment: .topLeading)
+            .fixedSize(horizontal: false, vertical: true)
             .background(wasMet ? Theme.Colors.lime : Theme.Colors.surfaceInset,
                         in: RoundedRectangle(cornerRadius: Theme.Radius.tileSmall, style: .continuous))
         }
@@ -1220,6 +1227,7 @@ private struct GoalDayDetailView: View {
                 .buttonStyle(.brandPrimary)
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
     }
@@ -1386,6 +1394,7 @@ private struct GoalDetailView: View {
                 .tile()
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .presentationDragIndicator(.visible)
@@ -1454,3 +1463,17 @@ private struct GoalDetailView: View {
             : state.bundle.version.period.displayName
     }
 }
+
+#if DEBUG
+struct GoalAuditScreens: View {
+    let screen: String
+    private var state: GoalCardState { GoalsViewModel.previewStates()[0] }
+    @ViewBuilder var body: some View {
+        switch screen {
+        case "goal-completed": CompletedGoalsView(goals: GoalsViewModel.previewCompletedStates(), isLoading: false, onSelect: { _ in })
+        case "goal-day": GoalDayDetailView(state: state, selection: .init(date: .now, dayState: .missing), onAskPulse: {})
+        default: GoalDetailView(state: state, onBooleanCheckin: { _ in }, onRatingCheckin: { _ in }, onAskPulse: {})
+        }
+    }
+}
+#endif

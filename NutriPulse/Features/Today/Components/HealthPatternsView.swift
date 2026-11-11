@@ -74,7 +74,7 @@ struct HealthPatternsView: View {
                     }.font(Theme.Fonts.body(14, .semibold)).padding(18)
                         .background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: Theme.Radius.tileSmall))
                 }
-            }.foregroundStyle(Theme.Colors.textPrimary).padding(Theme.Spacing.page)
+            }.foregroundStyle(Theme.Colors.textPrimary).padding(Theme.Spacing.page).daylightReadableWidth()
         }.background(Theme.Colors.ground).tint(Theme.Colors.primary)
         .task { await model.load() }
         .onChange(of: appState.session?.user.id) { _, _ in if !model.isPreview { dismiss() } }

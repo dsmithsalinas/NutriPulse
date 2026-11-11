@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ManualEntryView: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @FocusState private var focusedField: String?
     @Environment(\.foodSaveUndo) private var undo
     // SWIFT CONCEPT — @Bindable lets a view that RECEIVES an @Observable object
     // (rather than owning it with @State) create two-way bindings via $vm.property.
@@ -10,54 +12,89 @@ struct ManualEntryView: View {
     let onLogged: (LogSource) -> Void
 
     var body: some View {
-        Form {
-            Section {
-                // Meal picker
-                Picker("Meal", selection: $vm.selectedMeal) {
-                    ForEach(Meal.allCases.sorted { $0.sortOrder < $1.sortOrder }, id: \.self) { meal in
-                        Label(meal.displayName, systemImage: meal.icon).tag(meal)
+        VStack(spacing: 0) {
+            GeometryReader { geometry in
+                let expanded = geometry.size.width >= 700 && typeSize < .xxxLarge
+                Group {
+                    if expanded {
+                        HStack(alignment: .top, spacing: 0) {
+                            Form { foodSections }.daylightForm()
+                            Form { nutritionSection }.daylightForm()
+                        }
+                    } else {
+                        Form {
+                            foodSections
+                            nutritionSection
+                        }.daylightForm()
                     }
                 }
+                .scrollDismissesKeyboard(.interactively)
+                .daylightReadableWidth(expanded ? 1100 : 720)
+            }
+            .clipped()
+            logButton.daylightReadableWidth()
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }.accessibilityIdentifier("manualKeyboardDone")
+            }
+        }
+        .background(Theme.Colors.ground)
+    }
 
-                // Servings stepper — custom label so we can show the current value inline
-                HStack {
-                    Text("Servings").font(Theme.Fonts.body(16))
-                    Spacer()
-                    Text(vm.quantity.formatted())
-                        .font(Theme.Fonts.body(16))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.Colors.textSecondary)
-                    Stepper("", value: $vm.quantity, in: 0.25...20, step: 0.25)
-                        .labelsHidden()
+    @ViewBuilder private var foodSections: some View {
+        Section {
+            TextField("Food name", text: $vm.name).focused($focusedField, equals: "name")
+                .font(Theme.Fonts.body(16))
+                .autocorrectionDisabled()
+            TextField("Brand (optional)", text: $vm.brand).focused($focusedField, equals: "brand")
+                .font(Theme.Fonts.body(16))
+                .autocorrectionDisabled()
+            TextField("Serving size", text: $vm.servingDesc).focused($focusedField, equals: "serving")
+                .font(Theme.Fonts.body(16))
+        } header: {
+            DaylightSectionHeader("Food")
+        }
+        .daylightSection()
+
+        Section {
+            // Meal picker
+            Picker("Meal", selection: $vm.selectedMeal) {
+                ForEach(Meal.allCases.sorted { $0.sortOrder < $1.sortOrder }, id: \.self) { meal in
+                    Label(meal.displayName, systemImage: meal.icon).tag(meal)
                 }
-            } header: { DaylightSectionHeader("Log details") }
-                .daylightSection()
+            }
 
-            Section {
-                TextField("Food name", text: $vm.name)
+            // Servings stepper — custom label so we can show the current value inline
+            HStack {
+                Text("Servings").font(Theme.Fonts.body(16))
+                Spacer()
+                Text(vm.quantity.formatted())
                     .font(Theme.Fonts.body(16))
-                    .autocorrectionDisabled()
-                TextField("Brand (optional)", text: $vm.brand)
-                    .font(Theme.Fonts.body(16))
-                    .autocorrectionDisabled()
-                TextField("Serving size", text: $vm.servingDesc)
-                    .font(Theme.Fonts.body(16))
-            } header: { DaylightSectionHeader("Food") }
-                .daylightSection()
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                Stepper("", value: $vm.quantity, in: 0.25...20, step: 0.25)
+                    .labelsHidden()
+            }
+        } header: {
+            DaylightSectionHeader("Log details")
+        }
+        .daylightSection()
 
-            Section {
-                MacroField(label: "Calories",  value: $vm.calories,  unit: "kcal")
-                MacroField(label: "Protein",   value: $vm.proteinG,  unit: "g", accent: true)
-                MacroField(label: "Carbs",     value: $vm.carbsG,    unit: "g")
-                MacroField(label: "Fat",       value: $vm.fatG,      unit: "g")
-                MacroField(label: "Fiber",     value: $vm.fiberG,    unit: "g")
-            } header: { DaylightSectionHeader("Nutrition per serving") }
-                .daylightSection()
+    }
+    private var nutritionSection: some View {
+        Section {
+            MacroField(label: "Calories", value: $vm.calories, unit: "kcal", focus: $focusedField)
+            MacroField(
+                label: "Protein", value: $vm.proteinG, unit: "g", accent: true, focus: $focusedField)
+            MacroField(label: "Carbs", value: $vm.carbsG, unit: "g", focus: $focusedField)
+            MacroField(label: "Fat", value: $vm.fatG, unit: "g", focus: $focusedField)
+            MacroField(label: "Fiber", value: $vm.fiberG, unit: "g", focus: $focusedField)
+        } header: {
+            DaylightSectionHeader("Nutrition per serving")
         }
-        .daylightForm()
-        .safeAreaInset(edge: .bottom) {
-            logButton
-        }
+        .daylightSection()
     }
 
     private var logButton: some View {
@@ -75,14 +112,14 @@ struct ManualEntryView: View {
                 ProgressView().tint(.white)
             } else {
                 Text("Log \(vm.quantity.formatted()) × \(vm.name.isEmpty ? "food" : vm.name)")
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .buttonStyle(.brandPrimary)
         .disabled(!vm.canLog || vm.isLoading)
         .padding(.horizontal, Theme.Spacing.md)
         .padding(.bottom, Theme.Spacing.sm)
-        .background(.bar)    // matches the system "floating bar" material
+        .background(.bar)  // matches the system "floating bar" material
     }
 }
 
@@ -92,6 +129,7 @@ private struct MacroField: View {
     @Binding var value: Double
     let unit: String
     var accent: Bool = false
+    var focus: FocusState<String?>.Binding
 
     @State private var text: String = ""
 
@@ -110,10 +148,13 @@ private struct MacroField: View {
             // Parsing per keystroke keeps the ViewModel in sync, which also lets `canLog`
             // enable the Log button the moment calories are entered. See DecimalInput.
             TextField("0", text: $text)
+                .focused(focus, equals: label)
                 .font(Theme.Fonts.body(16))
                 .multilineTextAlignment(.trailing)
                 .keyboardType(.decimalPad)
-                .frame(width: 80)
+                .frame(minWidth: 64, idealWidth: 80, maxWidth: 120)
+                .accessibilityLabel(label)
+                .accessibilityIdentifier("manual" + label)
                 .onChange(of: text) { _, newText in
                     let cleaned = DecimalInput.sanitize(newText)
                     if cleaned != newText { text = cleaned }
@@ -122,7 +163,7 @@ private struct MacroField: View {
             Text(unit)
                 .font(Theme.Fonts.body(16))
                 .foregroundStyle(Theme.Colors.textSecondary)
-                .frame(width: 36, alignment: .leading)
+                .fixedSize()
         }
         .onAppear { text = DecimalInput.text(from: value) }
     }

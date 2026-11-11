@@ -9,6 +9,7 @@ struct InjectionRitualView: View {
     let latest: GLP1Log?
     var onLogged: (GLP1Log) -> Void = { _ in }
 
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.dismiss) private var dismiss
     @State private var vm = InjectionRitualViewModel()
 
@@ -54,50 +55,57 @@ struct InjectionRitualView: View {
     // MARK: Ritual content
 
     private var ritualContent: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-                header
-                    .popIn(order: 0)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Shot day")
-                        .font(Theme.Fonts.display(38, .extraBold, relativeTo: .largeTitle))
-                        .foregroundStyle(Theme.Colors.limeInk)
-                        .accessibilityAddTraits(.isHeader)
-                    Text("The shot does its part. Log it when it\u{2019}s done and I\u{2019}ll plan the week around it.")
-                        .font(Theme.Fonts.body(16, .medium))
-                        .foregroundStyle(Theme.Colors.limeLabel)
+        GeometryReader { geometry in
+            let expanded = geometry.size.width >= 700 && typeSize < .xxxLarge
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+                    ritualHeader(expanded: expanded)
+                    if expanded {
+                        Text("Log it when it's done. Pulse will plan the week around it.")
+                            .font(Theme.Fonts.body(13, .medium))
+                            .foregroundStyle(Theme.Colors.limeLabel)
+                    } else {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Shot day")
+                                .font(Theme.Fonts.display(38, .extraBold, relativeTo: .largeTitle))
+                                .foregroundStyle(Theme.Colors.limeInk)
+                                .accessibilityAddTraits(.isHeader)
+                            Text("The shot does its part. Log it when it’s done and I’ll plan the week around it.")
+                                .font(Theme.Fonts.body(16, .medium))
+                                .foregroundStyle(Theme.Colors.limeLabel)
+                        }
+                    }
+                    DaylightDashboard(lanes: [0, 1, 0, 1]) {
+                        doseCard.popIn(order: 1)
+                        holdButton(diameter: typeSize >= .xxxLarge ? 220 : expanded ? 144 : 168)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, expanded ? 0 : 20)
+                        siteSection.popIn(order: 2)
+                        nextShotRow.popIn(order: 3)
+                    }
                 }
-                .popIn(order: 0)
-
-                doseCard
-                    .popIn(order: 1)
-
-                Spacer(minLength: 20)
-                holdButton
-                    .frame(maxWidth: .infinity)
-                Spacer(minLength: 20)
-
-                siteSection
-                    .popIn(order: 2)
-
-                nextShotRow
-                    .popIn(order: 3)
+                .padding(.horizontal, Theme.Spacing.page)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+                .frame(maxWidth: expanded ? 1100 : 600)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, Theme.Spacing.page)
-            .padding(.top, 12)
-            .padding(.bottom, 32)
-            .frame(minHeight: 640)
         }
     }
 
-    private var header: some View {
-        HStack {
+    private func ritualHeader(expanded: Bool) -> some View {
+        HStack(spacing: 12) {
+            if expanded {
+                Text("Shot day")
+                    .font(Theme.Fonts.display(28, .extraBold, relativeTo: .title))
+                    .foregroundStyle(Theme.Colors.limeInk)
+                    .accessibilityAddTraits(.isHeader)
+            }
             Text(weekdayChipText)
                 .font(Theme.Fonts.body(13, .bold))
                 .foregroundStyle(Theme.Colors.limeLabel)
                 .padding(.horizontal, 12)
-                .frame(height: 32)
+                .frame(minHeight: 32)
                 .background(Theme.Colors.limeInk.opacity(0.1), in: Capsule())
             Spacer()
             Button { dismiss() } label: {
@@ -118,9 +126,10 @@ struct InjectionRitualView: View {
         return f.string(from: .now)
     }
 
-    private var holdButton: some View {
+    private func holdButton(diameter: CGFloat) -> some View {
         HoldToConfirmButton(
             duration: 1.5,
+            diameter: diameter,
             label: Text("Hold to\nlog dose"),
             accessibilityLabel: "Log dose",
             accessibilityHint: "\(vm.medication.rawValue), \(vm.doseMg.glp1DoseString) milligrams, in \(vm.site.rawValue). Double tap to log immediately.",
@@ -158,7 +167,7 @@ struct InjectionRitualView: View {
                         .foregroundStyle(Theme.Colors.limeLine)
                 }
                 .tint(Theme.Colors.limeInk)
-                .fixedSize()
+                .fixedSize(horizontal: false, vertical: true)
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -191,7 +200,7 @@ struct InjectionRitualView: View {
     private var siteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             TileEyebrow("Site", color: Theme.Colors.limeLabel)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) {
+            LazyVGrid(columns: typeSize >= .xxxLarge ? [GridItem(.flexible())] : [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) {
                 ForEach(InjectionSite.allCases) { site in
                     siteChip(site)
                 }
@@ -254,6 +263,7 @@ struct InjectionRitualView: View {
     // MARK: Confirmation
 
     private var confirmation: some View {
+        ScrollView {
         VStack(spacing: 0) {
             Spacer()
             ZStack {
@@ -289,6 +299,9 @@ struct InjectionRitualView: View {
                 .background(Theme.Colors.limeInk, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .padding(.horizontal, Theme.Spacing.page)
                 .padding(.bottom, 24)
+        }
+        .padding(.top, 16)
+        .daylightReadableWidth(600)
         }
         .transition(.opacity)
         .accessibilityAddTraits(.isHeader)

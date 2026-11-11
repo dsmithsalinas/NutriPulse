@@ -537,7 +537,7 @@ struct MovementSheet: View {
                     onDelete: { workout in Task { await vm.deleteWorkout(id: workout.id) } }
                 )
             }
-            .padding(Theme.Spacing.page)
+            .padding(Theme.Spacing.page).daylightReadableWidth()
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .presentationDragIndicator(.visible)

@@ -77,6 +77,7 @@ struct ExperimentsView: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .presentationDragIndicator(.visible)
@@ -406,3 +407,9 @@ private struct CreateExperimentView: View {
         }
     }
 }
+
+#if DEBUG
+struct CreateExperimentAuditScreen: View {
+    var body: some View { CreateExperimentView(activeGoals: GoalsViewModel.previewStates(), onCreated: {}) }
+}
+#endif

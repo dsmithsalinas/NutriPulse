@@ -43,6 +43,7 @@ struct TodayView: View {
     @State private var offScriptPrompt: String?
 
     @State private var lighterTrackingError: String?
+    @Environment(\.usesNavigationRail) private var usesNavigationRail
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppState.self) private var appState
     @AppStorage("unitSystem") private var unitSystemRaw = "metric"
@@ -632,7 +633,10 @@ struct TodayView: View {
     private var scrollContent: some View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.tileGap) {
-                    header
+                    DaylightDashboard(firstColumnFraction: 0.55) {
+                        header
+                        if !vm.isLoading { pulsePriorityCard }
+                    }
                     // No account in the tour, so every sync "fails"; that banner is noise there.
                     if let status = SyncEngine.shared.statusMessage, !DebugLaunch.tour {
                         SyncStatusBanner(status: status) {
@@ -644,42 +648,9 @@ struct TodayView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity, minHeight: 200)
                     } else {
-                        // Pulse gets one adaptive slot. A single, ranked next step keeps Today
-                        // calm even when dose, recovery, pacing, and target signals coexist.
-                        pulsePriorityCard
-                            .popIn(order: 1)
-
-                        if isLighterToday {
-                            lighterTodayContent
-                        } else {
-                            firstDayCard
-                            tileGrid
-                            MedicationTodaySection(date: vm.selectedDate,
-                                onManage: { showMedicationSettings = true }, onHistory: { showMedicationHistory = true })
-                            if vm.isToday { homeSupportActions }
-                        }
-
-                        if vm.foodLogs.isEmpty, vm.mealNotes.isEmpty, !BreakfastCheckinStore.shared.checkins.contains(where: { $0.localDay == vm.selectedDate.isoDateString }), !vm.showsReturnExperience, !isLighterToday {
-                            EmptyDayView(isToday: vm.isToday)
-                                .popIn(order: 7)
-                        } else {
-                            // Meal sections in fixed display order (breakfast → snack)
-                            mealSections
-                        }
-
-                        BreakfastCheckinCard(date: vm.selectedDate, hasDetailedBreakfast: vm.foodLogs.contains { $0.meal == .breakfast }) {
-                            appState.pendingOpenTalkToLog = true
-                        }
-                        mealNoteSections
-
-                        if vm.isToday, !isLighterToday, !vm.availableYesterdayMeals.isEmpty {
-                            RepeatYesterdayCard(
-                                meals: vm.availableYesterdayMeals
-                                    .map { (meal: $0.key, itemCount: $0.value.count) }
-                                    .sorted { $0.meal.sortOrder < $1.meal.sortOrder },
-                                busyMeal: vm.repeatingMeal,
-                                onRepeat: { meal in Task { await vm.repeatYesterday(meal) } }
-                            )
+                        DaylightDashboard(firstColumnFraction: 0.55) {
+                            dailyOverview
+                            dailyMeals
                         }
 
                         if vm.isToday, !isLighterToday {
@@ -722,7 +693,59 @@ struct TodayView: View {
                 }
                 .padding(.horizontal, Theme.Spacing.page)
                 .padding(.bottom, Theme.Spacing.xl)
+                .daylightReadableWidth(1100)
             }
+    }
+
+    private var dailyOverview: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            TileEyebrow("Daily overview", color: Theme.Colors.textFaint)
+                .accessibilityAddTraits(.isHeader)
+            if isLighterToday {
+                lighterTodayContent
+            } else {
+                firstDayCard
+                tileGrid
+                MedicationTodaySection(date: vm.selectedDate,
+                    onManage: { showMedicationSettings = true }, onHistory: { showMedicationHistory = true })
+                if vm.isToday { homeSupportActions }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("today-dailyOverview")
+    }
+
+    private var dailyMeals: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            TileEyebrow("Meals & notes", color: Theme.Colors.textFaint)
+                .accessibilityAddTraits(.isHeader)
+            if vm.foodLogs.isEmpty, vm.mealNotes.isEmpty, !BreakfastCheckinStore.shared.checkins.contains(where: { $0.localDay == vm.selectedDate.isoDateString }), !vm.showsReturnExperience, !isLighterToday {
+                EmptyDayView(isToday: vm.isToday)
+                    .popIn(order: 7)
+            } else {
+                // Meal sections in fixed display order (breakfast → snack)
+                mealSections
+            }
+
+            BreakfastCheckinCard(date: vm.selectedDate, hasDetailedBreakfast: vm.foodLogs.contains { $0.meal == .breakfast }) {
+                appState.pendingOpenTalkToLog = true
+            }
+            mealNoteSections
+
+            if vm.isToday, !isLighterToday, !vm.availableYesterdayMeals.isEmpty {
+                RepeatYesterdayCard(
+                    meals: vm.availableYesterdayMeals
+                        .map { (meal: $0.key, itemCount: $0.value.count) }
+                        .sorted { $0.meal.sortOrder < $1.meal.sortOrder },
+                    busyMeal: vm.repeatingMeal,
+                    onRepeat: { meal in Task { await vm.repeatYesterday(meal) } }
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("today-dailyMeals")
     }
 
     private var homeSupportActions: some View {
@@ -839,7 +862,7 @@ struct TodayView: View {
         let cycleDay = vm.currentShotCycleDay
         let showsShotCycle = cycleDay != nil && !vm.doseSchedule.cycleInterrupted
         return VStack(spacing: Theme.Spacing.tileGap) {
-            HStack(alignment: .top, spacing: Theme.Spacing.tileGap) {
+            DaylightTileRow {
                 ProteinTile(
                     proteinG: vm.totalProteinG,
                     goalG: vm.dailyGoal?.proteinG,
@@ -872,7 +895,7 @@ struct TodayView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: Theme.Spacing.tileGap) {
+            DaylightTileRow {
                 WaterTile(
                     intakeMl: vm.waterIntakeMl,
                     goalMl: vm.waterGoalMl,
@@ -1011,7 +1034,7 @@ struct TodayView: View {
             )
             .transition(.opacity.combined(with: .move(edge: .top)))
         } else if pulseOnToday, let nudge = vm.nudge {
-            UnderEatingNudgeCard(nudge: nudge, onAsk: pulseActive ? { appState.askPulse(nudge.prompt) } : nil)
+            UnderEatingNudgeCard(nudge: nudge, compact: usesNavigationRail, onAsk: pulseActive ? { appState.askPulse(nudge.prompt) } : nil)
             .transition(.opacity.combined(with: .move(edge: .top)))
         } else if doseCardDismissedDay != Date.now.isoDateString, let log = vm.latestGLP1,
                   vm.injectionLoggedToday {

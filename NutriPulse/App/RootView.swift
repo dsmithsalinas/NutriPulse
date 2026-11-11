@@ -11,7 +11,9 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if isPulseHealthPreview {
+            if let screen = duoAuditScreen {
+                duoAuditPreview(screen)
+            } else if isPulseHealthPreview {
                 pulseHealthPreview
             } else if isHealthPatternsPreview {
                 healthPatternsPreview
@@ -47,13 +49,7 @@ struct RootView: View {
             } else if isProgressPreview {
                 MainTabView()
             } else if appState.isLoading {
-                VStack(spacing: Theme.Spacing.md) {
-                    Image(colorScheme == .dark ? "FootingWordmark-dark" : "FootingWordmark").resizable().scaledToFit().frame(width: 180, height: 72).accessibilityLabel("Footing")
-                    ProgressView("Loading...")
-                    if appState.isAuthenticated && !SyncEngine.shared.isOnline {
-                        Button("Open notes offline") { showOfflineNotes = true }.frame(minHeight: 44)
-                    }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                StartupLoadingView(offersOfflineNotes: appState.isAuthenticated && !SyncEngine.shared.isOnline, onOpenNotes: { showOfflineNotes = true })
             } else if appState.isPasswordRecoveryFlow {
                 ResetPasswordView()
             } else if !appState.isAuthenticated {
@@ -75,8 +71,23 @@ struct RootView: View {
         // when the view appears and automatically cancels it when the view disappears.
         // No manual cleanup needed — Swift's structured concurrency handles it.
         .task {
-            if !isPulseHealthPreview && !isHealthPatternsPreview && !isOnboardingPreview && !isEverydayToolsPreview && !isOffScriptPreview && !isPulseWeekPreview && !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
+            if duoAuditScreen == nil && !isPulseHealthPreview && !isHealthPatternsPreview && !isOnboardingPreview && !isEverydayToolsPreview && !isOffScriptPreview && !isPulseWeekPreview && !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
         }
+    }
+
+    private var duoAuditScreen: String? {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "--duo-audit-screen"), arguments.indices.contains(index + 1) else { return nil }
+        return arguments[index + 1]
+        #else
+        return nil
+        #endif
+    }
+    @ViewBuilder private func duoAuditPreview(_ screen: String) -> some View {
+        #if DEBUG
+        DuoAuditPreview(screen: screen)
+        #endif
     }
 
     private var isEverydayToolsPreview: Bool {
@@ -202,7 +213,11 @@ struct RootView: View {
 
     @ViewBuilder private var logSheetPreview: some View {
         #if DEBUG
-        FoodLoggingView(selectedDate: .now)
+        if ProcessInfo.processInfo.arguments.contains("--food-review-preview") {
+            FoodReviewLayoutPreview()
+        } else {
+            FoodLoggingView(selectedDate: .now)
+        }
         #else
         EmptyView()
         #endif
@@ -310,12 +325,13 @@ struct RootView: View {
 
 // Shown when we're authenticated but the profile fetch failed. Deliberately offers
 // a retry (and a way out) rather than silently routing into onboarding.
-private struct ProfileLoadFailedView: View {
+struct ProfileLoadFailedView: View {
     @Environment(AppState.self) private var appState
     @State private var isRetrying = false
     @State private var showOfflineNotes = false
 
     var body: some View {
+        ScrollView {
         VStack(spacing: Theme.Spacing.md) {
             Image(systemName: "wifi.exclamationmark")
                 .font(.largeTitle)
@@ -345,7 +361,26 @@ private struct ProfileLoadFailedView: View {
             .font(.footnote)
         }
         .padding(Theme.Spacing.lg)
+        .daylightReadableWidth(600)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showOfflineNotes) { OfflineMealNotesView() }
+    }
+}
+
+struct StartupLoadingView: View {
+    let offersOfflineNotes: Bool
+    let onOpenNotes: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    var body: some View {
+                ScrollView {
+                VStack(spacing: Theme.Spacing.md) {
+                    Image(colorScheme == .dark ? "FootingWordmark-dark" : "FootingWordmark").resizable().scaledToFit().frame(width: 180, height: 72).accessibilityLabel("Footing")
+                    ProgressView("Loading...")
+                    if offersOfflineNotes {
+                        Button("Open notes offline", action: onOpenNotes).frame(minHeight: 44)
+                    }
+                }.padding(Theme.Spacing.page).daylightReadableWidth(600)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

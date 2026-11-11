@@ -41,6 +41,7 @@ struct FoodAIConsentSheet: View {
                 if isWorking { ProgressView() }
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
             .disabled(isWorking)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())

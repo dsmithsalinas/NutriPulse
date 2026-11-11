@@ -42,26 +42,34 @@ struct ProgressDashboardView: View {
                     } else if analytics.errorMessage != nil {
                         progressErrorState
                     } else {
-                        FloorDaysHero(
-                            range: loadedRange,
-                            summaries: analytics.summaries,
-                            proteinGoal: analytics.goalProteinG,
-                            trend: trend
-                        )
-                        .popIn(order: 2)
+                        DaylightDashboard(lanes: [0, 1, 0, 1]) {
+                            FloorDaysHero(
+                                range: loadedRange,
+                                summaries: analytics.summaries,
+                                proteinGoal: analytics.goalProteinG,
+                                trend: trend
+                            )
+                            .popIn(order: 2)
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("progress-floorDays")
 
-                        statGrid
+                            statGrid
+                                .accessibilityElement(children: .contain)
+                                .accessibilityIdentifier("progress-statistics")
 
-                        noticeRow
-                            .popIn(order: 7)
+                            noticeRow
+                                .popIn(order: 7)
 
-                        moreSection
-                            .popIn(order: 8)
+                            moreSection
+                                .popIn(order: 8)
+                        }
+
                     }
                 }
                 .padding(.horizontal, Theme.Spacing.page)
                 .padding(.top, Theme.Spacing.sm)
                 .padding(.bottom, Theme.Spacing.xl)
+                .daylightReadableWidth(1100)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
             // No navigation bar, so cover the status bar or scrolled tiles slide under the clock
@@ -164,7 +172,7 @@ struct ProgressDashboardView: View {
 
     private var statGrid: some View {
         VStack(spacing: Theme.Spacing.tileGap) {
-            HStack(spacing: Theme.Spacing.tileGap) {
+            DaylightTileRow {
                 AvgProteinStatTile(summaries: analytics.summaries)
                     .popIn(order: 3)
                 WeightTrendStatTile(weightLogs: analytics.weightLogs)
@@ -172,7 +180,7 @@ struct ProgressDashboardView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: Theme.Spacing.tileGap) {
+            DaylightTileRow {
                 MovedStatTile(sessions: analytics.totalWorkoutSessions)
                     .popIn(order: 5)
                 LoggedStatTile(loggedDays: analytics.loggedDays.count, totalDays: analytics.summaries.count)
@@ -185,7 +193,7 @@ struct ProgressDashboardView: View {
     // MARK: - Notice row
 
     private var noticeRow: some View {
-        HStack(spacing: Theme.Spacing.tileGap) {
+        DaylightTileRow {
             // Paused or stopped: no shot cycles to notice anything about, so "Try this" takes
             // the row alone (Android's NoticeRow does the same).
             if GLP1TrackingStore.shared.isTracking {
@@ -367,19 +375,7 @@ private struct FloorDaysHero: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    TileEyebrow(metrics.hasGoal ? "Floor days" : "Logged days", color: Theme.Colors.heroLabel)
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        CountingNumber(
-                            value: metrics.hasGoal ? metrics.metCount : metrics.logged.count,
-                            font: Theme.Fonts.number(44, relativeTo: .largeTitle)
-                        )
-                        .foregroundStyle(.white)
-                        Text(metrics.hasGoal ? "confirmed" : "of \(summaries.count)")
-                            .font(Theme.Fonts.display(20, relativeTo: .title3))
-                            .foregroundStyle(Theme.Colors.heroLabel)
-                    }
-                }
+                TileEyebrow(metrics.hasGoal ? "Floor days" : "Logged days", color: Theme.Colors.heroLabel)
                 Spacer(minLength: 8)
                 if let trend {
                     // Lime means "good" across Daylight, so only an improvement gets it; a dip or
@@ -392,6 +388,17 @@ private struct FloorDaysHero: View {
                         .frame(height: 30)
                         .background(improved ? Theme.Colors.lime : Color.white.opacity(0.14), in: Capsule())
                 }
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                CountingNumber(
+                    value: metrics.hasGoal ? metrics.metCount : metrics.logged.count,
+                    font: Theme.Fonts.number(44, relativeTo: .largeTitle)
+                )
+                .foregroundStyle(.white)
+                Text(metrics.hasGoal ? "confirmed" : "of \(summaries.count)")
+                    .font(Theme.Fonts.display(20, relativeTo: .title3))
+                    .foregroundStyle(Theme.Colors.heroLabel)
             }
 
             FloorDaysGraphic(range: range, summaries: summaries, proteinGoal: proteinGoal)

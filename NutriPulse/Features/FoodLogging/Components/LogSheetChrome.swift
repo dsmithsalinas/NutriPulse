@@ -55,10 +55,36 @@ struct LogSheetHeader: View {
 /// tab drawn as an ink capsule, matching the mockups' tab strip.
 struct LogTabBar: View {
     @Binding var selection: FoodLoggingViewModel.LogTab
+    var vertical = false
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 4) {
+        if typeSize >= .xxxLarge && !vertical {
+            Menu {
+                ForEach(FoodLoggingViewModel.LogTab.allCases, id: \.self) { tab in
+                    Button(tab.rawValue) { selection = tab }
+                }
+            } label: {
+                HStack {
+                    Label(selection.rawValue, systemImage: symbol(for: selection))
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                }
+                .font(Theme.Fonts.body(14, .semibold))
+                .padding(12)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 18))
+            }
+            .accessibilityLabel("Log method: \(selection.rawValue)")
+        } else {
+            tabStrip
+        }
+    }
+
+    private var tabStrip: some View {
+        let layout = vertical ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
+        return layout {
             ForEach(FoodLoggingViewModel.LogTab.allCases, id: \.self) { tab in
                 let selected = selection == tab
                 Button {
@@ -68,7 +94,12 @@ struct LogTabBar: View {
                         withAnimation(Theme.Motion.tabSelect) { selection = tab }
                     }
                 } label: {
-                    Text(tab.rawValue)
+                    HStack(spacing: 10) {
+                        if vertical { Image(systemName: symbol(for: tab)).frame(width: 20) }
+                        Text(tab.rawValue)
+                        if vertical { Spacer(minLength: 0) }
+                    }
+                        .padding(.horizontal, vertical ? 12 : 0)
                         .font(Theme.Fonts.body(14, selected ? .bold : .semibold))
                         .foregroundStyle(selected ? Theme.Colors.selectionText : Theme.Colors.textSecondary)
                         // Slightly taller than the mockup's 40pt track for a ≥44pt tap target.
@@ -79,8 +110,10 @@ struct LogTabBar: View {
                                     .fill(Theme.Colors.selectionFill)
                             }
                         }
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(tab.rawValue)
                 .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
         }
@@ -88,5 +121,13 @@ struct LogTabBar: View {
         .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Log method")
+    }
+    private func symbol(for tab: FoodLoggingViewModel.LogTab) -> String {
+        switch tab {
+        case .talk: "mic.fill"
+        case .search: "magnifyingglass"
+        case .scan: "barcode.viewfinder"
+        case .favorites: "star.fill"
+        }
     }
 }

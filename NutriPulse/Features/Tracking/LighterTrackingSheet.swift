@@ -72,6 +72,7 @@ struct LighterTrackingSheet: View {
                 if store.isSaving { ProgressView("Saving…").frame(maxWidth: .infinity) }
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .tint(Theme.Colors.primaryText)

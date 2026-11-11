@@ -54,6 +54,7 @@ struct OffScriptSheet: View {
                     Text(error).font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.danger)
                 }
             }.padding(Theme.Spacing.page)
+            .daylightReadableWidth()
         }.background(Theme.Colors.ground).tint(Theme.Colors.primary)
             .scrollDismissesKeyboard(.interactively).interactiveDismissDisabled(saving || undo.isUndoing)
             .onAppear {

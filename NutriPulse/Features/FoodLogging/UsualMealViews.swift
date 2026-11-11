@@ -45,7 +45,7 @@ struct SaveUsualMealSheet: View {
                 }
             }.buttonStyle(.brandPrimary).disabled(saving || foods.isEmpty || foods.count > 40 || UsualMeal.nameValidationMessage(name) != nil)
             Spacer()
-        }.padding(Theme.Spacing.page)
+        }.padding(Theme.Spacing.page).daylightReadableWidth()
         }.background(Theme.Colors.ground)
             .interactiveDismissDisabled(saving)
     }
@@ -96,7 +96,7 @@ struct UsualMealsSection: View {
                 await store.load()
             }
             .sheet(isPresented: $showBreakfastSettings) {
-                ScrollView { BreakfastCheckinSettings().padding(Theme.Spacing.page) }.background(Theme.Colors.ground)
+                ScrollView { BreakfastCheckinSettings().padding(Theme.Spacing.page).daylightReadableWidth() }.background(Theme.Colors.ground)
                     .presentationDragIndicator(.visible)
             }
             .sheet(item: $selected) { usual in
@@ -147,7 +147,7 @@ struct UsualMealReview: View {
                         } catch { self.error = "Couldn’t save this meal. Please try again." }
                     }
                 }.buttonStyle(.brandPrimary).disabled(saving)
-            }.padding(Theme.Spacing.page)
+            }.padding(Theme.Spacing.page).daylightReadableWidth()
         }.background(Theme.Colors.ground).interactiveDismissDisabled(saving)
     }
 }

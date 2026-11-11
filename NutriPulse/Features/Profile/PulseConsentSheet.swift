@@ -78,6 +78,7 @@ struct PulseConsentSheet: View {
                 }
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
             .padding(.bottom, Theme.Spacing.lg)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())

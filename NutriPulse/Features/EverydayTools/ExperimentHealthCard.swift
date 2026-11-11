@@ -119,7 +119,7 @@ struct ExperimentHealthDetailView: View {
                         }.font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary).padding(.top, 12)
                     }.padding(18).background(Theme.Colors.surfaceCard, in: RoundedRectangle(cornerRadius: Theme.Radius.tileSmall))
                 }
-            }.font(Theme.Fonts.body(15)).foregroundStyle(Theme.Colors.textPrimary).padding(Theme.Spacing.page)
+            }.font(Theme.Fonts.body(15)).foregroundStyle(Theme.Colors.textPrimary).padding(Theme.Spacing.page).daylightReadableWidth()
         }.background(Theme.Colors.ground).tint(Theme.Colors.primary)
         .task(id: refresh) {
             #if DEBUG
@@ -219,7 +219,7 @@ struct ExperimentHealthLinkEditor: View {
                 Text("Adding observations keeps your existing rating and entries. Sleep is an additional measure; it doesn’t replace the outcome you originally chose.")
                 Text("Uses this phone’s Health data. Observations stay on-device and aren’t sent to Pulse. Unlink whenever you like; your own entries remain.")
                 Button("Link these observations") { save(.init(metric: metric, startHour: start, endHour: max(end, start + 1))) }.buttonStyle(.brandPrimary)
-            }.font(Theme.Fonts.body(15)).padding(Theme.Spacing.page)
+            }.font(Theme.Fonts.body(15)).padding(Theme.Spacing.page).daylightReadableWidth()
         }.background(Theme.Colors.ground)
         .onAppear { if sleepOutcome { metric = .sleep } }
         .onChange(of: start) { _, value in end = max(end, value + 1) }

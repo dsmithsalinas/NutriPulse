@@ -41,6 +41,7 @@ struct MainTabBar: View {
     var compact: Bool = false
     let onLog: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Namespace private var pill
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -50,18 +51,38 @@ struct MainTabBar: View {
     }
 
     var body: some View {
+        GeometryReader { geometry in
+            // Width comes from the current safe-area proposal, never the device model.
+            let labels = !compact && geometry.size.width >= 360 && typeSize < .xxxLarge
+            bar(showsLabels: labels)
+                .padding(.horizontal, compact && geometry.size.width >= 360 ? 56 : Theme.Spacing.page)
+                .padding(.top, 8)
+                .padding(.bottom, compact ? 0 : 4)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+        }
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity)
+        .frame(height: 76)
+        .background {
+            GeometryReader { geo in
+                Color.clear.preference(key: TabBarHeightKey.self, value: geo.size.height)
+            }
+        }
+    }
+
+    private func bar(showsLabels: Bool) -> some View {
         HStack(spacing: 0) {
-            tab(.today,    "Today",    .symbol("square.grid.2x2.fill"))
+            tab(.today,    "Today",    .symbol("square.grid.2x2.fill"), showsLabel: showsLabels)
             Spacer(minLength: 0)
-            tab(.progress, "Progress", .symbol("chart.line.uptrend.xyaxis"))
+            tab(.progress, "Progress", .symbol("chart.line.uptrend.xyaxis"), showsLabel: showsLabels)
             Spacer(minLength: 0)
             logButton
             Spacer(minLength: 0)
             if showsPulse {
-                tab(.pulse, "Pulse", .pulse)
+                tab(.pulse, "Pulse", .pulse, showsLabel: showsLabels)
                 Spacer(minLength: 0)
             }
-            tab(.profile,  "Profile",  .symbol("person.fill"))
+            tab(.profile,  "Profile",  .symbol("person.fill"), showsLabel: showsLabels)
         }
         .padding(.horizontal, compact ? 6 : 8)
         .frame(height: compact ? 52 : 64)
@@ -71,20 +92,9 @@ struct MainTabBar: View {
                 .shadow(color: Color(hex: 0x0F172A, opacity: 0.18), radius: 16, y: 8)
         }
         .animation(reduceMotion ? nil : Theme.Motion.tabSelect, value: selected)
-        // Compact: the same bar, narrowed toward the middle so page content shows either side.
-        .padding(.horizontal, compact ? 56 : Theme.Spacing.page)
-        .padding(.top, 8)
-        .padding(.bottom, compact ? 0 : 4)
-        // A fixed height either way, so pages don't shift as the bar shrinks and grows.
-        .frame(height: 76, alignment: .bottom)
-        .background {
-            GeometryReader { geo in
-                Color.clear.preference(key: TabBarHeightKey.self, value: geo.size.height)
-            }
-        }
     }
 
-    private func tab(_ tab: MainTab, _ label: String, _ icon: Icon) -> some View {
+    private func tab(_ tab: MainTab, _ label: String, _ icon: Icon, showsLabel: Bool) -> some View {
         let isOn = selected == tab
         return Button {
             guard selected != tab else { return }
@@ -93,7 +103,7 @@ struct MainTabBar: View {
         } label: {
             HStack(spacing: 6) {
                 iconView(icon, color: isOn ? Theme.Colors.ink : Theme.Colors.inkIcon)
-                if isOn && !compact {
+                if isOn && showsLabel {
                     Text(label)
                         .font(Theme.Fonts.body(14, .bold, relativeTo: nil))
                         .foregroundStyle(Color(hex: 0x0F172A))
@@ -101,7 +111,7 @@ struct MainTabBar: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .leading)))
                 }
             }
-            .padding(.horizontal, isOn && !compact ? 14 : 0)
+            .padding(.horizontal, isOn && showsLabel ? 14 : 0)
             .frame(minWidth: compact ? 40 : 48, minHeight: compact ? 40 : 48)
             .background {
                 if isOn {
@@ -162,4 +172,81 @@ struct MainTabBar: View {
         MainTabBar(selected: .constant(.today), onLog: {})
     }
     .background(Theme.Colors.ground)
+}
+
+
+private struct NavigationRailEnvironmentKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var usesNavigationRail: Bool {
+        get { self[NavigationRailEnvironmentKey.self] }
+        set { self[NavigationRailEnvironmentKey.self] = newValue }
+    }
+}
+
+/// Expanded-window navigation occupies its own lane, leaving the whole content height free.
+struct MainNavigationRail: View {
+    @Binding var selected: MainTab
+    var showsPulse = true
+    let onLog: () -> Void
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 8) {
+                destination(.today, label: "Today", symbol: "square.grid.2x2.fill")
+                destination(.progress, label: "Progress", symbol: "chart.line.uptrend.xyaxis")
+                Button {
+                    onLog()
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(Theme.Colors.limeInk)
+                        .frame(width: 44, height: 44)
+                        .background(Theme.Colors.lime, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .accessibilityLabel("Log food")
+                .help("Log food")
+                if showsPulse { destination(.pulse, label: "Pulse", symbol: nil) }
+                destination(.profile, label: "Profile", symbol: "person.fill")
+            }
+            .padding(8)
+        }
+        .frame(width: 60)
+        .background(Theme.Colors.ink, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.vertical, 8)
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func destination(_ tab: MainTab, label: String, symbol: String?) -> some View {
+        let isSelected = selected == tab
+        return Button {
+            guard selected != tab else { return }
+            selected = tab
+            UISelectionFeedbackGenerator().selectionChanged()
+        } label: {
+            Group {
+                if let symbol {
+                    Image(systemName: symbol).font(.system(size: 19, weight: .semibold))
+                } else {
+                    PulseMark(lineWidthRatio: 0.15).frame(width: 22, height: 22)
+                }
+            }
+            .foregroundStyle(isSelected ? Theme.Colors.ink : Theme.Colors.inkIcon)
+            .frame(width: 44, height: 44)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("mainTab-\(label.lowercased())")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .help(label)
+    }
 }

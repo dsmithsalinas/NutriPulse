@@ -12,12 +12,14 @@ struct FoodSearchView: View {
     @Environment(\.foodSaveUndo) private var undo
     let onEnterManually: () -> Void
     var onFocusChanged: (Bool) -> Void = { _ in }
+    var compactHeight: Bool = false
+    private var shortInput: Bool { searchIsFocused && compactHeight }
     @FocusState private var searchIsFocused: Bool
 
     var body: some View {
         VStack(spacing: searchIsFocused ? 8 : Theme.Spacing.tileGap) {
             searchField
-            filterChips
+            if !shortInput { filterChips }
             if let restaurant = vm.restaurantName {
                 Text("Searching for \(restaurant) matches. Other database matches are labeled below.")
                     .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
@@ -36,8 +38,10 @@ struct FoodSearchView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if vm.filteredResults.isEmpty { enterManuallyButton }
-            FatSecretAttribution()
+            if !shortInput {
+                if vm.filteredResults.isEmpty { enterManuallyButton }
+                FatSecretAttribution()
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -184,6 +188,7 @@ struct FoodSearchView: View {
                     ProgressView().frame(maxWidth: .infinity)
                 }
                 enterManuallyButton
+                if shortInput { FatSecretAttribution() }
             }
             .padding(.bottom, 4)
         }
@@ -191,18 +196,28 @@ struct FoodSearchView: View {
         .accessibilityIdentifier("Food search results")
     }
 
-    private func placeholder(icon: String, text: String) -> some View {
-        VStack(spacing: Theme.Spacing.sm) {
-            Image(systemName: icon)
-                .font(.system(size: 40))
-                .foregroundStyle(Theme.Colors.textFaint)
-            Text(text)
-                .font(Theme.Fonts.body(14))
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Spacing.xl)
+    @ViewBuilder private func placeholder(icon: String, text: String) -> some View {
+        if shortInput {
+            ScrollView {
+                VStack(spacing: 8) {
+                    Text(text).font(Theme.Fonts.body(14)).padding(8)
+                    enterManuallyButton
+                    FatSecretAttribution()
+                }
+            }
+        } else {
+            VStack(spacing: Theme.Spacing.sm) {
+                Image(systemName: icon)
+                    .font(.system(size: 40))
+                    .foregroundStyle(Theme.Colors.textFaint)
+                Text(text)
+                    .font(Theme.Fonts.body(14))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.xl)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Manual entry link
@@ -312,6 +327,7 @@ private struct SearchResultRow: View {
 // Shown after tapping a search result's name. Lets the user pick a serving, quantity,
 // and meal before logging.
 struct FoodDetailSheet: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Bindable var vm: FoodSearchViewModel
     let result: FoodSearchResult
     let date: Date
@@ -344,6 +360,7 @@ struct FoodDetailSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         vm.cancelDetail()
+                        dismiss()
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -371,6 +388,7 @@ struct FoodDetailSheet: View {
     }
 
     private var loadFailedView: some View {
+        ScrollView {
         VStack(spacing: 12) {
             BrandedEmptyState(
                 icon: "wifi.exclamationmark",
@@ -383,13 +401,37 @@ struct FoodDetailSheet: View {
             .buttonStyle(.brandPrimary)
             .padding(.horizontal, Theme.Spacing.xl)
         }
+        .padding(.vertical, 24)
+        .daylightReadableWidth()
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.ground.ignoresSafeArea())
     }
 
-    @ViewBuilder
     private func detailForm(detail: FoodDetail) -> some View {
-        Form {
+        GeometryReader { geometry in
+            let expanded = geometry.size.width >= 700 && typeSize < .xxxLarge
+            Group {
+                if expanded {
+                    HStack(alignment: .top, spacing: 0) {
+                        Form { servingSections(detail: detail) }.daylightForm()
+                        Form { nutritionSections(compact: true) }.environment(\.defaultMinListRowHeight, 36).daylightForm()
+                    }
+                } else {
+                    Form {
+                        servingSections(detail: detail)
+                        nutritionSections(compact: false)
+                    }.daylightForm()
+                }
+            }
+            .daylightReadableWidth(expanded ? 1100 : 720)
+        }
+        .safeAreaInset(edge: .bottom) { logButton.daylightReadableWidth() }
+        .background(Theme.Colors.ground)
+    }
+
+    @ViewBuilder
+    private func servingSections(detail: FoodDetail) -> some View {
             if let restaurant = vm.restaurantName, let kind = result.matchKind {
                 Section {
                     Text(restaurant).font(Theme.Fonts.body(16, .semibold))
@@ -432,14 +474,22 @@ struct FoodDetailSheet: View {
             }
             .daylightSection()
 
-            // ── Macro preview ─────────────────────────────────────────────
+    }
+
+    @ViewBuilder
+    private func nutritionSections(compact: Bool) -> some View {
             if let preview = vm.macroPreview {
                 Section {
                     MacroPreviewRow(label: "Calories",  value: preview.calories,  unit: "kcal", color: Theme.NutrientColor.calories)
+                        .listRowInsets(EdgeInsets(top: compact ? 6 : 12, leading: 16, bottom: compact ? 6 : 12, trailing: 16))
                     MacroPreviewRow(label: "Protein",   value: preview.proteinG,  unit: "g",    color: Theme.NutrientColor.protein)
+                        .listRowInsets(EdgeInsets(top: compact ? 6 : 12, leading: 16, bottom: compact ? 6 : 12, trailing: 16))
                     MacroPreviewRow(label: "Carbs",     value: preview.carbsG,    unit: "g",    color: Theme.NutrientColor.carbs)
+                        .listRowInsets(EdgeInsets(top: compact ? 6 : 12, leading: 16, bottom: compact ? 6 : 12, trailing: 16))
                     MacroPreviewRow(label: "Fat",       value: preview.fatG,      unit: "g",    color: Theme.NutrientColor.fat)
+                        .listRowInsets(EdgeInsets(top: compact ? 6 : 12, leading: 16, bottom: compact ? 6 : 12, trailing: 16))
                     MacroPreviewRow(label: "Fiber",     value: preview.fiberG,    unit: "g",    color: Theme.NutrientColor.fiber)
+                        .listRowInsets(EdgeInsets(top: compact ? 6 : 12, leading: 16, bottom: compact ? 6 : 12, trailing: 16))
                 } header: {
                     DaylightSectionHeader("Nutrition (\(vm.quantity.formatted()) × \(vm.selectedServing?.description ?? ""))")
                 }
@@ -453,10 +503,8 @@ struct FoodDetailSheet: View {
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
             }
-        }
-        .daylightForm()
-        .safeAreaInset(edge: .bottom) { logButton }
     }
+
 
     private var logButton: some View {
         Button {

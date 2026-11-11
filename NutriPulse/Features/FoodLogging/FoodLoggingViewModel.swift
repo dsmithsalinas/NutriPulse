@@ -58,6 +58,9 @@ final class FoodLoggingViewModel {
     var canLog: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     func logManualFood(on date: Date) async throws {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--manual-layout-preview") { throw CocoaError(.userCancelled) }
+        #endif
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }

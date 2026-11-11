@@ -232,6 +232,24 @@ struct BodyMetricHistoryView: View {
     }
 
     private func load() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--duo-audit-populated") {
+            let base: Double
+            switch metric {
+            case .weight: base = 84
+            case .bodyFat: base = 28
+            case .leanMass: base = 56
+            case .site: base = 89
+            }
+            entries = (0..<18).map { index in
+                Entry(id: UUID(), date: Calendar.current.date(byAdding: .day, value: (index - 17) * 2, to: .now)!,
+                      value: base - Double(index) * 0.03, source: "manual", deletable: false)
+            }
+            goalValue = nil
+            isLoading = false
+            return
+        }
+        #endif
         isLoading = true
         defer { isLoading = false }
 

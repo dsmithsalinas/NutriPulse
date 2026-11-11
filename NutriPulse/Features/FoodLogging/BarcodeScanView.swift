@@ -10,21 +10,39 @@ struct BarcodeScanView: View {
     @State private var isScanning = true
     @State private var cameraPermission = AVCaptureDevice.authorizationStatus(for: .video)
 
+    // Read-only screenshot routes never initialize capture hardware or request permission.
+    private var layoutPreview: Int {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("--log-preview") else { return 0 }
+        if ProcessInfo.processInfo.arguments.contains("--scan-denied-preview") { return 2 }
+        return ProcessInfo.processInfo.arguments.contains("--scan-preview") ? 1 : 0
+        #else
+        return 0
+        #endif
+    }
+
     var body: some View {
         ZStack {
-            switch cameraPermission {
-            case .authorized:
+            if layoutPreview == 1 {
                 cameraLayer
-            case .notDetermined:
-                Color.black.ignoresSafeArea()
-            default:
+            } else if layoutPreview == 2 {
                 permissionDeniedView
+            } else {
+                switch cameraPermission {
+                case .authorized:
+                    cameraLayer
+                case .notDetermined:
+                    Color.black.ignoresSafeArea()
+                default:
+                    permissionDeniedView
+                }
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
         .onAppear {
             vm.resetScanState()
             vm.selectedMeal = headerMeal
+            guard layoutPreview == 0 else { return }
             if cameraPermission == .notDetermined {
                 AVCaptureDevice.requestAccess(for: .video) { granted in
                     // requestAccess calls back on an arbitrary queue. Assigning @State from
@@ -57,17 +75,27 @@ struct BarcodeScanView: View {
 
     private var cameraLayer: some View {
         ZStack {
-            BarcodeScannerRepresentable(isScanning: isScanning) { rawValue, symbology in
-                isScanning = false
-                // FatSecret wants a GTIN-13. Passing a compressed UPC-E code straight through
-                // meant every small-package product came back "Barcode Not Found".
-                let barcode = BarcodeNormalizer.gtin13(value: rawValue, symbology: symbology) ?? rawValue
-                vm.selectedMeal = headerMeal
-                Task { await vm.lookupBarcode(barcode) }
+            if layoutPreview == 1 {
+                Color(hex: 0x334155)
+                    .overlay { Image(systemName: "barcode").font(.system(size: 72)).foregroundStyle(.white.opacity(0.55)).accessibilityHidden(true) }
+            } else {
+                BarcodeScannerRepresentable(isScanning: isScanning) { rawValue, symbology in
+                    isScanning = false
+                    // FatSecret wants a GTIN-13. Passing a compressed UPC-E code straight through
+                    // meant every small-package product came back "Barcode Not Found".
+                    let barcode = BarcodeNormalizer.gtin13(value: rawValue, symbology: symbology) ?? rawValue
+                    vm.selectedMeal = headerMeal
+                    Task { await vm.lookupBarcode(barcode) }
+                }
             }
-            .ignoresSafeArea()
 
             ViewfinderOverlay()
+            if layoutPreview == 1 {
+                Text("Simulated camera preview")
+                    .font(Theme.Fonts.body(12, .semibold)).foregroundStyle(.white)
+                    .padding(10).background(.black.opacity(0.6), in: Capsule())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(12)
+            }
 
             if vm.isLoadingDetail {
                 Color.black.opacity(0.6).ignoresSafeArea()
@@ -86,25 +114,29 @@ struct BarcodeScanView: View {
     // MARK: Permission denied
 
     private var permissionDeniedView: some View {
-        VStack(spacing: Theme.Spacing.md) {
-            Image(systemName: "camera.slash")
-                .font(.system(size: 44))
-                .foregroundStyle(Theme.Colors.textFaint)
-            Text("Camera Access Required")
-                .font(Theme.Fonts.display(20, .bold, relativeTo: .headline))
-                .foregroundStyle(Theme.Colors.textPrimary)
-            Text("Allow camera access in Settings to scan barcodes.")
-                .font(Theme.Fonts.body(15))
-                .foregroundStyle(Theme.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Spacing.xl)
-            Button("Open Settings") {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
+        ScrollView {
+            VStack(spacing: Theme.Spacing.md) {
+                Image(systemName: "camera.slash")
+                    .font(.system(size: 44))
+                    .foregroundStyle(Theme.Colors.textFaint)
+                Text("Camera Access Required")
+                    .font(Theme.Fonts.display(20, .bold, relativeTo: .headline))
+                    .foregroundStyle(Theme.Colors.textPrimary)
+                Text("Allow camera access in Settings to scan barcodes.")
+                    .font(Theme.Fonts.body(15))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.xl)
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
                 }
+                .buttonStyle(.brandPrimary)
+                .padding(.horizontal, Theme.Spacing.xl)
             }
-            .buttonStyle(.brandPrimary)
-            .padding(.horizontal, Theme.Spacing.xl)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.ground)
@@ -165,6 +197,7 @@ private struct BarcodeScannerRepresentable: UIViewRepresentable {
             previewLayer.videoGravity = .resizeAspectFill
             view.previewLayer = previewLayer
             view.layer.addSublayer(previewLayer)
+            view.configureRotation(device: device, layer: previewLayer)
 
             self.session = session
             DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
@@ -208,6 +241,20 @@ private struct BarcodeScannerRepresentable: UIViewRepresentable {
 
 private final class CameraPreviewView: UIView {
     var previewLayer: AVCaptureVideoPreviewLayer?
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    private var rotationObservation: NSKeyValueObservation?
+
+    func configureRotation(device: AVCaptureDevice, layer: AVCaptureVideoPreviewLayer) {
+        let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: layer)
+        rotationCoordinator = coordinator
+        // AVFoundation delivers these observations on the main queue. The coordinator
+        // follows the actual camera and preview layer across rotation/display changes.
+        rotationObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview, options: [.initial, .new]) { [weak layer] coordinator, _ in
+            let angle = coordinator.videoRotationAngleForHorizonLevelPreview
+            guard let connection = layer?.connection, connection.isVideoRotationAngleSupported(angle) else { return }
+            connection.videoRotationAngle = angle
+        }
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -222,10 +269,10 @@ private struct ViewfinderOverlay: View {
 
     var body: some View {
         GeometryReader { geo in
-            let w = min(geo.size.width * 0.72, 300.0)
+            let w = min(geo.size.width * 0.72, 300.0, max(0, geo.size.height - 96) / 0.6)
             let h = w * 0.6
             let x = (geo.size.width - w) / 2
-            let y = (geo.size.height - h) / 2 - 40  // slightly above center
+            let y = max(16, (geo.size.height - h) / 2 - 40)
             let rect = CGRect(x: x, y: y, width: w, height: h)
 
             ZStack {
@@ -260,8 +307,12 @@ private struct ViewfinderOverlay: View {
                 Text("Align barcode within the frame")
                     .font(.subheadline)
                     .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .shadow(radius: 2)
-                    .position(x: geo.size.width / 2, y: rect.maxY + 24)
+                    .frame(width: max(0, geo.size.width - 32))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 16)
             }
         }
     }

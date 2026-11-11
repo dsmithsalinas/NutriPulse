@@ -136,7 +136,7 @@ struct PulseMemoryEditor: View {
                 }.buttonStyle(.brandPrimary).disabled(readOnlyPreview || saving || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || content.unicodeScalars.count > 300)
                 Text("Only remembered after you approve. You can edit or forget it in What Pulse knows.")
                     .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
-            }.padding(Theme.Spacing.page)
+            }.padding(Theme.Spacing.page).daylightReadableWidth()
         }.background(Theme.Colors.ground).tint(Theme.Colors.primary).interactiveDismissDisabled(saving).scrollDismissesKeyboard(.interactively)
             .onAppear { content = existing?.content ?? proposed; owner = expectedOwner ?? PulseMemoryStore.shared.accountId }
     }
@@ -160,7 +160,7 @@ struct PulseWeekPreview: View {
                         PulseMemoriesSection()
                         BreakfastCheckinSettings()
                     }
-                }.padding(Theme.Spacing.page)
+                }.padding(Theme.Spacing.page).daylightReadableWidth()
             }
         }.background(Theme.Colors.ground.ignoresSafeArea()).allowsHitTesting(false)
             .task {

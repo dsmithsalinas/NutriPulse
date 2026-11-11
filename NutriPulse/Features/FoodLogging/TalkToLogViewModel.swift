@@ -256,6 +256,11 @@ final class TalkToLogViewModel {
     // "chicken, rice, and beans", let one insert fail, tap Log twice, and two of the three
     // foods are in the day twice.
     func logAll(on date: Date) async throws {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--food-review-preview") || ProcessInfo.processInfo.arguments.contains("--confirmation-preview") {
+            throw CocoaError(.userCancelled)
+        }
+        #endif
         let pending = pendingRows
         guard !pending.isEmpty, !estimatesNeedConfirmation else { return }
         isLogging = true

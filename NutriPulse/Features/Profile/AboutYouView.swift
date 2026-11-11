@@ -174,6 +174,7 @@ struct AboutYouView: View {
                 }
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.Colors.ground.ignoresSafeArea())

@@ -63,6 +63,7 @@ struct ProteinRescueSheet: View {
                     .background(Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .padding(Theme.Spacing.page)
+                .daylightReadableWidth()
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationTitle("Protein rescue")

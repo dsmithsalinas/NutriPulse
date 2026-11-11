@@ -308,6 +308,11 @@ final class FoodSearchViewModel {
     }
 
     func logFood(on date: Date) async throws {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--food-review-preview") || ProcessInfo.processInfo.arguments.contains("--confirmation-preview") {
+            throw CocoaError(.userCancelled)
+        }
+        #endif
         guard let detail, let serving = selectedServing else { return }
         isLogging = true
         defer { isLogging = false }

@@ -89,11 +89,13 @@ struct DatePickerSheet: View {
 
     var body: some View {
         NavigationStack {
+            ScrollView {
             DatePicker("Jump to day", selection: $date, in: ...Date.now, displayedComponents: .date)
                 .datePickerStyle(.graphical)
                 .tint(Theme.Colors.primary)
                 .padding()
-                .frame(maxHeight: .infinity, alignment: .top)
+                .daylightReadableWidth(600)
+            }
                 .navigationTitle("Jump to day")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

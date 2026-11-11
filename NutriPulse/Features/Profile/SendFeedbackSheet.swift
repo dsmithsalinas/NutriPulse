@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SendFeedbackSheet: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @FocusState private var editing: Bool
     @Bindable var vm: ProfileViewModel
     @Environment(\.dismiss) private var dismiss
 
@@ -12,20 +14,39 @@ struct SendFeedbackSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Category", selection: $category) {
-                        ForEach(FeedbackCategory.allCases) { c in
-                            Text(c.displayName).tag(c)
+                    if typeSize >= .xxxLarge {
+                        VStack(spacing: 0) {
+                            ForEach(FeedbackCategory.allCases) { option in
+                                Button { category = option } label: {
+                                    HStack {
+                                        Text(option.displayName)
+                                        Spacer(minLength: 12)
+                                        Image(systemName: category == option ? "checkmark.circle.fill" : "circle")
+                                    }
+                                    .font(Theme.Fonts.body(16, .semibold))
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .padding(.vertical, 8)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(option.displayName)
+                                .accessibilityIdentifier("feedbackCategory" + option.rawValue)
+                                .accessibilityAddTraits(category == option ? [.isSelected] : [])
+                            }
                         }
+                    } else {
+                        Picker("Category", selection: $category) {
+                            ForEach(FeedbackCategory.allCases) { Text($0.displayName).tag($0) }
+                        }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("feedbackCategory")
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
                 } header: {
                     DaylightSectionHeader("Type")
                 }
                 .daylightSection()
 
                 Section {
-                    TextEditor(text: $message)
+                    TextEditor(text: $message).focused($editing)
                         .frame(minHeight: 140)
                         .scrollContentBackground(.hidden)
                 } header: {
@@ -44,6 +65,10 @@ struct SendFeedbackSheet: View {
             .navigationTitle("Send feedback")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { editing = false }.accessibilityIdentifier("feedbackKeyboardDone")
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }

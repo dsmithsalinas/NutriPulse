@@ -42,6 +42,7 @@ struct ShotCycleCheckInSheet: View {
                 saveButton
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
             .padding(.bottom, Theme.Spacing.lg)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())

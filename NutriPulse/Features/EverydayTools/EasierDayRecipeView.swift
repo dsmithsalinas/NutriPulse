@@ -43,6 +43,7 @@ struct EasierDayRecipeView: View {
                     .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
                 }
             }.padding(Theme.Spacing.page)
+            .daylightReadableWidth()
         }.background(Theme.Colors.ground).tint(Theme.Colors.primary).scrollDismissesKeyboard(.interactively)
         .sheet(isPresented: Binding(get: { proposed != nil }, set: { if !$0 { proposed = nil } })) {
             if let proposed { PulseMemoryEditor(proposed: proposed, expectedOwner: owner, readOnlyPreview: preview, onApproved: { approvedMemory = $0 }) }

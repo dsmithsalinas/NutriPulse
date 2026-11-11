@@ -34,6 +34,7 @@ struct RepeatedMealConfirmationSheet: View {
         NavigationStack {
             Group {
                 if saved {
+                    ScrollView {
                     VStack(spacing: 16) {
                         Text("Saved for today").font(Theme.Fonts.display(26, .bold, relativeTo: .title2))
                         Text("No need to fill in previous days.").font(Theme.Fonts.body(16))
@@ -46,6 +47,7 @@ struct RepeatedMealConfirmationSheet: View {
                         Button("Add something else") { dismiss(); appState.pendingOpenTalkToLog = true }
                             .frame(minHeight: 44).disabled(undo.isUndoing)
                     }.padding(Theme.Spacing.page)
+                    }
                 } else if isLoading {
                     ProgressView("Loading your usual meal…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -58,7 +60,7 @@ struct RepeatedMealConfirmationSheet: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                        DaylightDashboard(lanes: [0, 0, 1], firstColumnFraction: 0.6) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Label("Review before logging", systemImage: "checklist")
                                     .font(Theme.Fonts.body(15, .bold))
@@ -103,7 +105,7 @@ struct RepeatedMealConfirmationSheet: View {
                             }
                             .tile()
 
-                            HStack(spacing: Theme.Spacing.sm) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130))], spacing: Theme.Spacing.sm) {
                                 macro("Calories", totals.calories, "kcal")
                                 macro("Protein", totals.protein, "g")
                                 macro("Carbs", totals.carbs, "g")
@@ -114,6 +116,9 @@ struct RepeatedMealConfirmationSheet: View {
                     }
                     .safeAreaInset(edge: .bottom) {
                         Button {
+                            #if DEBUG
+                            if ProcessInfo.processInfo.arguments.contains("--repeat-review-preview") { return }
+                            #endif
                             isSaving = true
                             Task {
                                 let saved = await FoodSaveUndo.$current.withValue(undo) { await vm.repeatMeal(from: sourceDate, meal: meal, quantities: quantities) }
@@ -139,6 +144,7 @@ struct RepeatedMealConfirmationSheet: View {
             } message: {
                 Text("Your meal wasn’t saved. Please try again.")
             }
+            .daylightReadableWidth(1100)
             .background(Theme.Colors.ground.ignoresSafeArea())
             .navigationTitle("Usual \(meal.displayName)")
             .navigationBarTitleDisplayMode(.inline)
@@ -149,7 +155,15 @@ struct RepeatedMealConfirmationSheet: View {
             }
             .sheet(isPresented: $showSaveUsual) { SaveUsualMealSheet(foods: undo.savedFoods) }
         .task {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("--repeat-review-preview") {
+                    logs = AppStoreScreenshotPreview.todayModel().foodLogs
+                } else {
+                    logs = await vm.mealLogs(from: sourceDate, meal: meal)
+                }
+                #else
                 logs = await vm.mealLogs(from: sourceDate, meal: meal)
+                #endif
                 quantities = Dictionary(uniqueKeysWithValues: logs.map { ($0.id, $0.quantity) })
                 isLoading = false
             }

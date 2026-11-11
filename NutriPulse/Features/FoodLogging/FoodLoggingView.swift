@@ -4,7 +4,8 @@ import UIKit
 
 // Daylight Log sheet (docs/daylight-redesign.md): a header showing the meal everything logs to
 // ("Adding to Dinner ▾") plus a close button, and Talk / Search / Scan / Favorites tabs beneath
-// it. Manual entry moved inside Search ("Can't find it? Enter it yourself"); Favorites replaces
+// it in compact windows; expanded windows put these controls beside the workspace.
+// Manual entry moved inside Search ("Can't find it? Enter it yourself"); Favorites replaces
 // the old Manual tab.
 struct FoodLoggingView: View {
     let selectedDate: Date
@@ -13,6 +14,8 @@ struct FoodLoggingView: View {
     // SWIFT CONCEPT — @Environment(\.dismiss) gives any view the ability to close itself
     // when it's presented as a sheet or navigation push. It's like calling
     // router.back() or closing a modal in React — no prop drilling needed.
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.dismiss) private var dismiss
     @State private var vm = FoodLoggingViewModel()
     @State private var searchVM = FoodSearchViewModel()
@@ -23,7 +26,7 @@ struct FoodLoggingView: View {
     private var compactInput: Bool { (vm.selectedTab == .search && searchIsFocused) || (vm.selectedTab == .talk && talkIsFocused) }
     @State private var talkVM = TalkToLogViewModel()
     @State private var favoritesVM = FavoritesViewModel()
-    @State private var showManualEntry = false
+    @State private var showManualEntry = ProcessInfo.processInfo.arguments.contains("--manual-layout-preview")
     @State private var saved = false
     @State private var undo = FoodSaveUndo()
     @State private var familiar: [FoodLog] = []
@@ -40,6 +43,11 @@ struct FoodLoggingView: View {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--log-preview") {
             _vm = State(initialValue: FoodLoggingViewModel(selectedTab: ProcessInfo.processInfo.arguments.contains("--search-preview") ? .search : .talk))
+            if ProcessInfo.processInfo.arguments.contains("--scan-preview") || ProcessInfo.processInfo.arguments.contains("--scan-denied-preview") {
+                _vm = State(initialValue: FoodLoggingViewModel(selectedTab: .scan))
+            } else if ProcessInfo.processInfo.arguments.contains("--favorites-preview") {
+                _vm = State(initialValue: FoodLoggingViewModel(selectedTab: .favorites))
+            }
             if ProcessInfo.processInfo.arguments.contains("--search-preview") {
                 let search = FoodSearchViewModel()
                 search.searchQuery = "Kodiak"
@@ -58,6 +66,9 @@ struct FoodLoggingView: View {
                 let context = FoodLoggingContext(); context.acceptDetected(.init(name: "Chipotle"))
                 _foodContext = State(initialValue: context)
             }
+            if ProcessInfo.processInfo.arguments.contains("--confirmation-preview") {
+                preview.rows = AppStoreScreenshotPreview.foodModel().rows
+            }
             _talkVM = State(initialValue: preview)
         }
         if AppStoreScreenshotMode.active {
@@ -67,87 +78,34 @@ struct FoodLoggingView: View {
     }
 
     var body: some View {
-        VStack(spacing: compactInput ? 8 : 14) {
-            Capsule()
-                .fill(Theme.Colors.hairline)
-                .frame(width: 40, height: 5)
-                .padding(.top, 8)
+        GeometryReader { geometry in
+            loggerContent(compactHeight: geometry.size.height < 400, expanded: geometry.size.width >= 700 && typeSize < .xxxLarge)
+        }
+    }
 
-            LogSheetHeader(meal: $vm.selectedMeal, onClose: { dismiss() }, compact: compactInput)
-
-            if saved {
-                VStack(spacing: 16) {
-                    Image(systemName: "checkmark.circle").font(.system(size: 36)).foregroundStyle(Theme.Colors.primaryText)
-                    Text(selectedDate.isToday ? "Saved for today" : "Saved for \(selectedDate.formatted(date: .abbreviated, time: .omitted))")
-                        .font(Theme.Fonts.display(26, .bold, relativeTo: .title2))
-                    if let note = undo.note, MealNoteStore.shared.isPending(note.id) {
-                        Text("Saved on this phone · Waiting to sync").font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                    if returning { Text("No need to fill in previous days.").font(Theme.Fonts.body(16)) }
-                    if !undo.savedFoods.isEmpty {
-                        Button("Save as a usual meal") { showSaveUsual = true }.frame(minHeight: 44).disabled(undo.isUndoing)
-                    }
-                    if undo.canUndo {
-                        Button(undo.isUndoing ? "Undoing…" : "Undo") {
-                            Task { if await undo.undo() { talkVM.reset(); foodContext.reset(); searchVM.resetQuickLogState(); saved = false } }
-                        }.frame(minHeight: 44).disabled(undo.isUndoing)
-                    }
-                    if let error = undo.error { Text(error).foregroundStyle(Theme.Colors.danger) }
-                    Button("Done") { dismiss() }.buttonStyle(.brandPrimary).disabled(undo.isUndoing)
-                    if let restaurant = foodContext.restaurant {
-                        Button("Add more from \(restaurant.name)") {
-                            undo.reset(); talkVM.reset(); foodContext.reset(keepRestaurant: true)
-                            searchVM.resetQuickLogState(); saved = false
-                        }.font(Theme.Fonts.body(16, .semibold)).frame(minHeight: 44)
-                    }
-                    Button("Add something else") { undo.reset(); talkVM.reset(); foodContext.reset(); searchVM.resetQuickLogState(); saved = false }
-                        .disabled(undo.isUndoing)
-                        .font(Theme.Fonts.body(16, .semibold)).frame(minHeight: 44)
-                }.padding(Theme.Spacing.md).frame(maxHeight: .infinity)
-            } else {
-            if !compactInput {
-            Button { showMealNote = true } label: {
-                Label("Just leave a meal note", systemImage: "square.and.pencil")
-                    .font(Theme.Fonts.body(15, .semibold)).frame(minHeight: 44)
-            }
-            LogTabBar(selection: $vm.selectedTab)
-            }
-            if vm.selectedTab == .talk || vm.selectedTab == .search {
-                RestaurantContextBar(context: foodContext,
-                    locked: talkVM.hasSavedRows || talkVM.isLogging || searchVM.isLogging || searchVM.quickLoggingID != nil,
-                    onOpen: {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        showRestaurantPicker = true
-                    })
-            }
-
+    private func loggerContent(compactHeight: Bool, expanded: Bool) -> some View {
+        let layout = expanded
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
+            : AnyLayout(VStackLayout(spacing: compactInput ? 8 : 14))
+        return layout {
             Group {
-                switch vm.selectedTab {
-                case .talk:
-                    TalkToLogView(vm: talkVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: { source in
-                        handleLogged(source, keepOpen: false)
-                    }, familiarFoods: familiar, onSelectFamiliar: { reviewFood = $0 }, onFocusChanged: { talkIsFocused = $0 })
-                case .search:
-                    FoodSearchView(
-                        vm: searchVM, date: selectedDate, headerMeal: vm.selectedMeal,
-                        onLogged: handleLogged,
-                        onEnterManually: { showManualEntry = true },
-                        onFocusChanged: { searchIsFocused = $0 }
-                    )
-                case .scan:
-                    BarcodeScanView(vm: searchVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: { source in
-                        handleLogged(source, keepOpen: false)
-                    })
-                case .favorites:
-                    FavoritesView(vm: favoritesVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: handleLogged)
+                if expanded {
+                    ScrollView { loggerControls(expanded: true, compactHeight: compactHeight) }
+                        .scrollDismissesKeyboard(.immediately)
+                        .frame(width: 220)
+                        .overlay(alignment: .trailing) { Rectangle().fill(Theme.Colors.hairline).frame(width: 1) }
+                } else {
+                    loggerControls(expanded: false, compactHeight: compactHeight)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            loggerWorkspace(expanded: expanded, compactHeight: compactHeight)
+                .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         }
         .environment(\.foodSaveUndo, undo)
         .padding(.horizontal, Theme.Spacing.page)
+        .padding(.top, verticalSizeClass == .compact ? 8 : 0)
         .padding(.bottom, 8)
+        .daylightReadableWidth(expanded ? 1100 : 720)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Colors.ground.ignoresSafeArea())
         .tint(Theme.Colors.primary)
@@ -226,6 +184,96 @@ struct FoodLoggingView: View {
             searchVM.restaurantName = foodContext.restaurant?.name
             if !AppStoreScreenshotMode.active {
                 Telemetry.logIntentStarted(source: vm.selectedTab.telemetrySource)
+            }
+        }
+    }
+
+    private func loggerControls(expanded: Bool, compactHeight: Bool) -> some View {
+        VStack(alignment: .leading, spacing: expanded || compactInput ? 8 : 14) {
+            if !expanded && verticalSizeClass != .compact && !(compactInput && compactHeight) {
+                Capsule().fill(Theme.Colors.hairline).frame(width: 40, height: 5)
+                    .frame(maxWidth: .infinity).padding(.top, 8)
+            }
+            LogSheetHeader(meal: $vm.selectedMeal, onClose: { dismiss() }, compact: !expanded && (compactInput || compactHeight))
+                .layoutPriority(1)
+            if expanded && !selectedDate.isToday {
+                Text(selectedDate.formatted(date: .abbreviated, time: .omitted))
+                    .font(Theme.Fonts.body(13, .semibold)).foregroundStyle(Theme.Colors.textSecondary)
+            }
+            if !saved {
+                if expanded || !compactInput {
+                    LogTabBar(selection: $vm.selectedTab, vertical: expanded)
+                    Button { showMealNote = true } label: {
+                        Label("Just leave a meal note", systemImage: "square.and.pencil")
+                            .font(Theme.Fonts.body(15, .semibold)).frame(minHeight: 44)
+                    }
+                }
+                if (vm.selectedTab == .talk || vm.selectedTab == .search) && (expanded || !(compactInput && compactHeight)) {
+                    RestaurantContextBar(context: foodContext,
+                        locked: talkVM.hasSavedRows || talkVM.isLogging || searchVM.isLogging || searchVM.quickLoggingID != nil,
+                        onOpen: {
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                            showRestaurantPicker = true
+                        })
+                }
+            }
+        }
+        .padding(.trailing, expanded ? 12 : 0)
+    }
+
+    @ViewBuilder private func loggerWorkspace(expanded: Bool, compactHeight: Bool) -> some View {
+        if saved {
+            ScrollView {
+                VStack(spacing: 16) {
+                    Image(systemName: "checkmark.circle").font(.system(size: 36)).foregroundStyle(Theme.Colors.primaryText)
+                    Text(selectedDate.isToday ? "Saved for today" : "Saved for \(selectedDate.formatted(date: .abbreviated, time: .omitted))")
+                        .font(Theme.Fonts.display(26, .bold, relativeTo: .title2))
+                    if let note = undo.note, MealNoteStore.shared.isPending(note.id) {
+                        Text("Saved on this phone · Waiting to sync").font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                    if returning { Text("No need to fill in previous days.").font(Theme.Fonts.body(16)) }
+                    if !undo.savedFoods.isEmpty {
+                        Button("Save as a usual meal") { showSaveUsual = true }.frame(minHeight: 44).disabled(undo.isUndoing)
+                    }
+                    if undo.canUndo {
+                        Button(undo.isUndoing ? "Undoing…" : "Undo") {
+                            Task { if await undo.undo() { talkVM.reset(); foodContext.reset(); searchVM.resetQuickLogState(); saved = false } }
+                        }.frame(minHeight: 44).disabled(undo.isUndoing)
+                    }
+                    if let error = undo.error { Text(error).foregroundStyle(Theme.Colors.danger) }
+                    Button("Done") { dismiss() }.buttonStyle(.brandPrimary).disabled(undo.isUndoing)
+                    if let restaurant = foodContext.restaurant {
+                        Button("Add more from \(restaurant.name)") {
+                            undo.reset(); talkVM.reset(); foodContext.reset(keepRestaurant: true)
+                            searchVM.resetQuickLogState(); saved = false
+                        }.font(Theme.Fonts.body(16, .semibold)).frame(minHeight: 44)
+                    }
+                    Button("Add something else") { undo.reset(); talkVM.reset(); foodContext.reset(); searchVM.resetQuickLogState(); saved = false }
+                        .disabled(undo.isUndoing)
+                        .font(Theme.Fonts.body(16, .semibold)).frame(minHeight: 44)
+                }.padding(Theme.Spacing.md)
+            }
+        } else {
+            Group {
+                switch vm.selectedTab {
+                case .talk:
+                    TalkToLogView(vm: talkVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: { source in
+                        handleLogged(source, keepOpen: false)
+                    }, familiarFoods: familiar, onSelectFamiliar: { reviewFood = $0 }, onFocusChanged: { talkIsFocused = $0 }, expanded: expanded)
+                case .search:
+                    FoodSearchView(
+                        vm: searchVM, date: selectedDate, headerMeal: vm.selectedMeal,
+                        onLogged: handleLogged,
+                        onEnterManually: { showManualEntry = true },
+                        onFocusChanged: { searchIsFocused = $0 }, compactHeight: compactHeight
+                    )
+                case .scan:
+                    BarcodeScanView(vm: searchVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: { source in
+                        handleLogged(source, keepOpen: false)
+                    })
+                case .favorites:
+                    FavoritesView(vm: favoritesVM, date: selectedDate, headerMeal: vm.selectedMeal, onLogged: handleLogged)
+                }
             }
         }
     }

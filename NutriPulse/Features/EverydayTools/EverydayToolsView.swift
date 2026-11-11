@@ -125,6 +125,7 @@ struct EverydayToolsView: View {
                 }.font(Theme.Fonts.body(16)).padding(Theme.Spacing.page)
             }.scrollDismissesKeyboard(.interactively)
         }
+        .daylightReadableWidth()
         .background(Theme.Colors.ground).foregroundStyle(Theme.Colors.textPrimary).tint(Theme.Colors.primary)
         .interactiveDismissDisabled(busy)
             .onAppear {
@@ -135,6 +136,8 @@ struct EverydayToolsView: View {
                     PulseMemoryStore.shared.preview()
                     PulseProfileStore.shared.setForPreview(preferences: .init(), enabled: true)
                     let args = ProcessInfo.processInfo.arguments
+                    if args.contains("--tools-data") { showDataInfo = true }
+                    if args.contains("--tools-memories") { showMemories = true }
                     if args.contains("--tools-experiment") { tab = .experiments }
                     if args.contains("--tools-library") { tab = .library; when = "Travel mornings"; helped = "A familiar cold breakfast made eating easier" }
                     if args.contains("--tools-leftovers") { tab = .leftovers }
@@ -173,7 +176,7 @@ struct EverydayToolsView: View {
                     VStack(spacing: 20) {
                         SheetHeader(title: "Saved memories", onClose: { showMemories = false })
                         PulseMemoriesSection()
-                    }.padding(Theme.Spacing.page)
+                    }.padding(Theme.Spacing.page).daylightReadableWidth()
                 }.background(Theme.Colors.ground)
             }
             .sheet(isPresented: $showDataInfo) {
@@ -184,7 +187,7 @@ struct EverydayToolsView: View {
                         Text("Examples only fill an editable draft. They don’t start an experiment, save a memory or send anything to Pulse.")
                         Text("Leftovers add a meal note and a reminder in this app. They don’t schedule a notification or estimate nutrition. Removing a reminder leaves the day notes intact; edit or delete those on Today.")
                         Text("You review and approve memories separately. You can edit or forget them later. Forgetting a memory doesn’t erase past conversations.")
-                    }.font(Theme.Fonts.body(16)).padding(Theme.Spacing.page)
+                    }.font(Theme.Fonts.body(16)).padding(Theme.Spacing.page).daylightReadableWidth()
                 }.background(Theme.Colors.ground)
             }
             .sheet(isPresented: Binding(get: { proposedMemory != nil }, set: { if !$0 { proposedMemory = nil } })) {

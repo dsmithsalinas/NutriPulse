@@ -4,6 +4,7 @@ import SwiftUI
 // last 72 hours" grouped by day. Every "+" logs straight to the header meal; the star on a
 // Recents row favorites that food (which then drops out of Recents).
 struct FavoritesView: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.foodSaveUndo) private var undo
     @Bindable var vm: FavoritesViewModel
     let date: Date
@@ -12,7 +13,9 @@ struct FavoritesView: View {
 
     @State private var reviewFood: FoodLog?
 
-    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    private var columns: [GridItem] {
+        typeSize >= .xxxLarge ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 160), spacing: 10)]
+    }
 
     var body: some View {
         ScrollView {
@@ -33,11 +36,11 @@ struct FavoritesView: View {
                         favoritesGrid
                     }
                     if !vm.recentSections.isEmpty {
-                        HStack(alignment: .firstTextBaseline) {
+                        (typeSize >= .xxxLarge ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4)) : AnyLayout(HStackLayout(alignment: .firstTextBaseline))) {
                             Text("Recents")
                                 .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
                                 .foregroundStyle(Theme.Colors.textPrimary)
-                            Spacer(minLength: 0)
+                            if typeSize < .xxxLarge { Spacer(minLength: 0) }
                             Text("Familiar foods")
                                 .font(Theme.Fonts.body(13, .semibold))
                                 .foregroundStyle(Theme.Colors.textSecondary)
@@ -99,6 +102,7 @@ struct FavoritesView: View {
 // MARK: - Favorite grid tile
 
 private struct FavoriteTile: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let fav: FavoriteQuickAdd
     let onLog: () async -> Void
 
@@ -110,7 +114,7 @@ private struct FavoriteTile: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(fav.name)
                     .font(Theme.Fonts.body(14, .bold))
-                    .lineLimit(2)
+                    .lineLimit(typeSize >= .xxxLarge ? nil : 3)
                 Spacer(minLength: 0)
                 Text("\(Int((fav.proteinGSnapshot * fav.quantity).rounded()))g")
                     .font(Theme.Fonts.display(22, .extraBold, relativeTo: .title2))
@@ -137,7 +141,7 @@ private struct FavoriteTile: View {
                 }
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
+                .frame(width: 44, height: 44)
                 .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .frame(width: 44, height: 44)
@@ -147,7 +151,8 @@ private struct FavoriteTile: View {
             .accessibilityLabel(didLog ? "\(fav.name) added to log" : "Log \(fav.name)")
         }
         .padding(12)
-        .frame(height: 96, alignment: .topLeading)
+        .frame(minHeight: 96, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
         .tile(radius: Theme.Radius.tileSmall, padding: 0)
     }
 }
@@ -155,6 +160,7 @@ private struct FavoriteTile: View {
 // MARK: - Recents row
 
 private struct RecentRow: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     let log: FoodLog
     let onStar: () async -> Void
     let onLogAgain: () async -> Void
@@ -169,7 +175,7 @@ private struct RecentRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(log.displayName)
                     .font(Theme.Fonts.body(14, .bold))
-                    .lineLimit(1)
+                    .lineLimit(typeSize >= .xxxLarge ? nil : 2)
                 Text(detailLine)
                     .font(Theme.Fonts.body(12))
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -196,7 +202,7 @@ private struct RecentRow: View {
                     }
                 }
                 .foregroundStyle(starred ? Color.yellow : Theme.Colors.textSecondary)
-                .frame(width: 40, height: 40)
+                .frame(width: 44, height: 44)
                 .background(starred ? Color.yellow.opacity(0.18) : Theme.Colors.surfaceInset,
                             in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
@@ -226,7 +232,7 @@ private struct RecentRow: View {
                 }
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(Theme.Colors.primaryText)
-                .frame(width: 40, height: 40)
+                .frame(width: 44, height: 44)
                 .background(Theme.Colors.primarySoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .frame(width: 44, height: 44)

@@ -197,6 +197,7 @@ struct NarratedStepLayout<Content: View>: View {
                     .padding(.top, 8)
                     .padding(.bottom, 12)
             }
+            .daylightReadableWidth(600)
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)

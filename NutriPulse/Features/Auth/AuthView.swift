@@ -122,6 +122,7 @@ struct AuthView: View {
                 Spacer(minLength: 24)
             }
             .padding(.horizontal, Theme.Spacing.page)
+            .daylightReadableWidth()
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.Colors.ground.ignoresSafeArea())

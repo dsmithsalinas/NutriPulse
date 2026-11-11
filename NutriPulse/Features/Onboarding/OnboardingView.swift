@@ -28,7 +28,7 @@ struct OnboardingView: View {
                     Image(colorScheme == .dark ? "FootingWordmark-dark" : "FootingWordmark").resizable().scaledToFit().frame(width: 116, height: 44)
                         .accessibilityLabel("Footing")
                     if step == 0 { Spacer() }
-                }.padding(.horizontal, Theme.Spacing.page)
+                }.padding(.horizontal, Theme.Spacing.page).daylightReadableWidth(600)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         switch step {
@@ -40,6 +40,7 @@ struct OnboardingView: View {
                         }
                     }
                     .padding(Theme.Spacing.page)
+                    .daylightReadableWidth(600)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .frame(maxHeight: .infinity)
@@ -65,7 +66,7 @@ struct OnboardingView: View {
             }
             .sheet(isPresented: $editingFocus) {
                 NavigationStack {
-                    ScrollView { focusEditor.padding(Theme.Spacing.page) }
+                    ScrollView { focusEditor.padding(Theme.Spacing.page).daylightReadableWidth(600) }
                         .background(Theme.Colors.ground)
                         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { editingFocus = false } } }
                 }
@@ -221,6 +222,7 @@ struct OnboardingView: View {
             }
             .font(Theme.Fonts.body(16, .semibold))
             .padding(.horizontal, Theme.Spacing.page).padding(.vertical, 12)
+            .daylightReadableWidth(600)
             .background(Theme.Colors.ground)
         }
     }

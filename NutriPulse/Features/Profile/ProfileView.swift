@@ -53,9 +53,8 @@ struct ProfileView: View {
     // generic Profile/pulseTile type. A simulator's larger stack hid it.
     private var profileHighlights: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
-            header.popIn(order: 0)
             dailyTargetsTile.popIn(order: 1)
-            HStack(spacing: Theme.Spacing.tileGap) {
+            DaylightTileRow {
                 glp1QuickTile
                 healthQuickTile
             }.popIn(order: 2)
@@ -108,14 +107,18 @@ struct ProfileView: View {
     private var profileCanvas: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
-                AnyView(profileHighlights)
-                AnyView(profileCoaching)
-                AnyView(profileHealth)
-                AnyView(profileSupport)
+                header.popIn(order: 0)
+                DaylightDashboard(lanes: [0, 1, 0, 1], firstColumnFraction: 0.55) {
+                    AnyView(profileHighlights)
+                    AnyView(profileCoaching)
+                    AnyView(profileHealth)
+                    AnyView(profileSupport)
+                }
             }
             .padding(.horizontal, Theme.Spacing.page)
             .padding(.top, Theme.Spacing.sm)
             .padding(.bottom, Theme.Spacing.xl)
+            .daylightReadableWidth(1100)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .overlay(alignment: .top) {
@@ -1803,6 +1806,7 @@ private struct SmartNotificationExplainerSheet: View {
             }
             .padding(Theme.Spacing.page)
             .padding(.bottom, Theme.Spacing.lg)
+            .daylightReadableWidth()
         }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .interactiveDismissDisabled(isEnabling)
@@ -1826,3 +1830,18 @@ private struct SmartNotificationExplainerSheet: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+#if DEBUG
+struct ProfileAuditScreens: View {
+    let screen: String
+    @State private var vm = ProfileViewModel()
+    @ViewBuilder var body: some View {
+        switch screen {
+        case "profile-edit": EditProfileSheet(vm: vm)
+        case "targets-edit": EditGoalsSheet(vm: vm)
+        case "dose-edit": LogInjectionSheet(vm: vm)
+        default: SmartNotificationExplainerSheet(onEnable: {})
+        }
+    }
+}
+#endif

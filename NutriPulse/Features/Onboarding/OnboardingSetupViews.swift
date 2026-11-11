@@ -95,6 +95,7 @@ struct OnboardingTargetsView: View {
                 Button("Use calculated estimates") { vm.customGoals = nil; resetID = UUID() }
             }
         }
+        .daylightReadableWidth(600)
         .navigationTitle("Nutrition targets").navigationBarTitleDisplayMode(.inline)
     }
     private func target(_ label: String, keyPath: WritableKeyPath<CalculatedGoals, Double>) -> some View {

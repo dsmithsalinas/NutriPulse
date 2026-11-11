@@ -45,6 +45,7 @@ struct GLP1TrackerView: View {
                 coachCard
             }
             .padding(Theme.Spacing.page)
+            .daylightReadableWidth()
             .padding(.bottom, Theme.Spacing.xl)
         }
         .background(Theme.Colors.ground.ignoresSafeArea())

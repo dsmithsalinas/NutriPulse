@@ -23,7 +23,26 @@ final class FavoritesViewModel {
 
     var isEmpty: Bool { favorites.isEmpty && recentSections.isEmpty }
 
+    private var usesLayoutPreview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--log-preview") && (ProcessInfo.processInfo.arguments.contains("--favorites-preview") || ProcessInfo.processInfo.arguments.contains("--food-review-preview"))
+        #else
+        false
+        #endif
+    }
+
     func load() async {
+        #if DEBUG
+        if usesLayoutPreview {
+            favorites = [("Protein shake", 30.0), ("Greek yogurt, berries & granola", 24.0), ("Cottage cheese", 25.0), ("Salmon rice bowl", 36.0)].map { name, protein in
+                FavoriteQuickAdd(foodItemId: UUID(), name: name, brand: nil, servingDesc: "1 serving", quantity: 1,
+                                 caloriesSnapshot: 220, proteinGSnapshot: protein, carbsGSnapshot: 20, fatGSnapshot: 8, fiberGSnapshot: 3)
+            }
+            recentSections = [.init(id: "today", label: "Today", logs: Array(AppStoreScreenshotPreview.todayModel().foodLogs.suffix(2)))]
+            isLoading = false
+            return
+        }
+        #endif
         isLoading = true
         defer { isLoading = false }
         favorites = (try? await favRepo.fetchQuickAdds()) ?? []
@@ -53,6 +72,7 @@ final class FavoritesViewModel {
     // Writes local-first, same as every other logging path in this feature — see
     // FavoriteRepository.quickLog.
     func logFavorite(_ fav: FavoriteQuickAdd, meal: Meal, date: Date) async -> Bool {
+        guard !usesLayoutPreview else { return false }
         do {
             try await favRepo.quickLog(fav, on: date, meal: meal)
             return true
@@ -66,6 +86,7 @@ final class FavoritesViewModel {
     // a new id and today's timestamp — the food_item itself already exists, so there's nothing
     // to upsert.
     func logAgain(_ log: FoodLog, meal: Meal, date: Date, quantity: Double? = nil) async -> Bool {
+        guard !usesLayoutPreview else { return false }
         do {
             let userId = try await supabase.auth.session.user.id
             try LocalStore.shared.insertFoodLog(
@@ -94,6 +115,7 @@ final class FavoritesViewModel {
     // Starring a Recents row favorites it and — since Recents hides favorited foods — drops
     // it from the list; refreshing also picks it up in the favorites grid.
     func addToFavorites(_ log: FoodLog) async {
+        guard !usesLayoutPreview else { return }
         await FavoritesStore.shared.toggle(foodItemId: log.foodItemId)
         await load()
     }

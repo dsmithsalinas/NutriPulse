@@ -5,6 +5,7 @@ import SwiftUI
 // logging the parsed items would bring today's protein up to goal. The parse/confirm/save flow
 // itself is unchanged from before the redesign; only the chrome around it moved.
 struct TalkToLogView: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.foodSaveUndo) private var undo
     @Bindable var vm: TalkToLogViewModel
     let date: Date
@@ -13,6 +14,7 @@ struct TalkToLogView: View {
     var familiarFoods: [FoodLog] = []
     var onSelectFamiliar: (FoodLog) -> Void = { _ in }
     var onFocusChanged: (Bool) -> Void = { _ in }
+    var expanded = false
 
     @State private var dictation = DictationRecognizer()
     @State private var showFoodAIConsent = false
@@ -153,7 +155,8 @@ struct TalkToLogView: View {
     }
 
     private var micHero: some View {
-        VStack(spacing: 16) {
+        let layout = expanded ? AnyLayout(HStackLayout(spacing: 16)) : AnyLayout(VStackLayout(spacing: 16))
+        return layout {
             VStack(spacing: 4) {
                 Text("What did you have?")
                     .font(Theme.Fonts.display(22, .bold, relativeTo: .title2))
@@ -165,30 +168,34 @@ struct TalkToLogView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button {
-                dictationBase = vm.inputText.isEmpty ? "" : vm.inputText + " "
-                Task { await dictation.start() }
-            } label: {
-                ZStack {
-                    if !reduceMotion {
-                        MicPulseRing(color: Theme.Colors.heroLabel)
+            VStack(spacing: 8) {
+                Button {
+                    dictationBase = vm.inputText.isEmpty ? "" : vm.inputText + " "
+                    Task { await dictation.start() }
+                } label: {
+                    ZStack {
+                        if !reduceMotion && !expanded {
+                            MicPulseRing(color: Theme.Colors.heroLabel)
+                        }
+                        Circle()
+                            .fill(Theme.Colors.hero)
+                            .frame(width: 96, height: 96)
+                            .shadow(color: Theme.Colors.hero.opacity(0.45), radius: 14, y: 6)
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 32, weight: .semibold))
+                            .foregroundStyle(.white)
                     }
-                    Circle()
-                        .fill(Theme.Colors.hero)
-                        .frame(width: 96, height: 96)
-                        .shadow(color: Theme.Colors.hero.opacity(0.45), radius: 14, y: 6)
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 32, weight: .semibold))
-                        .foregroundStyle(.white)
+                    .frame(width: 96, height: 96)
+                    .contentShape(Circle())
                 }
-                .frame(width: 96, height: 96)
-            }
-            .buttonStyle(.pressable)
-            .accessibilityLabel("Talk to log your food")
+                .buttonStyle(.pressable)
+                .accessibilityLabel("Talk to log your food")
 
-            Text("Tap to talk")
-                .font(Theme.Fonts.body(14, .bold))
-                .foregroundStyle(Theme.Colors.heroSubtext)
+                Text("Tap to talk")
+                    .font(Theme.Fonts.body(14, .bold))
+                    .foregroundStyle(Theme.Colors.heroSubtext)
+            }
+            .padding(.horizontal, expanded ? 24 : 0)
         }
         .frame(maxWidth: .infinity)
         .tile(Theme.Colors.heroDeep, shadow: false)
@@ -302,9 +309,14 @@ struct TalkToLogView: View {
 
     private var parsedContent: some View {
         VStack(spacing: Theme.Spacing.sm) {
-            ForEach(Array($vm.rows.enumerated()), id: \.element.id) { index, $row in
-                ConfirmRowView(row: $row)
-                    .popIn(order: index)
+            Text("Review your food")
+                .font(Theme.Fonts.display(20, .bold, relativeTo: .title3))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            LazyVGrid(columns: typeSize >= .xxxLarge ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: expanded ? 220 : 300))], spacing: Theme.Spacing.sm) {
+                ForEach(Array($vm.rows.enumerated()), id: \.element.id) { index, $row in
+                    ConfirmRowView(row: $row)
+                        .popIn(order: index)
+                }
             }
 
             if vm.wouldClearProteinFloor && !TrackingPreferencesStore.shared.suppressesGoalPrompts {
@@ -323,6 +335,7 @@ struct TalkToLogView: View {
             correctionField
 
             Button("Start Over") { vm.reset(); vm.foodContext.reset() }
+                .frame(minHeight: 44)
                 .font(Theme.Fonts.body(13, .semibold))
                 .foregroundStyle(Theme.Colors.textSecondary)
                 .padding(.top, Theme.Spacing.xs)
@@ -365,6 +378,7 @@ struct TalkToLogView: View {
                 .onSubmit { vm.applyCorrection(); isTyping = false }
                 .font(Theme.Fonts.body(15)).focused($isTyping)
             Button("Apply") { vm.applyCorrection() }
+                .frame(minWidth: 44, minHeight: 44)
                 .font(Theme.Fonts.body(14, .bold))
                 .foregroundStyle(Theme.Colors.primaryText)
                 .disabled(vm.correctionText.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -403,7 +417,7 @@ struct TalkToLogView: View {
                 }
                 .font(Theme.Fonts.body(17, .bold))
                 .foregroundStyle(.white)
-                .frame(height: 56)
+                .frame(minHeight: 56)
                 .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .buttonStyle(.pressable)
                 .disabled(vm.isLogging || vm.pendingCount == 0 || vm.estimatesNeedConfirmation)
@@ -500,6 +514,8 @@ private struct ConfirmRowView: View {
                     .foregroundStyle(row.isSaved ? Theme.NutrientColor.fiber
                                      : row.isIncluded ? Theme.Colors.primary : Theme.Colors.textFaint)
             }
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
             .buttonStyle(.plain)
             .disabled(row.isSaved)
             .accessibilityLabel(row.isIncluded ? "Included — tap to remove \(row.name)" : "Excluded — tap to include \(row.name)")
@@ -507,7 +523,7 @@ private struct ConfirmRowView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.name)
                     .font(Theme.Fonts.body(15, .bold))
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 // "estimated" rides on the detail line: as a badge beside the name it wrapped
                 // ("estimat-ed") and squeezed the food name down to a few letters.
                 (Text(row.isSaved
@@ -525,12 +541,15 @@ private struct ConfirmRowView: View {
                 .font(Theme.Fonts.number(15).monospacedDigit())
                 .foregroundStyle(Theme.Colors.primaryText)
 
+        }
             if !row.isSaved {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("Servings").font(Theme.Fonts.body(13, .semibold)).fixedSize()
+                    Spacer(minLength: 0)
                     Text(row.quantity.formatted())
                         .font(Theme.Fonts.body(13, .semibold))
                         .monospacedDigit()
-                        .frame(width: 28, alignment: .trailing)
+                        .fixedSize()
                     Stepper(value: $row.quantity, in: 0.25...10, step: 0.25) {
                         EmptyView()
                     }
@@ -540,7 +559,6 @@ private struct ConfirmRowView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("\(row.quantity.formatted()) servings of \(row.name)")
             }
-        }
         if let kind = row.matchKind {
             Text(kind == "restaurant" ? "Restaurant match" : kind == "generic" ? "Generic database match · review carefully" : "Estimated · review before logging")
                 .font(Theme.Fonts.body(12, .semibold)).foregroundStyle(Theme.Colors.textSecondary)

@@ -9,6 +9,8 @@ struct CoachView: View {
     let isActive: Bool
     @Environment(AppState.self) private var appState
     @Environment(\.tabBarHeight) private var tabBarHeight
+    @Environment(\.usesNavigationRail) private var usesNavigationRail
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var vm = CoachViewModel()
     @State private var dictation = DictationRecognizer()
@@ -27,25 +29,14 @@ struct CoachView: View {
     // by it (with the keyboard up it also rides the keyboard and lands on the composer), so the
     // whole measured bar height is cleared by hand in both states.
     private var composerClearance: CGFloat {
-        max(tabBarHeight, 76) + (keyboardVisible ? 0 : 4)
+        usesNavigationRail ? 8 : max(tabBarHeight, 76) + (keyboardVisible ? 0 : 4)
     }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                Group {
-                    if inConversation {
-                        conversation
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                    } else {
-                        startScreen
-                            .transition(.move(edge: .leading).combined(with: .opacity))
-                    }
-                }
-                .frame(maxHeight: .infinity)
-
-                composer
-                    .padding(.bottom, composerClearance)
+            GeometryReader { geometry in
+                pulseCanvas(expanded: geometry.size.width >= 640 && !typeSize.isAccessibilitySize,
+                            short: geometry.size.height < 300)
             }
             .background(Theme.Colors.ground.ignoresSafeArea())
             // No navigation bar on either screen, so cover the status bar ourselves or scrolled
@@ -153,6 +144,78 @@ struct CoachView: View {
             Button("OK") { vm.error = nil }
         } message: {
             Text(vm.error ?? "")
+        }
+    }
+
+    // AnyLayout moves the same sidebar and workspace between columns and rows.
+    // The composer, focus binding and conversation model keep their identity on resize.
+    private func pulseCanvas(expanded: Bool, short: Bool) -> some View {
+        let layout = expanded
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 0))
+            : AnyLayout(VStackLayout(spacing: 0))
+        return layout {
+            startScreen(expanded: expanded)
+                .frame(width: expanded ? 240 : nil)
+                .frame(height: !expanded && inConversation ? 0 : nil)
+                .padding(.bottom, expanded ? composerClearance : 0)
+                .clipped()
+                .opacity(!expanded && inConversation ? 0 : 1)
+                .accessibilityHidden(!expanded && inConversation)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("pulseSuggestionsPane")
+                .overlay(alignment: .trailing) {
+                    if expanded { Rectangle().fill(Theme.Colors.hairline).frame(width: 1).padding(.bottom, composerClearance) }
+                }
+
+            VStack(spacing: 0) {
+                if inConversation {
+                    conversation
+                        .frame(maxHeight: .infinity)
+                } else if expanded {
+                    expandedWelcome(short: short)
+                        .frame(maxHeight: .infinity)
+                }
+                composer
+                    .padding(.bottom, composerClearance)
+            }
+            .frame(maxWidth: .infinity, maxHeight: expanded || inConversation ? .infinity : nil)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("pulseConversationPane")
+        }
+        .daylightReadableWidth(expanded ? 1100 : 720)
+    }
+
+    private func expandedWelcome(short: Bool) -> some View {
+        VStack(spacing: 0) {
+            pulseHeader(titleSize: 24, subtitle: nil) {
+                if !vm.messages.isEmpty {
+                    Button(action: resume) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                            .background(Theme.Colors.surfaceCard, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Past conversations")
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.top, 8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(vm.firstName.map { "What's on your mind, \($0)?" } ?? "What's on your mind?")
+                        .font(Theme.Fonts.display(26, .extraBold, relativeTo: .title))
+                        .foregroundStyle(Theme.Colors.textPrimary)
+                    if !short {
+                        Text("Pick a suggestion or ask a question.")
+                            .font(Theme.Fonts.body(15))
+                            .foregroundStyle(Theme.Colors.textSecondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Theme.Spacing.page)
+            }
+            .scrollDismissesKeyboard(.immediately)
         }
     }
 
@@ -278,58 +341,70 @@ struct CoachView: View {
 
     // MARK: - Start screen
 
-    private var startScreen: some View {
+    private func startScreen(expanded: Bool) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                pulseHeader(titleSize: 24, subtitle: nil) {
-                    if !vm.messages.isEmpty {
-                        Button(action: resume) {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(Theme.Colors.textPrimary)
-                                .frame(width: 44, height: 44)
-                                .background(Theme.Colors.surfaceCard, in: Circle())
+                if !expanded {
+                    pulseHeader(titleSize: 24, subtitle: nil) {
+                        if !vm.messages.isEmpty {
+                            Button(action: resume) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(Theme.Colors.textPrimary)
+                                    .frame(width: 44, height: 44)
+                                    .background(Theme.Colors.surfaceCard, in: Circle())
+                            }
+                            .buttonStyle(.pressable)
+                            .accessibilityLabel("Past conversations")
                         }
-                        .buttonStyle(.pressable)
-                        .accessibilityLabel("Past conversations")
                     }
-                }
-                .popIn(order: 0)
+                    .popIn(order: 0)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(vm.firstName.map { "What's on your mind, \($0)?" } ?? "What's on your mind?")
-                        .font(Theme.Fonts.display(32, .extraBold, relativeTo: .largeTitle))
-                        .foregroundStyle(Theme.Colors.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(vm.firstName.map { "What's on your mind, \($0)?" } ?? "What's on your mind?")
+                            .font(Theme.Fonts.display(32, .extraBold, relativeTo: .largeTitle))
+                            .foregroundStyle(Theme.Colors.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                    // Opens "What Pulse knows" — the one place to see and edit everything
-                    // Pulse has been told (docs/daylight-redesign.md, step 8).
+                        // Opens "What Pulse knows" — the one place to see and edit everything
+                        // Pulse has been told (docs/daylight-redesign.md, step 8).
+                        Button { showAboutYou = true } label: {
+                            // Stacked, not side by side: beside the line, the link squeezed it onto two.
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(canSeeLine)
+                                    .font(Theme.Fonts.body(15))
+                                    .foregroundStyle(Theme.Colors.textSecondary)
+                                Text("What I know about you ›")
+                                    .font(Theme.Fonts.body(14, .semibold))
+                                    .foregroundStyle(Theme.Colors.primaryText)
+                            }
+                            .multilineTextAlignment(.leading)
+                            .frame(minHeight: 44, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("What Pulse knows about you")
+                        .accessibilityHint("\(canSeeLine) Opens what Pulse knows, to review or change it.")
+                    }
+                    .padding(.top, 6)
+                    .popIn(order: 1)
+
+                } else {
+                    sectionLabel("Explore with Pulse")
                     Button { showAboutYou = true } label: {
-                        // Stacked, not side by side: beside the line, the link squeezed it onto two.
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(canSeeLine)
-                                .font(Theme.Fonts.body(15))
-                                .foregroundStyle(Theme.Colors.textSecondary)
-                            Text("What I know about you ›")
-                                .font(Theme.Fonts.body(14, .semibold))
-                                .foregroundStyle(Theme.Colors.primaryText)
-                        }
-                        .multilineTextAlignment(.leading)
-                        .frame(minHeight: 44, alignment: .leading)
+                        Text("What Pulse knows about you ›")
+                            .font(Theme.Fonts.body(14, .semibold))
+                            .foregroundStyle(Theme.Colors.primaryText)
+                            .frame(minHeight: 44, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
                     .accessibilityLabel("What Pulse knows about you")
-                    .accessibilityHint("\(canSeeLine) Opens what Pulse knows, to review or change it.")
                 }
-                .padding(.top, 6)
-                .popIn(order: 1)
 
                 healthSummaryCards
 
                 if !vm.startSuggestions.isEmpty {
                     sectionLabel("Suggested for right now")
                         .popIn(order: 2)
-                    suggestionGrid
+                    suggestionGrid(expanded: expanded)
                 }
 
                 sectionLabel("Or talk about")
@@ -406,7 +481,7 @@ struct CoachView: View {
     }
 
     // One tile spans the full width when there are one or three; two sit side by side.
-    private var suggestionGrid: some View {
+    private func suggestionGrid(expanded: Bool) -> some View {
         let tiles = vm.startSuggestions
         let wideFirst = tiles.count != 2
         let rest = wideFirst ? Array(tiles.dropFirst()) : tiles
@@ -416,7 +491,8 @@ struct CoachView: View {
                     .popIn(order: 2)
             }
             if !rest.isEmpty {
-                HStack(spacing: 10) {
+                let layout = expanded ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
+                layout {
                     ForEach(Array(rest.enumerated()), id: \.element.id) { index, tile in
                         suggestionTile(tile, wide: false)
                             .popIn(order: 3 + index)

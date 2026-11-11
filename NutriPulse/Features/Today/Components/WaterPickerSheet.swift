@@ -13,6 +13,7 @@ struct WaterPickerSheet: View {
     var loadHistory: () -> [WaterLog] = { [] }
     @State private var history: [WaterLog] = []
 
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.dismiss) private var dismiss
     @State private var customAmount: Double = 0
     @State private var lastAdd: (id: UUID, ml: Double)?
@@ -35,12 +36,14 @@ struct WaterPickerSheet: View {
     }
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 14) {
             SheetHeader(title: "Add water", onClose: { dismiss() })
 
             summary
 
-            HStack(spacing: 10) {
+            let presetLayout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
+            presetLayout {
                 ForEach(presets, id: \.label) { preset in
                     presetButton(preset)
                 }
@@ -79,11 +82,15 @@ struct WaterPickerSheet: View {
                         }
                     }
                 }
+                .frame(height: min(CGFloat(history.count) * 44, 220))
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Theme.Spacing.page)
         .padding(.top, 20)
+        .padding(.bottom, 20)
+        .daylightReadableWidth()
+        }
         .background(Theme.Colors.ground.ignoresSafeArea())
         .presentationDetents([.height(560), .large])
         .presentationDragIndicator(.visible)

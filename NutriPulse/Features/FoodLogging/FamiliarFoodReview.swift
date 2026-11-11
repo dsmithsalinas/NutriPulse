@@ -17,14 +17,23 @@ struct FamiliarFoodReview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             SheetHeader(title: "Review your food", onClose: { dismiss() })
-            Text(food.displayName).font(Theme.Fonts.display(24, .bold, relativeTo: .title2))
-            Text("Last logged \(food.logDate). Adding to \(meal.displayName.lowercased()) on \(date.formatted(date: .abbreviated, time: .omitted)).")
-                .font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
-            Text(food.foodItems?.servingDesc ?? "1 serving").font(Theme.Fonts.body(16))
-            Stepper("\(quantity.formatted()) servings", value: $quantity, in: 0.25...20, step: 0.25)
-            Text("\(Int((food.caloriesSnapshot * quantity).rounded())) kcal · \(Int((food.proteinGSnapshot * quantity).rounded()))g protein")
-                .font(Theme.Fonts.body(15)).foregroundStyle(Theme.Colors.textSecondary)
-            if let error { Text(error).foregroundStyle(Theme.Colors.danger) }
+            ScrollView {
+                DaylightDashboard {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                        Text(food.displayName).font(Theme.Fonts.display(24, .bold, relativeTo: .title2))
+                        Text("Last logged \(food.logDate). Adding to \(meal.displayName.lowercased()) on \(date.formatted(date: .abbreviated, time: .omitted)).")
+                            .font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+                        Text(food.foodItems?.servingDesc ?? "1 serving").font(Theme.Fonts.body(16))
+                        Stepper("\(quantity.formatted()) servings", value: $quantity, in: 0.25...20, step: 0.25)
+                            .accessibilityIdentifier("familiarQuantity")
+                        Text("\(Int((food.caloriesSnapshot * quantity).rounded())) kcal · \(Int((food.proteinGSnapshot * quantity).rounded()))g protein")
+                            .font(Theme.Fonts.body(15)).foregroundStyle(Theme.Colors.textSecondary)
+                        if let error { Text(error).foregroundStyle(Theme.Colors.danger) }
+                    }.tile()
+                }.padding(.vertical, 4)
+            }
             Button(saving ? "Saving…" : "Save for this day") {
                 saving = true
                 Task {
@@ -35,8 +44,7 @@ struct FamiliarFoodReview: View {
                     saving = false
                 }
             }.buttonStyle(.brandPrimary).disabled(saving)
-            Spacer()
-        }.padding(Theme.Spacing.page).background(Theme.Colors.ground)
+        }.padding(Theme.Spacing.page).daylightReadableWidth(1100).background(Theme.Colors.ground)
             .interactiveDismissDisabled(saving).presentationDetents([.medium, .large])
     }
 }
