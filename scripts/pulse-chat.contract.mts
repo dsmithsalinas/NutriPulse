@@ -7,7 +7,8 @@ import { runInNewContext } from 'node:vm';
 // Runs coach-chat with its shared modules against a stubbed model, like strong-week.contract.mts.
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/^import .*\n/gm, '').replace(/export /g, '');
 const fullSource = read('../supabase/functions/_shared/pulse-context.ts') + '\n' +
-  read('../supabase/functions/_shared/pulse-provider.ts') + '\n' + read('../supabase/functions/coach-chat/index.ts');
+  read('../supabase/functions/_shared/pulse-provider.ts') + '\n' +
+  read('../supabase/functions/_shared/ai-consent.ts') + '\n' + read('../supabase/functions/coach-chat/index.ts');
 
 async function send(body: Record<string, unknown>, modelResponse: unknown, env: Record<string, string> = {}, settings?: Record<string, unknown> | null, tracking?: Record<string, unknown> | null, memoryRows?: unknown[], owner = 'test-user', breakfastRows?: unknown[]) {
   let handler: any, modelRequest: any;
@@ -15,11 +16,14 @@ async function send(body: Record<string, unknown>, modelResponse: unknown, env: 
     Deno: { env: { get: (key: string) => key in env ? env[key] : key === 'ANTHROPIC_API_KEY' ? 'test-key' : undefined }, serve: (value: any) => { handler = value; } },
     createClient: () => ({
       auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
-      // pulse_profiles lookup; undefined settings = no from() at all (older stub), like a missing table.
-      ...(settings === undefined && tracking === undefined && memoryRows === undefined ? {} : { from: (table: string) => ({ select: () => {
-        const builder = { eq: (_key: string, value: string) => { assert.equal(value, owner); return builder; }, order: () => builder, limit: async () => ({ data: table === 'pulse_memories' ? memoryRows : table === 'breakfast_checkins' ? breakfastRows ?? [] : [], error: null }), maybeSingle: async () => ({ data: table === 'tracking_preferences' ? tracking ?? null : settings }) };
+      // Provider/context fixtures are explicitly consented; denial and lookup errors
+      // are exercised separately in ai-consent.contract.mts using the real helper.
+      from: (table: string) => ({ select: () => {
+        if ((table === 'tracking_preferences' && tracking === undefined) ||
+            (table === 'pulse_memories' && memoryRows === undefined)) throw new Error('fixture lookup unavailable');
+        const builder = { eq: (_key: string, value: string) => { assert.equal(value, owner); return builder; }, order: () => builder, limit: async () => ({ data: table === 'pulse_memories' ? memoryRows : table === 'breakfast_checkins' ? breakfastRows ?? [] : [], error: null }), maybeSingle: async () => ({ data: table === 'tracking_preferences' ? tracking ?? null : { user_id: owner, ai_consent_at: '2026-11-12T00:00:00Z', ...settings }, error: null }) };
         return builder;
-      } }) }),
+      } }),
     }),
     checkRateLimit: async () => true, corsHeaders: {}, Request, Response, AbortSignal, performance,
     fetch: async (_url: string, options: any) => { modelRequest = JSON.parse(options.body); return new Response(JSON.stringify(modelResponse), { status: 200 }); },
@@ -176,7 +180,7 @@ test('remember offers only new, valid facts, at most two', async () => {
   assert.deepEqual((await result.json()).remember, [{ kind: 'avoid', value: 'Cilantro' }, { kind: 'love', value: 'Cottage cheese' }]);
 });
 
-test('Pulse off refuses before any model call; on, unset, or unreadable settings go through', async () => {
+test('Pulse off refuses before any model call; consented enabled and legacy settings go through', async () => {
   const off = await send({ message: 'Hi', messageType: 'chat' }, reply('Hi.'), {}, { pulse_enabled: false });
   assert.equal(off.result.status, 403);
   assert.equal((await off.result.json()).code, 'pulse_off');
