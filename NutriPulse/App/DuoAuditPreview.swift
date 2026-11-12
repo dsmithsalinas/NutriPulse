@@ -8,6 +8,7 @@ struct DuoAuditPreview: View {
     @State private var profile = ProfileViewModel()
     init(screen: String) {
         self.screen = screen
+        if screen == "nutrition" { NutritionImportStore.shared.loadPreview() }
         if screen == "about-you" {
             PulseProfileStore.shared.setForPreview(preferences: .init(), enabled: true)
         }
@@ -18,6 +19,7 @@ struct DuoAuditPreview: View {
     }
     @ViewBuilder private var content: some View {
         switch screen {
+        case "nutrition": NutritionImportView()
         case "tools-data", "tools-memories", "tools-experiment", "tools-library", "tools-leftovers", "tools-decision": EverydayToolsView(userId: AppStoreScreenshotPreview.sampleUser, onAskPulse: { _ in })
         case "health-link": ExperimentHealthLinkEditor(save: { _ in })
         case "observation": ScrollView { ExperimentObservationEditor(experiment: .init(action: "Walk after lunch", outcome: "energy", startedOn: Date.now.isoDateString), save: { _ in }).padding(18).daylightReadableWidth() }

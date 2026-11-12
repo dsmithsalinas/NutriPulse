@@ -528,6 +528,9 @@ struct TodayView: View {
                     break
                 }
             }
+            .onChange(of: NutritionImportStore.shared.revision) { _, _ in
+                Task { await vm.loadData() }
+            }
             .onChange(of: SyncEngine.shared.lastSyncAt) { _, _ in
                 // `lastSyncAt` advances only after a full pull (foreground/reconnect), not
                 // after pushing a local mutation. Water already updates optimistically;
@@ -701,6 +704,12 @@ struct TodayView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
             TileEyebrow("Daily overview", color: Theme.Colors.textFaint)
                 .accessibilityAddTraits(.isHeader)
+            if !usesNavigationRail {
+                NutritionSourceSummary(day: vm.nutrition)
+            } else if !vm.nutrition.nutritionSources.isEmpty {
+                Text(NutritionMacro.allCases.compactMap { macro in vm.nutrition.nutritionSources[macro].map { "\(macro.title) · \($0) via Apple Health" } }.joined(separator: " · "))
+                    .font(Theme.Fonts.body(11)).foregroundStyle(Theme.Colors.textSecondary)
+            }
             if isLighterToday {
                 lighterTodayContent
             } else {
@@ -866,7 +875,8 @@ struct TodayView: View {
                 ProteinTile(
                     proteinG: vm.totalProteinG,
                     goalG: vm.dailyGoal?.proteinG,
-                    hasFoodLogs: !vm.foodLogs.isEmpty,
+                    hasFoodLogs: !vm.foodLogs.isEmpty || vm.nutrition.nutritionSources[.protein] != nil,
+                    unavailableMacros: vm.nutrition.unavailableMacros,
                     // Stay indigo until the moment can play to someone watching.
                     holdsClear: vm.isToday && (proteinCelebrationPending || proteinCelebrationInFlight),
                     celebration: proteinCelebrationTrigger
@@ -880,7 +890,8 @@ struct TodayView: View {
                         fatG: vm.totalFatG,
                         fiberG: vm.totalFiberG,
                         goal: vm.dailyGoal,
-                        hasFoodLogs: !vm.foodLogs.isEmpty
+                        hasFoodLogs: !vm.foodLogs.isEmpty || !vm.nutrition.nutritionSources.isEmpty,
+                        unavailableMacros: vm.nutrition.unavailableMacros
                     )
                     .popIn(order: 3)
                     if showsShotCycle, let cycleDay {

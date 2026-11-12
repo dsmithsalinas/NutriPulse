@@ -74,11 +74,20 @@ final class TodayViewModel {
         Dictionary(grouping: foodLogs, by: \.meal)
     }
 
-    var totalCalories: Double { foodLogs.reduce(0) { $0 + $1.totalCalories } }
-    var totalProteinG: Double { foodLogs.reduce(0) { $0 + $1.totalProteinG } }
-    var totalCarbsG:   Double { foodLogs.reduce(0) { $0 + $1.totalCarbsG   } }
-    var totalFatG:     Double { foodLogs.reduce(0) { $0 + $1.totalFatG     } }
-    var totalFiberG:   Double { foodLogs.reduce(0) { $0 + $1.totalFiberG   } }
+    var nutrition: DailySummary {
+        NutritionImportStore.shared.resolved(DailySummary(date: selectedDate,
+            calories: foodLogs.reduce(0) { $0 + $1.totalCalories },
+            proteinG: foodLogs.reduce(0) { $0 + $1.totalProteinG },
+            carbsG: foodLogs.reduce(0) { $0 + $1.totalCarbsG },
+            fatG: foodLogs.reduce(0) { $0 + $1.totalFatG },
+            fiberG: foodLogs.reduce(0) { $0 + $1.totalFiberG },
+            unavailableMacros: foodLogs.isEmpty ? Set(NutritionMacro.allCases) : []))
+    }
+    var totalCalories: Double { nutrition.calories }
+    var totalProteinG: Double { nutrition.proteinG }
+    var totalCarbsG: Double { nutrition.carbsG }
+    var totalFatG: Double { nutrition.fatG }
+    var totalFiberG: Double { nutrition.fiberG }
 
     var isToday: Bool { selectedDate.isToday }
 
@@ -108,7 +117,7 @@ final class TodayViewModel {
     }
 
     var recoveryOpportunity: RecoveryOpportunity? {
-        guard isToday, !TrackingPreferencesStore.shared.suppressesGoalPrompts, !foodLogs.isEmpty, !showsReturnExperience, strongWeekContext?.needsTailoredSuggestions != true else { return nil }
+        guard !nutrition.unavailableMacros.contains(.protein), isToday, !TrackingPreferencesStore.shared.suppressesGoalPrompts, !foodLogs.isEmpty, !showsReturnExperience, strongWeekContext?.needsTailoredSuggestions != true else { return nil }
         return RecoveryCoach.opportunity(
             workouts: workouts,
             goal: dailyGoal,
@@ -278,7 +287,7 @@ final class TodayViewModel {
     // Food entries may be partial. Offer a next-meal idea in the afternoon without
     // treating the diary's remaining target as confirmed under-eating. Empty days stay quiet.
     var nudge: DayNudge? {
-        guard !TrackingPreferencesStore.shared.suppressesGoalPrompts, strongWeekContext?.needsTailoredSuggestions != true, isToday, let goal = dailyGoal else { return nil }
+        guard !nutrition.unavailableMacros.contains(.protein), !nutrition.unavailableMacros.contains(.calories), !TrackingPreferencesStore.shared.suppressesGoalPrompts, strongWeekContext?.needsTailoredSuggestions != true, isToday, let goal = dailyGoal else { return nil }
         return Self.buildNudge(
             goal: goal,
             totalProteinG: totalProteinG,
@@ -350,6 +359,7 @@ final class TodayViewModel {
     // just today's totals against today's goal. See CelebrationEngine for the
     // richer, Coach-facing win detection (streaks, firsts).
     var allRingsClosed: Bool {
+        guard nutrition.unavailableMacros.isEmpty else { return false }
         guard let goal = dailyGoal else { return false }
         return goal.ringsClosed(
             calories: totalCalories,
@@ -448,6 +458,7 @@ final class TodayViewModel {
             errorMessage = error.localizedDescription
         }
 
+        await NutritionImportStore.shared.refresh(from: selectedDate, through: selectedDate)
         if isToday { await loadReturnHistory() }
 
         justClosedAllRings = !wasClosed && allRingsClosed
@@ -459,7 +470,8 @@ final class TodayViewModel {
                 proteinToday: totalProteinG,
                 proteinGoal: dailyGoal?.proteinG ?? 0,
                 updatedAt: .now,
-                showsDose: GLP1TrackingStore.shared.isTracking
+                showsDose: GLP1TrackingStore.shared.isTracking,
+                nutritionUnknown: nutrition.unavailableMacros.contains(.protein) && nutrition.nutritionSources[.protein] != nil
             ))
         }
 

@@ -20,6 +20,7 @@ struct MainTabView: View {
     private static func makeTodayViewModel() -> TodayViewModel {
         #if DEBUG
         if DebugLaunch.tour {
+            if DebugLaunch.has("--nutrition-preview") { NutritionImportStore.shared.loadPreview() }
             let vm = AppStoreScreenshotPreview.todayModel()
             if ProcessInfo.processInfo.arguments.contains("--return-preview") { vm.previewReturnExperience() }
             if ProcessInfo.processInfo.arguments.contains("--lighter-preview") { TrackingPreferencesStore.shared.preview() }

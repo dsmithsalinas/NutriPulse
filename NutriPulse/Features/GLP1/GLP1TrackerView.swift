@@ -179,7 +179,7 @@ struct GLP1TrackerView: View {
                 }
                 Spacer()
                 HStack(spacing: 4) {
-                    Text("\(Int(vm.proteinToday.rounded())) / \(Int(vm.proteinGoal.rounded()))g")
+                    Text(vm.proteinUnknown ? "No Health data" : "\(Int(vm.proteinToday.rounded())) / \(Int(vm.proteinGoal.rounded()))g")
                         .font(Theme.Fonts.number(15, .bold, relativeTo: .subheadline))
                         .foregroundStyle(Theme.Colors.textPrimary)
                     if vm.proteinCleared {

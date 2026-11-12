@@ -132,7 +132,7 @@ enum CycleAnalyticsEngine {
                 cycleDay: day,
                 sampleCount: max(nutrition.count, max(checks.count, water.count)),
                 averageProteinG: average(nutrition, \.proteinG),
-                averageCalories: average(nutrition, \.calories),
+                averageCalories: average(nutrition.filter(\.hasCalorieData), \.calories),
                 averageWaterMl: average(water, \.amountMl),
                 averageWorkoutMinutes: average(workouts, \.minutes),
                 averageAppetite: average(checks) { Double($0.appetite) },

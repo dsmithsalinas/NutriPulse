@@ -18,6 +18,7 @@ enum AnalyticsQuestion: String, CaseIterable, Identifiable {
 }
 
 struct AnalyticsView: View {
+    @Environment(\.scenePhase) private var scenePhase
     let embeddedInNavigation: Bool
     @State private var vm: AnalyticsViewModel
     // nil until the person taps a chip — `currentQuestion` resolves the default from data, so
@@ -119,6 +120,10 @@ struct AnalyticsView: View {
         .task(id: vm.selectedRange) {
             await vm.loadData()
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && NutritionImportStore.shared.isEnabled { Task { await vm.loadData() } }
+        }
+        .onChange(of: NutritionImportStore.shared.revision) { _, _ in Task { await vm.loadData() } }
         .tint(Theme.Colors.primary)
     }
 
@@ -197,13 +202,14 @@ struct AnalyticsView: View {
 
     private var proteinSourcesQuestion: some View {
         let sources = vm.proteinSources
-        let takeaway = ProteinSourceAggregator.headline(for: sources) ?? "Log a few meals and your top protein sources will show up here."
+        let importedProtein = NutritionImportStore.shared.selections[.protein]
+        let takeaway = importedProtein.map { "Protein totals come from \($0.name) via Apple Health. Individual foods may be unavailable." } ?? ProteinSourceAggregator.headline(for: sources) ?? "Log a few meals and your top protein sources will show up here."
         return AnalyticsQuestionCard(question: .proteinSources, takeaway: takeaway, askPrompt: askPrompt(.proteinSources)) {
             if sources.isEmpty {
                 BrandedEmptyState(
                     icon: "fork.knife",
-                    title: "No foods logged yet",
-                    message: "Log a few meals and your top protein sources will show up here."
+                    title: importedProtein == nil ? "No foods logged yet" : "Protein from Apple Health",
+                    message: takeaway
                 )
             } else {
                 ProteinSourcesChart(sources: sources, accessibilitySummary: takeaway)
@@ -233,13 +239,14 @@ struct AnalyticsView: View {
     }
 
     private var proteinCaloriesQuestion: some View {
-        let takeaway = NutritionSummaryTakeaway.build(
+        let hasBoth = vm.summaries.contains(where: \.hasCalorieData) && vm.summaries.contains(where: \.hasProteinData)
+        let takeaway = hasBoth ? NutritionSummaryTakeaway.build(
             loggedDayCount: vm.loggedDays.count,
             avgProtein: vm.averageProteinG,
             goalProtein: vm.goalProteinG,
             avgCalories: vm.averageCalories,
             goalCalories: vm.goalCalories
-        )
+        ) : "Some nutrition is unavailable. Only readable values are included; missing entries are not zero intake."
         return AnalyticsQuestionCard(question: .proteinCalories, takeaway: takeaway, askPrompt: askPrompt(.proteinCalories)) {
             if vm.loggedDays.isEmpty {
                 BrandedEmptyState(
@@ -253,7 +260,8 @@ struct AnalyticsView: View {
                         avgProtein:   vm.averageProteinG,
                         goalProtein:  vm.goalProteinG,
                         avgCalories:  vm.averageCalories,
-                        goalCalories: vm.goalCalories
+                        goalCalories: vm.goalCalories,
+                        caloriesKnown: vm.summaries.contains(where: \.hasCalorieData)
                     )
                     CaloriesChartContent(
                         summaries: vm.summaries,
@@ -364,6 +372,8 @@ private struct AnalyticsSummaryCard: View {
     let avgCalories: Double
     let goalCalories: Double?
 
+    var caloriesKnown = true
+
     private var proteinPct: Int? {
         guard let g = goalProtein, g > 0, avgProtein > 0 else { return nil }
         return Int((avgProtein / g * 100).rounded())
@@ -380,7 +390,7 @@ private struct AnalyticsSummaryCard: View {
             )
             tile(
                 title: "Avg calories",
-                value: Int(avgCalories.rounded()),
+                value: caloriesKnown ? Int(avgCalories.rounded()) : nil,
                 unit: nil,
                 sub: goalCalories.map { "Goal \(Int($0))" } ?? "No goal set",
                 valueColor: Theme.Colors.textPrimary
@@ -388,14 +398,17 @@ private struct AnalyticsSummaryCard: View {
         }
     }
 
-    private func tile(title: String, value: Int, unit: String?, sub: String, valueColor: Color) -> some View {
+    private func tile(title: String, value: Int?, unit: String?, sub: String, valueColor: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             TileEyebrow(title)
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 // CountingNumber owns the roll animation when the range changes (7 → 14 → 30
                 // days), so the tile doesn't need its own `.animation`.
-                CountingNumber(value: value, font: Theme.Fonts.number(30, .bold, relativeTo: .title))
-                    .foregroundStyle(valueColor)
+                if let value {
+                    CountingNumber(value: value, font: Theme.Fonts.number(30, .bold, relativeTo: .title)).foregroundStyle(valueColor)
+                } else {
+                    Text("—").font(Theme.Fonts.number(30, .bold, relativeTo: .title)).foregroundStyle(valueColor)
+                }
                 if let unit {
                     Text(unit)
                         .font(Theme.Fonts.display(18, relativeTo: .title3))
@@ -442,7 +455,7 @@ private struct CaloriesChartContent: View {
             }
 
             Chart {
-                ForEach(summaries) { day in
+                ForEach(summaries.filter(\.hasCalorieData)) { day in
                     BarMark(
                         x: .value("Date", day.date, unit: .day),
                         y: .value("kcal", day.calories)
@@ -500,11 +513,12 @@ private struct MacrosChartContent: View {
 
     private var chartData: [MacroPoint] {
         // Only include days where the user logged food
-        summaries.filter(\.hasData).flatMap { day in [
-            MacroPoint(date: day.date, macro: "Protein", value: day.proteinG),
-            MacroPoint(date: day.date, macro: "Carbs",   value: day.carbsG),
-            MacroPoint(date: day.date, macro: "Fat",     value: day.fatG),
-        ]}
+        summaries.flatMap { day in
+            [NutritionMacro.protein, .carbs, .fat].compactMap { macro -> MacroPoint? in
+                guard !day.unavailableMacros.contains(macro), day.hasData || day.nutritionSources[macro] != nil else { return nil }
+                return MacroPoint(date: day.date, macro: macro.title, value: macro.value(in: day))
+            }
+        }
     }
 
     var body: some View {

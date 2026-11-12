@@ -12,6 +12,7 @@ struct AnalyticsRepository {
         return try await fetchDailySummaries(from: startDate, through: today)
     }
 
+    @MainActor
     func fetchDailySummaries(from startDate: Date, through endDate: Date) async throws -> [DailySummary] {
         let cal = Calendar.current
         let startDate = cal.startOfDay(for: startDate)
@@ -49,17 +50,19 @@ struct AnalyticsRepository {
 
         let grouped = Dictionary(grouping: rows, by: \.logDate)
 
+        await NutritionImportStore.shared.refresh(from: startDate, through: endDate)
         return (0..<days).map { offset in
             let date = cal.date(byAdding: .day, value: offset, to: startDate)!
             let dayRows = grouped[date.isoDateString] ?? []
-            return DailySummary(
+            return NutritionImportStore.shared.resolved(DailySummary(
                 date: date,
                 calories: dayRows.reduce(0) { $0 + $1.caloriesSnapshot * $1.quantity },
                 proteinG: dayRows.reduce(0) { $0 + $1.proteinGSnapshot * $1.quantity },
                 carbsG:   dayRows.reduce(0) { $0 + $1.carbsGSnapshot   * $1.quantity },
                 fatG:     dayRows.reduce(0) { $0 + $1.fatGSnapshot      * $1.quantity },
-                fiberG:   dayRows.reduce(0) { $0 + $1.fiberGSnapshot    * $1.quantity }
-            )
+                fiberG:   dayRows.reduce(0) { $0 + $1.fiberGSnapshot    * $1.quantity },
+                unavailableMacros: dayRows.isEmpty ? Set(NutritionMacro.allCases) : []
+            ))
         }
     }
 

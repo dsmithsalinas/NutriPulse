@@ -22,6 +22,7 @@ struct ProfileView: View {
     @State private var isSeedingHealth = false
     @State private var isReconnectingHealth = false
     @State private var showHealthPermissionsHelp = false
+    @State private var showNutritionSources = false
     @State private var showSmartNotificationExplainer = false
     @State private var showPulseOffConfirm = false
     @State private var showAIDataSharingInfo = false
@@ -136,6 +137,7 @@ struct ProfileView: View {
                 await vm.loadData(profile: appState.profile)
             }
             .sheet(isPresented: $showLighterTracking) { LighterTrackingSheet() }
+            .sheet(isPresented: $showNutritionSources) { NutritionImportView() }
             .sheet(isPresented: $showMedications) { MedicationSettingsView() }
             .onReceive(NotificationCenter.default.publisher(for: .glp1DoseHistoryChanged)) { _ in
                 Task { await vm.loadData(profile: appState.profile) }
@@ -720,6 +722,8 @@ struct ProfileView: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(minHeight: 52)
+                hairline
+                actionRow(icon: "fork.knife", title: "Nutrition sources") { showNutritionSources = true }
                 hairline
                 actionRow(
                     icon: "arrow.clockwise",

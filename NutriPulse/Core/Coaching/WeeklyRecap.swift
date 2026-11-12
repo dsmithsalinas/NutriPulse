@@ -86,8 +86,8 @@ enum WeeklyRecapDigest {
         func floorHit(_ day: DailySummary) -> Bool? {
             day.proteinFloorHit(target: proteinGoal)
         }
-        func average(_ days: [DailySummary], _ value: (DailySummary) -> Double) -> Int? {
-            let logged = days.filter(\.hasData)
+        func average(_ days: [DailySummary], _ value: (DailySummary) -> Double, known: (DailySummary) -> Bool = { $0.hasData }) -> Int? {
+            let logged = days.filter(known)
             guard !logged.isEmpty else { return nil }
             return Int((logged.reduce(0) { $0 + value($1) } / Double(logged.count)).rounded())
         }
@@ -105,7 +105,7 @@ enum WeeklyRecapDigest {
             return .init(
                 day: dayFormatter.string(from: day.date),
                 logged: day.hasData,
-                calories: day.hasData ? Int(day.calories.rounded()) : nil,
+                calories: day.hasCalorieData ? Int(day.calories.rounded()) : nil,
                 proteinG: day.hasData ? Int(day.proteinG.rounded()) : nil,
                 proteinFloorHit: floorHit(day),
                 workoutMinutes: (minutes ?? 0) > 0 ? minutes : nil,
@@ -132,7 +132,7 @@ enum WeeklyRecapDigest {
             range: "\(rangeFormatter.string(from: interval.start)) – \(rangeFormatter.string(from: interval.end))",
             daysLogged: week.filter(\.hasData).count,
             proteinFloorDays: proteinGoal.map { _ in week.compactMap(floorHit).filter { $0 }.count },
-            avgCalories: average(week, \.calories),
+            avgCalories: average(week, \.calories, known: { $0.hasCalorieData }),
             avgProteinG: average(week, \.proteinG),
             workoutSessions: weekMovement.reduce(0) { $0 + $1.sessions },
             workoutMinutes: Int(weekMovement.reduce(0) { $0 + $1.minutes }.rounded()),

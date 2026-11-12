@@ -30,7 +30,13 @@ final class SmartNotificationCoordinator {
         guard let goal else { return }
 
         let logs = (try? LocalStore.shared.fetchFoodLogs(for: now, userId: userId)) ?? []
-        let protein = logs.reduce(0) { $0 + $1.totalProteinG }
+        NutritionImportStore.shared.setAccount(userId)
+        await NutritionImportStore.shared.refresh(from: now, through: now)
+        let nutrition = NutritionImportStore.shared.resolved(DailySummary(date: now,
+            calories: logs.reduce(0) { $0 + $1.totalCalories }, proteinG: logs.reduce(0) { $0 + $1.totalProteinG },
+            carbsG: 0, fatG: 0, fiberG: 0))
+        guard !nutrition.unavailableMacros.contains(.protein), !nutrition.unavailableMacros.contains(.calories) else { return }
+        let protein = nutrition.proteinG
         let water = (try? LocalStore.shared.fetchWaterTotal(for: now, userId: userId)) ?? 0
         guard let latest = (await workoutTask).max(by: { $0.startDate < $1.startDate }) else { return }
 
@@ -59,7 +65,7 @@ final class SmartNotificationCoordinator {
         let opportunity = SmartNotificationEngine.bestOpportunity(
             recovery: recovery,
             proteinGap: max(Int((goal.proteinG - protein).rounded()), 0),
-            calorieRoom: max(Int((goal.calories - logs.reduce(0) { $0 + $1.totalCalories }).rounded()), 0),
+            calorieRoom: max(Int((goal.calories - nutrition.calories).rounded()), 0),
             rescueOptions: [],
             repeatedMeal: nil,
             enabledKinds: preferences.enabledKinds,

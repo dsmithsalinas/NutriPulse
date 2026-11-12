@@ -36,7 +36,7 @@ struct StrongWeekEvidence: Encodable {
     static func nutrition(_ days: [DailySummary], expectedDays: Int, target: Double?) -> NutritionPeriod {
         let logged = days.filter { $0.hasData && $0.calories.isFinite && $0.proteinG.isFinite }
         return .init(expectedDays: expectedDays, loggedDays: logged.count,
-            averageLoggedCalories: average(logged.map(\.calories)),
+            averageLoggedCalories: average(logged.filter(\.hasCalorieData).map(\.calories)),
             averageLoggedProteinG: average(logged.map(\.proteinG)),
             daysAtCurrentProteinTarget: target.flatMap { threshold in
                 threshold > 0 ? logged.filter { $0.proteinG >= threshold }.count : nil

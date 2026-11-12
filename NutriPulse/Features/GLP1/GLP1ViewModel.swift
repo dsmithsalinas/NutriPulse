@@ -17,6 +17,7 @@ final class GLP1ViewModel {
     var doseSchedule: GLP1DoseSchedule { .init(latest: latest, skips: skippedDoses) }
     var scheduleError: String?
     var proteinToday: Double  = 0
+    var proteinUnknown = false
     var proteinGoal: Double   = 0
     var waterMl: Double       = 0
     var waterGoalMl: Double   = 2000
@@ -42,8 +43,12 @@ final class GLP1ViewModel {
         async let checkInTask = shotCycleRepo.fetchRecent()
 
         // Today's protein and water come from the local cache (instant, matches Today).
-        proteinToday = (try? LocalStore.shared.fetchFoodLogs(for: .now, userId: userId))?
-            .reduce(0) { $0 + $1.totalProteinG } ?? 0
+        let logs = (try? LocalStore.shared.fetchFoodLogs(for: .now, userId: userId)) ?? []
+        await NutritionImportStore.shared.refresh(from: .now, through: .now)
+        let nutrition = NutritionImportStore.shared.resolved(DailySummary(date: .now, calories: 0,
+            proteinG: logs.reduce(0) { $0 + $1.totalProteinG }, carbsG: 0, fatG: 0, fiberG: 0))
+        proteinToday = nutrition.proteinG
+        proteinUnknown = nutrition.unavailableMacros.contains(.protein)
         waterMl = (try? LocalStore.shared.fetchWaterTotal(for: .now, userId: userId)) ?? 0
 
         if let goal = try? LocalStore.shared.fetchGoal(for: .now, userId: userId) {

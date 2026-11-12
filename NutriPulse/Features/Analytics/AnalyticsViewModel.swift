@@ -67,8 +67,9 @@ final class AnalyticsViewModel {
     var loggedDays: [DailySummary] { summaries.filter(\.hasData) }
 
     var averageCalories: Double {
-        guard !loggedDays.isEmpty else { return 0 }
-        return loggedDays.reduce(0) { $0 + $1.calories } / Double(loggedDays.count)
+        let days = summaries.filter(\.hasCalorieData)
+        guard !days.isEmpty else { return 0 }
+        return days.reduce(0) { $0 + $1.calories } / Double(days.count)
     }
 
     var averageProteinG: Double {
@@ -101,7 +102,7 @@ final class AnalyticsViewModel {
     // MARK: - Question data
 
     var proteinSources: [ProteinSource] {
-        ProteinSourceAggregator.topSources(from: foodLogs)
+        NutritionImportStore.shared.selections[.protein] == nil ? ProteinSourceAggregator.topSources(from: foodLogs) : []
     }
 
     var doseChanges: [DoseChangeMark] {

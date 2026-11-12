@@ -16,6 +16,7 @@ private extension Theme.Colors {
 
 struct ProgressDashboardView: View {
     @State private var analytics = AnalyticsViewModel()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var goals = GoalsViewModel()
     @State private var selectedRange: ProgressRange = .month
     /// The range `analytics.summaries` actually holds. The picker moves first; the hero graphic
@@ -32,6 +33,10 @@ struct ProgressDashboardView: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
                     header
                         .popIn(order: 0)
+                    if NutritionImportStore.shared.isEnabled {
+                        Text("Nutrition uses your selected sources · Profile → Apple Health → Nutrition sources")
+                            .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+                    }
                     rangePicker
                         .popIn(order: 1)
 
@@ -92,6 +97,12 @@ struct ProgressDashboardView: View {
                 _ = await (analyticsLoad, previousLoad)
             }
             .task { await loadSupportingData() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active && NutritionImportStore.shared.isEnabled { Task { await loadAnalytics(); await loadPreviousPeriod() } }
+            }
+            .onChange(of: NutritionImportStore.shared.revision) { _, _ in
+                Task { await loadAnalytics(); await loadPreviousPeriod() }
+            }
             .sheet(isPresented: $showExperiments) {
                 ExperimentsView(activeGoals: goals.active)
             }

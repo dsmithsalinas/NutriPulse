@@ -10,6 +10,7 @@ struct ProteinTile: View {
     let proteinG: Double
     let goalG: Double?
     var hasFoodLogs: Bool = true
+    var unavailableMacros: Set<NutritionMacro> = []
     /// Keeps the tile indigo after protein crosses the floor, while Today waits to play the
     /// moment to a watching user (the logging sheet is usually still up).
     var holdsClear: Bool = false
@@ -30,6 +31,7 @@ struct ProteinTile: View {
     }
 
     private var status: String {
+        guard !unavailableMacros.contains(.protein) else { return "No Health data today" }
         guard hasFoodLogs else { return "No food logged today" }
         guard let remaining else { return "Protein logged" }
         return remaining > 0 ? "Logged · day not assessed" : "Floor cleared"
@@ -37,7 +39,7 @@ struct ProteinTile: View {
 
     /// Past the floor: the tile turns lime for the rest of the day, matching the widget.
     private var showsClear: Bool {
-        guard let remaining else { return false }
+        guard !unavailableMacros.contains(.protein), let remaining else { return false }
         return remaining <= 0 && !holdsClear
     }
 
@@ -70,7 +72,7 @@ struct ProteinTile: View {
             Spacer(minLength: 12)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    if hasFoodLogs {
+                    if hasFoodLogs && !unavailableMacros.contains(.protein) {
                         CountingNumber(value: Int(proteinG.rounded()), font: Theme.Fonts.number(60, relativeTo: .largeTitle))
                         Text("g").font(Theme.Fonts.display(22, relativeTo: .title2))
                     } else {
@@ -117,7 +119,7 @@ struct ProteinTile: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(hasFoodLogs
+        .accessibilityLabel(hasFoodLogs && !unavailableMacros.contains(.protein)
             ? "Protein \(Int(proteinG.rounded())) grams logged. \(status)"
             : "Protein intake unknown. No food logged today.")
     }
@@ -260,8 +262,10 @@ struct CaloriesTile: View {
     let fiberG: Double
     let goal: DailyGoal?
     var hasFoodLogs: Bool = true
+    var unavailableMacros: Set<NutritionMacro> = []
 
     private var caloriesLine: (value: String, unit: String) {
+        guard !unavailableMacros.contains(.calories) else { return ("—", "no data") }
         guard hasFoodLogs else { return ("—", "not logged") }
         return (Int(calories.rounded()).formatted(), "kcal logged")
     }
@@ -297,7 +301,7 @@ struct CaloriesTile: View {
                     Text("Goal \(Int(goal.calories.rounded()).formatted()) kcal")
                         .font(Theme.Fonts.body(12, .medium))
                         .foregroundStyle(Theme.Colors.textSecondary)
-                    if hasFoodLogs {
+                    if hasFoodLogs && !unavailableMacros.contains(.calories) {
                         MeterBar(progress: calories / goal.calories, color: Theme.NutrientColor.calories, height: 8)
                     }
                 }
@@ -331,7 +335,7 @@ struct CaloriesTile: View {
                     .foregroundStyle(Theme.Colors.textSecondary)
                 Spacer(minLength: 4)
                 HStack(spacing: 0) {
-                    Text(hasFoodLogs ? "\(Int(value.rounded()))" : "—")
+                    Text(hasFoodLogs && !isUnavailable(name) ? "\(Int(value.rounded()))" : "—")
                         .font(Theme.Fonts.body(12, .bold))
                         .foregroundStyle(Theme.Colors.textPrimary)
                     Text(target.map { $0 > 0 ? " / \(Int($0.rounded()))g" : "g" } ?? "g")
@@ -340,19 +344,23 @@ struct CaloriesTile: View {
                 }
                 .monospacedDigit()
             }
-            if hasFoodLogs, let target, target > 0 {
+            if hasFoodLogs && !isUnavailable(name), let target, target > 0 {
                 MeterBar(progress: value / target, color: color, height: 5, delay: 0.6)
             }
         }
     }
 
+    private func isUnavailable(_ name: String) -> Bool {
+        NutritionMacro.allCases.first { $0.title == name }.map { unavailableMacros.contains($0) } ?? false
+    }
+
     private var accessibilitySummary: String {
         let calGoal = goal.flatMap { $0.calories > 0 ? " Daily goal \(Int($0.calories.rounded())) kilocalories." : nil } ?? ""
-        let cal = hasFoodLogs
+        let cal = hasFoodLogs && !unavailableMacros.contains(.calories)
             ? "Calories \(caloriesLine.value) kilocalories logged. Diary may be partial."
             : "No food logged. Calorie and macro intake unknown."
         func part(_ name: String, _ value: Double, _ target: Double?) -> String {
-            let logged = hasFoodLogs ? "\(Int(value.rounded())) grams logged" : "not logged"
+            let logged = hasFoodLogs && !isUnavailable(name) ? "\(Int(value.rounded())) grams logged" : "not logged"
             let targetText = target.flatMap { $0 > 0 ? ", daily goal \(Int($0.rounded())) grams" : nil } ?? ""
             return "\(name) \(logged)\(targetText)"
         }

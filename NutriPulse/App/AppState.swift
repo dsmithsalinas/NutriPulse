@@ -99,10 +99,12 @@ final class AppState {
             #if DEBUG
             if !DebugLaunch.tour {
                 MealNoteStore.shared.setAccount(session?.user.id)
+                NutritionImportStore.shared.setAccount(session?.user.id)
                 UsualMealStore.shared.setAccount(session?.user.id)
             }
             #else
             MealNoteStore.shared.setAccount(session?.user.id)
+            NutritionImportStore.shared.setAccount(session?.user.id)
             UsualMealStore.shared.setAccount(session?.user.id)
             #endif
             #if DEBUG
@@ -157,6 +159,7 @@ final class AppState {
     // the previous user's goals, favorites, and HealthKit sync state — and "Delete
     // Account" left their food history sitting on disk.
     private func handleSignedOut() {
+        NutritionImportStore.shared.setAccount(nil)
         profile = nil
         profileLoadFailed = false
         isPasswordRecoveryFlow = false

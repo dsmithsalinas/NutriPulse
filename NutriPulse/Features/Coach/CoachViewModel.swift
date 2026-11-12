@@ -168,10 +168,13 @@ final class CoachViewModel {
         let workouts = (try? LocalStore.shared.fetchRecentWorkoutLogs(days: 1, userId: userId)) ?? []
         let todaysWorkouts = workouts.filter { $0.logDate == Date.now.isoDateString }
 
+        await NutritionImportStore.shared.refresh(from: .now, through: .now)
+        let nutrition = NutritionImportStore.shared.resolved(DailySummary(date: .now, calories: 0,
+            proteinG: logs.reduce(0) { $0 + $1.totalProteinG }, carbsG: 0, fatG: 0, fiberG: 0))
         suggestedPrompts = CoachSuggestionBuilder.suggestions(
             hasFoodLogs: !logs.isEmpty,
-            totalProteinG: logs.reduce(0) { $0 + $1.totalProteinG },
-            proteinGoalG: goal?.proteinG,
+            totalProteinG: nutrition.proteinG,
+            proteinGoalG: nutrition.unavailableMacros.contains(.protein) ? nil : goal?.proteinG,
             hasWorkout: !todaysWorkouts.isEmpty,
             hour: Calendar.current.component(.hour, from: .now),
             excluding: excluded
@@ -252,9 +255,12 @@ final class CoachViewModel {
             recapDue = false
         }
 
+        await NutritionImportStore.shared.refresh(from: .now, through: .now)
+        let nutrition = NutritionImportStore.shared.resolved(DailySummary(date: .now, calories: 0,
+            proteinG: logs.reduce(0) { $0 + $1.totalProteinG }, carbsG: 0, fatG: 0, fiberG: 0))
         startSuggestions = CoachSuggestionBuilder.startSuggestions(
-            totalProteinG: logs.reduce(0) { $0 + $1.totalProteinG },
-            proteinGoalG: goal?.proteinG,
+            totalProteinG: nutrition.proteinG,
+            proteinGoalG: nutrition.unavailableMacros.contains(.protein) ? nil : goal?.proteinG,
             cycleDay: cycleDay,
             cycleLength: cycleLength,
             recapDue: recapDue,

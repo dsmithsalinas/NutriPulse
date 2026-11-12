@@ -11,12 +11,19 @@ struct ProteinFloorWidgetView: View {
     let family: WidgetFamily
 
     var body: some View {
+        if snapshot.nutritionUnknown == true {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Protein —").font(.headline)
+                Text("No Health data").font(.caption)
+            }.foregroundStyle(family == .systemSmall ? Color.white : Theme.Colors.textPrimary)
+        } else {
         switch family {
         case .accessoryCircular:    circular
         case .accessoryRectangular: rectangular
         case .accessoryInline:      inline
         case .systemMedium:         medium
         default:                    small
+        }
         }
     }
 

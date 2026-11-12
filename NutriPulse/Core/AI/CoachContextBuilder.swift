@@ -72,6 +72,8 @@ struct CoachContextBundle: Encodable {
         // Only present when the user deliberately labels food as workout nutrition.
         // Raw timestamps let Pulse discuss proximity without treating the label as proof
         // that a workout happened or that the food caused an outcome.
+        var nutritionSources: [String: String]? = nil
+        var nutritionCaution: String? = nil
         let workoutNutrition: WorkoutNutritionContext?
 
         struct MealContext: Encodable {
@@ -82,11 +84,11 @@ struct CoachContextBundle: Encodable {
         }
 
         struct MacroTotals: Encodable {
-            let calories: Int
-            let proteinG: Int
-            let carbsG: Int
-            let fatG: Int
-            let fiberG: Int
+            let calories: Int?
+            let proteinG: Int?
+            let carbsG: Int?
+            let fatG: Int?
+            let fiberG: Int?
         }
 
         struct GoalProgress: Encodable {
@@ -120,10 +122,10 @@ struct CoachContextBundle: Encodable {
 
     struct WeekHistoryContext: Encodable {
         let daysLogged: Int
-        let avgCalories: Int
-        let avgProteinG: Int
-        let avgCarbsG: Int
-        let avgFatG: Int
+        let avgCalories: Int?
+        let avgProteinG: Int?
+        let avgCarbsG: Int?
+        let avgFatG: Int?
         let caloriesVsGoal: String?
         let proteinVsGoal: String?
         // Movement across the window — sessions and total minutes, both sources.
@@ -336,6 +338,7 @@ struct CoachContextBuilder {
             }
         }
 
+        await NutritionImportStore.shared.refresh(from: .now, through: .now)
         var context = await assemble(
             profile: profile,
             logs: logs,
@@ -488,11 +491,19 @@ struct CoachContextBuilder {
             )
         }
 
-        let totalCal  = logs.reduce(0) { $0 + $1.totalCalories }
-        let totalPro  = logs.reduce(0) { $0 + $1.totalProteinG }
-        let totalCarb = logs.reduce(0) { $0 + $1.totalCarbsG }
-        let totalFat  = logs.reduce(0) { $0 + $1.totalFatG }
-        let totalFib  = logs.reduce(0) { $0 + $1.totalFiberG }
+        let localNutrition = DailySummary(date: .now,
+            calories: logs.reduce(0) { $0 + $1.totalCalories },
+            proteinG: logs.reduce(0) { $0 + $1.totalProteinG },
+            carbsG: logs.reduce(0) { $0 + $1.totalCarbsG },
+            fatG: logs.reduce(0) { $0 + $1.totalFatG },
+            fiberG: logs.reduce(0) { $0 + $1.totalFiberG },
+            unavailableMacros: logs.isEmpty ? Set(NutritionMacro.allCases) : [])
+        let nutrition = await MainActor.run { NutritionImportStore.shared.resolved(localNutrition) }
+        let totalCal = nutrition.calories
+        let totalPro = nutrition.proteinG
+        let totalCarb = nutrition.carbsG
+        let totalFat = nutrition.fatG
+        let totalFib = nutrition.fiberG
 
         func pct(_ val: Double, _ target: Double?) -> String {
             guard let t = target, t > 0 else { return "N/A" }
@@ -541,20 +552,20 @@ struct CoachContextBuilder {
             )
         }()
 
-        let todayCtx = CoachContextBundle.TodayContext(
+        var todayCtx = CoachContextBundle.TodayContext(
             foodLog: mealCtxs,
             totals: .init(
-                calories: Int(totalCal),
-                proteinG: Int(totalPro),
-                carbsG: Int(totalCarb),
-                fatG: Int(totalFat),
-                fiberG: Int(totalFib)
+                calories: nutrition.unavailableMacros.contains(.calories) ? nil : Int(totalCal),
+                proteinG: nutrition.unavailableMacros.contains(.protein) ? nil : Int(totalPro),
+                carbsG: nutrition.unavailableMacros.contains(.carbs) ? nil : Int(totalCarb),
+                fatG: nutrition.unavailableMacros.contains(.fat) ? nil : Int(totalFat),
+                fiberG: nutrition.unavailableMacros.contains(.fiber) ? nil : Int(totalFib)
             ),
             goalProgress: .init(
-                caloriesPct: pct(totalCal,  goal?.calories),
-                proteinPct:  pct(totalPro,  goal?.proteinG),
-                carbsPct:    pct(totalCarb, goal?.carbsG),
-                fatPct:      pct(totalFat,  goal?.fatG)
+                caloriesPct: nutrition.unavailableMacros.contains(.calories) ? "Unknown" : pct(totalCal, goal?.calories),
+                proteinPct: nutrition.unavailableMacros.contains(.protein) ? "Unknown" : pct(totalPro, goal?.proteinG),
+                carbsPct: nutrition.unavailableMacros.contains(.carbs) ? "Unknown" : pct(totalCarb, goal?.carbsG),
+                fatPct: nutrition.unavailableMacros.contains(.fat) ? "Unknown" : pct(totalFat, goal?.fatG)
             ),
             // nil when HealthKit reported nothing — don't tell Pulse the user burned zero.
             activeCaloriesBurned: activeCal.map { Int($0.rounded()) },
@@ -571,21 +582,30 @@ struct CoachContextBuilder {
             workoutNutrition: workoutNutrition
         )
 
+        if !nutrition.nutritionSources.isEmpty {
+            todayCtx.nutritionSources = Dictionary(uniqueKeysWithValues: nutrition.nutritionSources.map { ($0.key.rawValue, $0.value) })
+            todayCtx.nutritionCaution = "Totals use one selected source per nutrient, replacing Footing amounts. Meal entries below are context, not extra intake to add. Missing nutrients are unknown, not zero. Data may be partial; do not infer a complete day or calculate insulin doses."
+        }
+
         // 7-day history — tail of the wider window fetched above
         let recentSummaries = Array(summaries.suffix(7))
         let loggedDays = recentSummaries.filter { $0.hasData }
         let count = Double(max(loggedDays.count, 1))
-        let avgCal  = loggedDays.reduce(0) { $0 + $1.calories  } / count
+        let calorieDays = recentSummaries.filter(\.hasCalorieData)
+        let avgCal = calorieDays.reduce(0) { $0 + $1.calories } / Double(max(calorieDays.count, 1))
         let avgPro  = loggedDays.reduce(0) { $0 + $1.proteinG  } / count
-        let avgCarb = loggedDays.reduce(0) { $0 + $1.carbsG    } / count
-        let avgFat  = loggedDays.reduce(0) { $0 + $1.fatG      } / count
+        func macroAverage(_ macro: NutritionMacro) -> Int? {
+            let known = recentSummaries.filter { $0.hasData && !$0.unavailableMacros.contains(macro) }
+            guard !known.isEmpty else { return nil }
+            return Int((known.reduce(0) { $0 + macro.value(in: $1) } / Double(known.count)).rounded())
+        }
 
         let weekCtx = CoachContextBundle.WeekHistoryContext(
             daysLogged: loggedDays.count,
-            avgCalories: Int(avgCal),
-            avgProteinG: Int(avgPro),
-            avgCarbsG: Int(avgCarb),
-            avgFatG: Int(avgFat),
+            avgCalories: calorieDays.isEmpty ? nil : Int(avgCal),
+            avgProteinG: loggedDays.isEmpty ? nil : Int(avgPro),
+            avgCarbsG: macroAverage(.carbs),
+            avgFatG: macroAverage(.fat),
             caloriesVsGoal: loggedDays.isEmpty ? nil : pct(avgCal, goal?.calories),
             proteinVsGoal:  loggedDays.isEmpty ? nil : pct(avgPro, goal?.proteinG),
             workoutSessions: workouts.count,

@@ -447,6 +447,12 @@ export function sanitizeContext(raw: unknown): Record<string, unknown> | undefin
           calories: i(meal.calories), proteinG: i(meal.proteinG),
         })
       }),
+      nutritionSources: (() => {
+        const sources = o(today.nutritionSources)
+        if (!sources) return undefined
+        return compact(Object.fromEntries(['calories', 'protein', 'carbs', 'fat', 'fiber']
+          .map((key) => [key, s(sources[key], 80)])))
+      })(),
       totals: totals && compact({
         calories: i(totals.calories), proteinG: i(totals.proteinG), carbsG: i(totals.carbsG),
         fatG: i(totals.fatG), fiberG: i(totals.fiberG),
@@ -653,6 +659,12 @@ Use at most three numbers in the whole recap. If \`lastWeek.daysLogged\` is unde
   }
 
   // Same trust level as the context: client-supplied, so data only.
+  const importedNutrition = o(o(context?.today)?.nutritionSources)
+  if (importedNutrition && Object.keys(importedNutrition).length > 0) {
+    instruction += `\n\nNUTRITION SOURCES
+Each nutrient total uses one selected source. Apple Health totals REPLACE Footing totals for that nutrient; never add meal entries to them. Meal entries remain food context and may overlap imported nutrition. Missing totals are unknown, not zero; sources and logs may be partial. Do not infer complete intake or estimate calories from a carbs-only import. These are dietary records, not blood-glucose or insulin dosing data.`
+  }
+
   const recent = recentPulseMessages.length === 0 ? '' : `
 
 ## RECENT PULSE MESSAGES

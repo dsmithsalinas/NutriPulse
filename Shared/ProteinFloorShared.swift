@@ -17,6 +17,7 @@ struct ProteinFloorSnapshot: Codable {
     /// False while GLP-1 tracking is paused or stopped: the widget drops its dose button.
     /// Optional so snapshots saved by older builds still decode.
     var showsDose: Bool? = nil
+    var nutritionUnknown: Bool? = nil
 
     var remaining: Int { max(Int((proteinGoal - proteinToday).rounded()), 0) }
     var pct: Double { proteinGoal > 0 ? min(proteinToday / proteinGoal, 1) : 0 }

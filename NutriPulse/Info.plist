@@ -36,7 +36,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Footing uses the camera to scan food barcodes.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Footing reads weight, body fat, BMI, lean body mass, water, active energy, HRV, resting HR, and sleep from Apple Health.</string>
+	<string>Footing reads weight, body fat, BMI, lean body mass, water, activity, sleep, and optionally calories, protein, carbohydrates, fat, and fiber from Apple Health.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Footing writes weight, body fat, BMI, lean body mass, and water logs to Apple Health.</string>
 	<key>NSMicrophoneUsageDescription</key>
