@@ -23,3 +23,11 @@ Nutrition pass: 58 distinct Xcode checks (10 UI and 48 unit/rendering) and two N
 ## Suggested TestFlight notes
 
 Footing now adapts to wider iPhone layouts while keeping portrait navigation familiar. You can optionally use Apple Health nutrition from another app: open Profile → Apple Health → Nutrition sources and choose a source separately for each nutrient. The chosen source replaces Footing’s total for that nutrient rather than adding both together. Please test permissions, source switching, missing data and updates made in the original app.
+
+## Rollout — November 12, 2026
+
+Release source `c372989011127cd2258a0eaadfb1b901afaf91d9` was pushed to `origin/codex/footing-testflight-1-3-2`. The signed 1.3.8 (306) archive was uploaded without rebuilding; Xcode confirmed “Upload succeeded” at 11:39 AM Pacific and reported “Uploaded package is processing.” App Store Connect’s Build Uploads table independently shows version 1.3.8, build 306, status Processing, created November 12 at 11:39 AM. Tester availability and App Review approval are separate states.
+
+`coach-chat` v35 is ACTIVE with JWT verification enabled. All six deployed files match committed release source, including nutrition source handling and AI consent enforcement. An unauthenticated live request returned HTTP 401. The privacy policy at https://tryfooting.app/privacy returned HTTP 200 and matches the committed November 12 nutrition policy; Cloudflare deployment version `d56cceb6-c910-4b7c-a1aa-b23bd8c88ce1`. Physical Health and Duo acceptance checks above remain device checks.
+
+The archive, export, upload and deployment evidence is in `build/TestFlight-1.3.8-306/release-verification.json` and accompanying logs.

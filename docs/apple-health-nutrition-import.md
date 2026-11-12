@@ -30,3 +30,7 @@ Apple references: [Nutrition identifiers](https://developer.apple.com/documentat
 Final verification: 58 distinct Xcode checks passed (10 UI and 48 unit/rendering checks), plus two Node server-context tests. The last two focused result bundles completed with TEST SUCCEEDED. Debug compilation and `git diff --check` passed. Portrait/expanded Today, Progress, Pulse and Profile regressions passed. Captures were visually reviewed, including the selected-source restoration and large-text scroll state.
 
 [Open the six-screen capture gallery](/Users/dustinsmith-salinas/.codex/visualizations/2026/11/07/01a1b7dc-0f75-7863-aacb-8a55034cfcd6/screenshots/nutrition-import-2026-11-11/index.html). Screenshots use read-only sample Health data; permission requests are disabled in that fixture.
+
+## Deployment — November 12, 2026
+
+The implementation and release-preparation source were pushed. `coach-chat` v35 was deployed with JWT verification retained and source bytes verified against the release commit. The revised nutrition privacy policy is live at https://tryfooting.app/privacy. Footing 1.3.8 (306) uploaded successfully to App Store Connect and entered processing. This supersedes the initial local-only status above; physical signed-device Health acceptance remains pending. See `testflight-1.3.8.md` and the release-verification artifact for rollout evidence.
