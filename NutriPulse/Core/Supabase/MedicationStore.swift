@@ -224,3 +224,24 @@ extension Notification.Name {
     static let medicationsChanged = Notification.Name("medicationsChanged")
     static let medicationNotificationOpened = Notification.Name("medicationNotificationOpened")
 }
+
+#if DEBUG
+extension MedicationStore {
+    static func compactLayoutPreview() -> MedicationStore {
+        let store = MedicationStore(folder: FileManager.default.temporaryDirectory.appendingPathComponent("medication-layout-\(UUID())"), automaticallyReconcile: false)
+        store.accountID = UUID()
+        let day = MedicationCalendar.calendar.startOfDay(for: .now)
+        store.cache.document.enabled = true
+        store.cache.document.intervals = [.init(start: day)]
+        store.cache.document.schedules = ["NAC", "Stress Reset"].map { name in
+            MedicationSchedule(routineID: UUID(), name: name, amount: "1 capsule", weekdays: Set(1...7), times: [.init(minute: 480), .init(minute: 1200)], startsAt: day)
+        }
+        for var dose in store.occurrences(on: .now) where dose.minute == 480 {
+            dose.status = .taken; dose.takenAt = min(dose.scheduledAt, .now); dose.recordedAt = .now
+            store.cache.document.doses[dose.id] = dose
+        }
+        store.didLoad = true
+        return store
+    }
+}
+#endif

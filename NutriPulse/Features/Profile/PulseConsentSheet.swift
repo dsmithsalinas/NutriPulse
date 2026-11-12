@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Shown once, before Pulse ever sends anything to the AI provider: when
-// `PulseProfileStore.needsConsent` is true and the user opens the Pulse tab, or something asks
+// `PulseProfileStore.needsConsent` is true and the user explicitly asks for a reply, or something asks
 // Pulse a question from elsewhere in the app (a Today nudge, a goal question, "Ask Pulse about
 // today" — see `PulseGate.Handoff` and `AppState.pendingCoachPrompt`). Also reopened read-only
 // (or to opt back in) from Profile's "AI data sharing" row.

@@ -587,3 +587,29 @@ struct SheetHeader: View {
         }
     }
 }
+
+/// Shot context stays reachable without reserving a second column beneath calories.
+struct CompactShotCycleTile: View {
+    let cycleDay: Int
+    let cycleLength: Int
+    let hasCheckIn: Bool
+    var onTap: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var title: String {
+        cycleDay == 0 ? "Shot day" : cycleDay >= cycleLength ? "Shot due" : "Day \(cycleDay) of \(cycleLength)"
+    }
+    var body: some View {
+        Button(action: onTap) {
+            (typeSize >= .xxxLarge ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 12))) {
+                VStack(alignment: .leading, spacing: 2) {
+                    TileEyebrow("Shot cycle", color: Theme.Colors.limeLabel)
+                    Text(title).font(Theme.Fonts.body(18, .bold)).foregroundStyle(Theme.Colors.limeInk)
+                }
+                if typeSize < .xxxLarge { Spacer(minLength: 0) }
+                Label(hasCheckIn ? "Check-in saved" : "Check in", systemImage: hasCheckIn ? "checkmark.circle.fill" : "plus.circle")
+                    .font(Theme.Fonts.body(14, .semibold)).foregroundStyle(Theme.Colors.limeInk)
+            }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(14).background(Theme.Colors.lime, in: RoundedRectangle(cornerRadius: Theme.Radius.tile))
+        }.buttonStyle(.plain).accessibilityIdentifier("todayCompactShotCycle")
+    }
+}

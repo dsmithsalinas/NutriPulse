@@ -37,7 +37,6 @@ struct TodayView: View {
     @State private var mealNoteError: String?
     @State private var rememberingNote: MealNote?
     @State private var showOffScript = false
-    @State private var showEverydayTools = false
     @AppStorage("shortSleepSupportDismissal") private var shortSleepDismissal = ""
     @State private var offScriptOwner: UUID?
     @State private var offScriptPrompt: String?
@@ -612,15 +611,6 @@ struct TodayView: View {
                 Task { await vm.loadData() }
             }
             .sheet(item: $rememberingNote) { note in PulseMemoryEditor(proposed: note.body) }
-            .sheet(isPresented: $showEverydayTools, onDismiss: {
-                let prompt = offScriptPrompt; offScriptPrompt = nil
-                guard let owner = offScriptOwner, owner == appState.session?.user.id, let prompt else { return }
-                appState.askPulse(prompt)
-            }) {
-                if let owner = offScriptOwner {
-                    EverydayToolsView(userId: owner, onAskPulse: { offScriptPrompt = $0 })
-                }
-            }
             .sheet(isPresented: $showOffScript, onDismiss: {
                 let prompt = offScriptPrompt; offScriptPrompt = nil
                 guard let owner = offScriptOwner, owner == appState.session?.user.id, let prompt else { return }
@@ -715,9 +705,8 @@ struct TodayView: View {
             } else {
                 firstDayCard
                 tileGrid
-                MedicationTodaySection(date: vm.selectedDate,
+                MedicationTodaySection(date: vm.selectedDate, store: medicationStore,
                     onManage: { showMedicationSettings = true }, onHistory: { showMedicationHistory = true })
-                if vm.isToday { homeSupportActions }
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -755,14 +744,6 @@ struct TodayView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("today-dailyMeals")
-    }
-
-    private var homeSupportActions: some View {
-        HomeSupportActions(showsLighterTracking: !isLighterToday, onOffScript: {
-            offScriptOwner = appState.session?.user.id; offScriptPrompt = nil; showOffScript = true
-        }, onTools: {
-            offScriptOwner = appState.session?.user.id; offScriptPrompt = nil; showEverydayTools = true
-        }, onLighterTracking: { showLighterTracking = true })
     }
 
     private var lighterTodayContent: some View {
@@ -833,9 +814,8 @@ struct TodayView: View {
                 .background(Theme.Colors.sky, in: RoundedRectangle(cornerRadius: Theme.Radius.tile))
             }
             .buttonStyle(.plain)
-            MedicationTodaySection(date: vm.selectedDate,
+            MedicationTodaySection(date: vm.selectedDate, store: medicationStore,
                 onManage: { showMedicationSettings = true }, onHistory: { showMedicationHistory = true })
-            if vm.isToday { homeSupportActions }
             Text("Your food entries")
                 .font(Theme.Fonts.body(16, .semibold))
                 .accessibilityAddTraits(.isHeader)
@@ -865,8 +845,8 @@ struct TodayView: View {
 
     // MARK: - Tile grid
 
-    // Protein spans the left column beside calories and the shot cycle; water and movement sit
-    // below. Without a shot cycle, movement moves up beside protein and water takes the row.
+    // Pair protein with macros, then water with movement. Shot-cycle context uses a
+    // compact full-width row so it never leaves an empty slot beneath protein.
     private var tileGrid: some View {
         let cycleDay = vm.currentShotCycleDay
         let showsShotCycle = cycleDay != nil && !vm.doseSchedule.cycleInterrupted
@@ -883,26 +863,16 @@ struct TodayView: View {
                 )
                     .celebrationBeat(trigger: ringCelebrationTrigger)
                     .popIn(order: 2)
-                VStack(spacing: Theme.Spacing.tileGap) {
-                    CaloriesTile(
-                        calories: vm.totalCalories,
-                        carbsG: vm.totalCarbsG,
-                        fatG: vm.totalFatG,
-                        fiberG: vm.totalFiberG,
-                        goal: vm.dailyGoal,
-                        hasFoodLogs: !vm.foodLogs.isEmpty || !vm.nutrition.nutritionSources.isEmpty,
-                        unavailableMacros: vm.nutrition.unavailableMacros
-                    )
-                    .popIn(order: 3)
-                    if showsShotCycle, let cycleDay {
-                        ShotCycleTile(cycleDay: cycleDay, cycleLength: shotCycleLength, hasCheckIn: vm.todayShotCycleCheckIn != nil) {
-                            showShotCycleCheckIn = true
-                        }
-                        .popIn(order: 4)
-                    } else {
-                        movedTile.popIn(order: 4)
-                    }
-                }
+                CaloriesTile(
+                    calories: vm.totalCalories,
+                    carbsG: vm.totalCarbsG,
+                    fatG: vm.totalFatG,
+                    fiberG: vm.totalFiberG,
+                    goal: vm.dailyGoal,
+                    hasFoodLogs: !vm.foodLogs.isEmpty || !vm.nutrition.nutritionSources.isEmpty,
+                    unavailableMacros: vm.nutrition.unavailableMacros
+                )
+                .popIn(order: 3)
             }
             .fixedSize(horizontal: false, vertical: true)
 
@@ -919,12 +889,22 @@ struct TodayView: View {
                     onOpenPicker: { showWaterPicker = true }
                 )
                 .popIn(order: 5)
-                if showsShotCycle {
-                    movedTile.popIn(order: 6)
-                }
+                movedTile.popIn(order: 6)
             }
             .fixedSize(horizontal: false, vertical: true)
+            if showsShotCycle, let cycleDay {
+                CompactShotCycleTile(cycleDay: cycleDay, cycleLength: shotCycleLength, hasCheckIn: vm.todayShotCycleCheckIn != nil) {
+                    showShotCycleCheckIn = true
+                }
+            }
         }
+    }
+
+    private var medicationStore: MedicationStore {
+        #if DEBUG
+        if DebugLaunch.has("--compact-medication-preview") { return MedicationLayoutPreview.store }
+        #endif
+        return .shared
     }
 
     private var movedTile: some View {

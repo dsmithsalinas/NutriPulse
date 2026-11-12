@@ -407,6 +407,8 @@ struct CoachView: View {
                     suggestionGrid(expanded: expanded)
                 }
 
+                EverydaySupportSection()
+
                 sectionLabel("Or talk about")
                     .popIn(order: 5)
                 topicChips

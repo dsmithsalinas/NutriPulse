@@ -37,7 +37,7 @@ struct EverydayToolsView: View {
     private var store: EverydayToolsStore { .shared }
     private var ownsScreen: Bool {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") || ProcessInfo.processInfo.arguments.contains("--pulse-health-preview") { return true }
+        if (ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") || ProcessInfo.processInfo.arguments.contains("--support-tools-preview")) || ProcessInfo.processInfo.arguments.contains("--pulse-health-preview") { return true }
         #endif
         return store.accountId == userId && store.generation == token && supabase.auth.currentSession?.user.id == userId
     }
@@ -131,10 +131,12 @@ struct EverydayToolsView: View {
             .onAppear {
                 if startWithExperiments { tab = .experiments }
                 #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") {
+                if (ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") || ProcessInfo.processInfo.arguments.contains("--support-tools-preview")) {
                     store.preview(empty: !ProcessInfo.processInfo.arguments.contains("--tools-saved"))
                     PulseMemoryStore.shared.preview()
-                    PulseProfileStore.shared.setForPreview(preferences: .init(), enabled: true)
+                    if !ProcessInfo.processInfo.arguments.contains("--support-tools-preview") {
+                        PulseProfileStore.shared.setForPreview(preferences: .init(), enabled: true)
+                    }
                     let args = ProcessInfo.processInfo.arguments
                     if args.contains("--tools-data") { showDataInfo = true }
                     if args.contains("--tools-memories") { showMemories = true }
@@ -153,7 +155,7 @@ struct EverydayToolsView: View {
             .onChange(of: tab) { _, _ in error = nil; message = nil }
             .onChange(of: store.accountId) { _, _ in
                 #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") { return }
+                if (ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") || ProcessInfo.processInfo.arguments.contains("--support-tools-preview")) { return }
                 #endif
                 useHealth = false; healthMetric = .walking; walkStart = 12; walkEnd = 16
                 action = ""; outcome = ""; when = ""; helped = ""; leftoverName = ""; constraints = ""
@@ -161,7 +163,7 @@ struct EverydayToolsView: View {
             }
             .sheet(item: $reflectingExperiment) { experiment in
                 ExperimentWrapUpView(experiment: experiment, owner: userId,
-                    preview: ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") || ProcessInfo.processInfo.arguments.contains("--pulse-health-preview"))
+                    preview: (ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") || ProcessInfo.processInfo.arguments.contains("--support-tools-preview")) || ProcessInfo.processInfo.arguments.contains("--pulse-health-preview"))
             }
             .sheet(item: $linkingExperiment) { experiment in
                 ExperimentHealthLinkEditor(sleepOutcome: experiment.healthOutcome == true) { link in
@@ -513,7 +515,7 @@ struct EverydayToolsView: View {
     }
     @discardableResult private func mutate(_ change: (inout EverydayToolData) -> Void) -> Bool {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") || ProcessInfo.processInfo.arguments.contains("--pulse-health-preview") { return false }
+        if (ProcessInfo.processInfo.arguments.contains("--everyday-tools-preview") || ProcessInfo.processInfo.arguments.contains("--support-tools-preview")) || ProcessInfo.processInfo.arguments.contains("--pulse-health-preview") { return false }
         #endif
         guard ownsScreen, let token else { error = "Your account changed. Close this screen and try again."; return false }
         do { try store.update(owner: userId, generation: token, change); error = nil; return true }

@@ -73,6 +73,9 @@ struct ProfileView: View {
                     .font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
                     .padding(.horizontal, 16).padding(.bottom, 14)
             }
+            if !pulseStore.pulseEnabled {
+                EverydaySupportSection(identifierPrefix: "profile", showsLighterTracking: false)
+            }
             FootingSiriSection()
             PulseAttentionSection()
             notificationsTile.popIn(order: 3)

@@ -248,6 +248,7 @@ struct MedicationTodaySection: View {
     var store: MedicationStore = .shared
     var onManage: () -> Void
     var onHistory: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var expanded = false
     @State private var error: String?
     private var doses: [MedicationOccurrence] { store.occurrences(on: date) }
@@ -269,97 +270,97 @@ struct MedicationTodaySection: View {
     @ViewBuilder private var content: some View {
         if store.enabled && !store.document.schedules.isEmpty {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top) {
-                    Text("Medications & supplements").font(Theme.Fonts.display(22, .bold)).accessibilityAddTraits(.isHeader)
-                    Spacer(minLength: 8)
-                    Button("Manage", action: onManage).font(Theme.Fonts.body(15, .semibold)).frame(minHeight: 44)
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Medications").font(Theme.Fonts.display(20, .bold)).accessibilityAddTraits(.isHeader)
+                        if !doses.isEmpty { Text(summary).font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary) }
+                    }
+                    Spacer(minLength: 0)
+                    Button(action: onHistory) { Image(systemName: "clock.arrow.circlepath").frame(minWidth: 44, minHeight: 44) }
+                        .accessibilityLabel("Medication history")
+                    Button("Manage", action: onManage).font(Theme.Fonts.body(14, .semibold)).frame(minHeight: 44)
                 }
-                MedicationStoreStatusView(store: store)
+                if store.isSyncing || store.storageFailed || store.hasConflict || store.pendingCount > 0 || store.syncFailed {
+                    MedicationStoreStatusView(store: store)
+                }
                 if doses.isEmpty {
                     Text("Nothing scheduled this day").font(Theme.Fonts.body(16)).foregroundStyle(Theme.Colors.textSecondary)
                 } else {
                     if complete {
                         Button { expanded.toggle() } label: {
                             HStack {
-                                Label(summary, systemImage: skipped == 0 ? "checkmark.circle.fill" : "checkmark.circle")
+                                Text(expanded ? "Hide doses" : "Review doses")
                                 Spacer(); Image(systemName: expanded ? "chevron.up" : "chevron.down")
                             }.font(Theme.Fonts.body(16, .semibold)).frame(minHeight: 44)
                         }.accessibilityHint("Review or correct your doses")
-                    } else {
-                        Text(summary).font(Theme.Fonts.body(16)).foregroundStyle(Theme.Colors.textSecondary)
                     }
                     if !complete || expanded {
-                        ForEach(["Morning", "Afternoon", "Evening"], id: \.self) { group in
-                            let rows = doses.filter { $0.group == group }
-                            if !rows.isEmpty {
-                                Text(group.uppercased()).font(Theme.Typography.eyebrow).tracking(1).foregroundStyle(Theme.Colors.primaryText)
-                                ForEach(rows) { dose in
-                                    MedicationDoseRow(dose: dose, historical: !date.isToday, disabled: store.hasConflict,
-                                        taken: { record(dose, .taken) }, skip: { record(dose, .skipped) },
-                                        undo: { record(dose, .notLogged) }, edit: onHistory)
-                                    if dose.id != rows.last?.id { Divider() }
+                        ForEach(Array(groupedDoses.enumerated()), id: \.offset) { _, rows in
+                            VStack(alignment: .leading, spacing: 6) {
+                                ViewThatFits(in: .horizontal) {
+                                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                        Text(rows[0].name).font(Theme.Fonts.body(17, .bold))
+                                        Text(rows[0].amount).font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+                                    }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(rows[0].name).font(Theme.Fonts.body(17, .bold))
+                                        Text(rows[0].amount).font(Theme.Fonts.body(13)).foregroundStyle(Theme.Colors.textSecondary)
+                                    }
+                                }
+                                LazyVGrid(columns: typeSize >= .xxxLarge ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 140))], alignment: .leading, spacing: 6) {
+                                    ForEach(rows) { dose in compactDose(dose) }
                                 }
                             }
                         }
+
                     }
                 }
                 if let error { MedicationErrorText(message: error) }
-                Button("View history", action: onHistory).font(Theme.Fonts.body(15, .semibold)).frame(minHeight: 44)
             }.foregroundStyle(Theme.Colors.textPrimary).tint(Theme.Colors.primary).tile(padding: 16)
                 .accessibilityIdentifier("medicationsToday")
         }
     }
+    private var groupedDoses: [[MedicationOccurrence]] {
+        // Preserve different names/amounts on schedule-change days instead of merging them.
+        struct Key: Hashable { let routine: UUID; let name: String; let amount: String }
+        var order: [Key] = []; var groups: [Key: [MedicationOccurrence]] = [:]
+        for dose in doses {
+            let key = Key(routine: dose.routineID, name: dose.name, amount: dose.amount)
+            if groups[key] == nil { order.append(key) }
+            groups[key, default: []].append(dose)
+        }
+        return order.compactMap { groups[$0] }
+    }
+    private func compactDose(_ dose: MedicationOccurrence) -> some View {
+        Menu {
+            if !date.isToday {
+                Button("Review in history", action: onHistory)
+            } else if dose.status == .notLogged {
+                Button("Mark taken") { record(dose, .taken) }
+                    .accessibilityIdentifier("compactMedicationTaken")
+                Button("Skip dose") { record(dose, .skipped) }
+                    .accessibilityIdentifier("compactMedicationSkip")
+            } else {
+                if let time = dose.takenAt { Text("Taken at \(time.formatted(date: .omitted, time: .shortened))") }
+                Button("Undo \(dose.status.title.lowercased())") { record(dose, .notLogged) }
+                    .accessibilityIdentifier("compactMedicationUndo")
+                Button("View history", action: onHistory)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: dose.status == .taken ? "checkmark.circle.fill" : dose.status == .skipped ? "minus.circle" : "plus.circle")
+                Text(dose.scheduledAt.formatted(date: .omitted, time: .shortened))
+                Text(dose.status == .notLogged ? "Log" : dose.status.title).fontWeight(.semibold)
+            }.font(Theme.Fonts.body(12)).frame(maxWidth: .infinity, minHeight: 44)
+                .foregroundStyle(dose.status == .taken ? Theme.Colors.limeLabel : Theme.Colors.primaryText)
+                .background(dose.status == .taken ? Theme.Colors.lime.opacity(0.5) : Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 12))
+        }.disabled(store.hasConflict && date.isToday)
+            .accessibilityIdentifier("compactMedicationDose-\(dose.id)")
+            .accessibilityLabel("\(dose.name), \(dose.amount), \(dose.scheduledAt.formatted(date: .omitted, time: .shortened)), \(dose.status.title)")
+            .accessibilityHint("Open dose actions")
+    }
     private func record(_ dose: MedicationOccurrence, _ status: MedicationDoseStatus) {
         do { try store.record(dose, status: status); error = nil } catch { self.error = error.localizedDescription }
-    }
-}
-
-@MainActor
-private struct MedicationDoseRow: View {
-    var dose: MedicationOccurrence
-    var historical: Bool
-    var disabled: Bool
-    var taken: () -> Void
-    var skip: () -> Void
-    var undo: () -> Void
-    var edit: () -> Void
-    @Environment(\.dynamicTypeSize) private var typeSize
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
-                if dose.status != .notLogged {
-                    Image(systemName: dose.status == .taken ? "checkmark.circle.fill" : "minus.circle")
-                        .foregroundStyle(dose.status == .taken ? Theme.Colors.limeLine : Theme.Colors.textSecondary)
-                        .font(.system(size: 24)).accessibilityHidden(true)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(dose.name).font(Theme.Fonts.body(18, .bold))
-                    Text([dose.amount, dose.scheduledAt.formatted(date: .omitted, time: .shortened)].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
-                    if dose.status != .notLogged {
-                        Text(dose.status == .taken ? "Taken at \((dose.takenAt ?? dose.scheduledAt).formatted(date: .omitted, time: .shortened))" : "Skipped")
-                            .font(Theme.Fonts.body(14)).foregroundStyle(Theme.Colors.textSecondary)
-                    }
-                }
-                Spacer(minLength: 0)
-                if !typeSize.isAccessibilitySize { actions }
-            }
-            if typeSize.isAccessibilitySize { actions }
-        }.padding(.vertical, 6)
-    }
-    @ViewBuilder private var actions: some View {
-        if historical {
-            Button("Review", action: edit).frame(minHeight: 44)
-        } else if dose.status == .notLogged {
-            HStack(spacing: 8) {
-                Button("Taken", action: taken).font(Theme.Fonts.body(15, .semibold))
-                    .padding(.horizontal, 12).frame(minHeight: 44)
-                    .background(Theme.Colors.primary, in: RoundedRectangle(cornerRadius: 12)).foregroundStyle(.white)
-                    .accessibilityLabel("Mark \(dose.name) taken, \(dose.scheduledAt.formatted(date: .omitted, time: .shortened))")
-                Button("Skip", action: skip).frame(minWidth: 44, minHeight: 44)
-                    .accessibilityLabel("Skip \(dose.name), \(dose.scheduledAt.formatted(date: .omitted, time: .shortened))")
-            }.disabled(disabled)
-        } else { Button("Undo", action: undo).frame(minHeight: 44).disabled(disabled).accessibilityLabel("Undo \(dose.name) \(dose.status.title)") }
     }
 }
 
@@ -589,5 +590,11 @@ struct MedicationAuditScreens: View {
             MedicationCorrectionView(store: .shared, dose: .init(id: UUID().uuidString, scheduleID: UUID(), routineID: UUID(), localDay: Date.now.isoDateString, timeZoneID: TimeZone.current.identifier, scheduledAt: .now, minute: 480, name: "Morning supplement", amount: "1 tablet", takenAt: nil, recordedAt: nil))
         }
     }
+}
+#endif
+
+#if DEBUG
+@MainActor enum MedicationLayoutPreview {
+    static let store = MedicationStore.compactLayoutPreview()
 }
 #endif

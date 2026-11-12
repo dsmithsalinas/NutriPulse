@@ -20,6 +20,7 @@ struct DuoAuditPreview: View {
     @ViewBuilder private var content: some View {
         switch screen {
         case "nutrition": NutritionImportView()
+        case "medications-compact": ScrollView { MedicationTodaySection(date: .now, store: MedicationLayoutPreview.store, onManage: {}, onHistory: {}).padding(20).daylightReadableWidth(650) }
         case "tools-data", "tools-memories", "tools-experiment", "tools-library", "tools-leftovers", "tools-decision": EverydayToolsView(userId: AppStoreScreenshotPreview.sampleUser, onAskPulse: { _ in })
         case "health-link": ExperimentHealthLinkEditor(save: { _ in })
         case "observation": ScrollView { ExperimentObservationEditor(experiment: .init(action: "Walk after lunch", outcome: "energy", startedOn: Date.now.isoDateString), save: { _ in }).padding(18).daylightReadableWidth() }

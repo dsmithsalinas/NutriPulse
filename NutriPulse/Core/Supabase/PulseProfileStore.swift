@@ -243,9 +243,11 @@ final class PulseProfileStore {
     /// Preview and test fixtures: set state without the network.
     func setForPreview(preferences: PulsePreferences, enabled: Bool = true, onToday: Bool = true, consentAt: Date? = .now) {
         self.preferences = preferences
-        pulseEnabled = enabled
-        pulseOnToday = onToday
-        aiConsentAt = consentAt
+        let args = ProcessInfo.processInfo.arguments
+        let off = args.contains("--support-pulse-off")
+        pulseEnabled = enabled && !off
+        pulseOnToday = onToday && !off
+        aiConsentAt = off || args.contains("--support-no-consent") ? nil : consentAt
         isLoaded = true
     }
     #endif

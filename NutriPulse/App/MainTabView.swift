@@ -20,6 +20,12 @@ struct MainTabView: View {
     private static func makeTodayViewModel() -> TodayViewModel {
         #if DEBUG
         if DebugLaunch.tour {
+            let args = ProcessInfo.processInfo.arguments
+            if args.contains("--support-no-consent") {
+                PulseProfileStore.shared.setForPreview(preferences: .init(), enabled: true, consentAt: nil)
+            } else if args.contains("--support-pulse-off") {
+                PulseProfileStore.shared.setForPreview(preferences: .init(), enabled: false, onToday: false, consentAt: nil)
+            }
             if DebugLaunch.has("--nutrition-preview") { NutritionImportStore.shared.loadPreview() }
             let vm = AppStoreScreenshotPreview.todayModel()
             if ProcessInfo.processInfo.arguments.contains("--return-preview") { vm.previewReturnExperience() }
@@ -143,11 +149,8 @@ struct MainTabView: View {
             appState.pendingSelectTab = nil
             selectedTab = tab
         }
-        // Landing on the Pulse tab is itself a hand-off: show the consent sheet the first time,
-        // same as asking Pulse something from elsewhere.
-        .onChange(of: selectedTab) { _, tab in
-            if tab == .pulse, pulseStore.needsConsent { appState.showPulseConsentSheet = true }
-        }
+        // Browsing Pulse's practical tools does not require AI consent. Actual prompts
+        // still pass through pulseMaySend / AppState's consent-gated handoff.
         // Pulse turned off (from Profile, or another device) while its tab was showing —
         // there's nowhere left to send anything on it, so back out to Today.
         .onChange(of: pulseStore.pulseEnabled) { _, enabled in

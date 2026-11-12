@@ -112,7 +112,7 @@ struct OffScriptSheet: View {
         if action != .remember {
             guard pulseEnabled, let prompt = action.prompt(context: context) else { return }
             onAskPulse(prompt)
-            dismiss() // Today sends only after the sheet closes, so consent can present safely.
+            dismiss() // The presenting screen sends only after dismissal, so consent can present safely.
             return
         }
         guard let body = MealNote.validBody(context) else { return }

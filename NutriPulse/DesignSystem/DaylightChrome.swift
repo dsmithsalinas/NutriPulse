@@ -196,7 +196,7 @@ struct DaylightTileLayout: Layout {
         let width = vertical ? bounds.width : max(0, (bounds.width - gaps) / CGFloat(subviews.count))
         var origin = bounds.origin
         for view in subviews {
-            let childProposal = ProposedViewSize(width: width, height: nil)
+            let childProposal = ProposedViewSize(width: width, height: vertical ? nil : bounds.height)
             view.place(at: origin, anchor: .topLeading, proposal: childProposal)
             if vertical { origin.y += view.sizeThatFits(childProposal).height + spacing }
             else { origin.x += width + spacing }
