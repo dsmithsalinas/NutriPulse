@@ -19,11 +19,13 @@ Deno.serve(async req => {
         verified = { notification, verifier, environment }; break
       } catch (error) {
         // Log only bounded error classification, never exception messages or signed data.
-        const failure = error as { status?: number; cause?: { name?: string; code?: string } }
+        const failure = error as { status?: number; cause?: { name?: string; code?: string; stack?: string; message?: string } }
         console.error('apple_notification_verification', JSON.stringify({ environment,
           status: typeof failure.status === 'number' ? failure.status : null,
           cause: typeof failure.cause?.name === 'string' ? failure.cause.name.slice(0,60) : null,
-          code: typeof failure.cause?.code === 'string' ? failure.cause.code.slice(0,60) : null }))
+          code: typeof failure.cause?.code === 'string' ? failure.cause.code.slice(0,60) : null,
+          frames: failure.cause?.stack?.split('\n').slice(1,5).map(line => line.match(/^\s*at\s+(?:async\s+)?([A-Za-z0-9_.$<>]+)\s*(?:\(|$)/)?.[1] ?? 'anonymous'),
+          terms: failure.cause?.message?.match(/\b(?:not|implemented|supported|unsupported|crypto|verify|ec|rsa|key|algorithm|digest|invalid|signature|type|decode|encode|export|jwk|asn1|parameter)\b/gi)?.slice(0,12) ?? [] }))
       }
     }
     if (!verified) return new Response('Invalid signature or unavailable configuration', { status: 503 })
