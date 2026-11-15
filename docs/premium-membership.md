@@ -1,6 +1,6 @@
 # Footing premium membership
 
-Prepared November 14, 2026. Implementation is local; the database migration, membership functions, updated AI functions and revised policy pages have not been deployed. Premium enforcement and founding claims must stay off until the coordinated release is approved.
+Prepared November 14; backend deployed November 15, 2026 from pushed commit `625956f`. The premium migration and four Edge Functions are live. Native membership code and revised policy pages are not released. Global premium enforcement and founding claims remain off; only the explicitly allowlisted disposable sandbox account uses prelaunch enforcement.
 
 ## Product behavior
 
@@ -93,3 +93,15 @@ Live App Store sandbox purchase validation and deployment remain pre-release che
 References: [Apple Server Library](https://github.com/apple/app-store-server-library-node), [Apple purchase verification](https://developer.apple.com/documentation/storekit/verificationresult), [StoreKit purchase intents](https://developer.apple.com/documentation/storekit/purchaseintent), [Supabase database function security](https://supabase.com/docs/guides/database/functions).
 
 Production-401 investigation: repeated the read-only lookup with a freshly signed five-minute ES256 JWT; production returned 401 with an empty body and sandbox returned 4040010 using the same token. Confirmed the key remains active in App Store Connect. Reviewed the implementation: requests use their explicit Production/Sandbox environment, sandbox accounts require the dedicated allowlist, and Apple-signed transaction environment is checked. No generic 401-to-sandbox fallback was added. No secrets, billing settings or deployed code changed during this investigation.
+
+## Backend deployment — November 15, 2026
+
+- Pushed source commit `625956f` before hosted changes. Applied the reviewed `premium_membership` migration via the Supabase migration API. The hosted migration history uses its application timestamp; local source remains `20261115021855_premium_membership.sql`.
+- Deployed `membership`, `app-store-notifications`, `coach-chat`, and `parse-food` to Footing project `dcabdzuhuixlcgwavtsc`. After the sandbox secret update their reported versions were 2, 2, 39 and 23 respectively; membership/AI endpoints retain JWT verification, and the Apple signature-authenticated webhook has JWT verification off.
+- The owner selected the existing, confirmed Jordan disposable account. Its UUID is the sole `APP_STORE_SANDBOX_USER_IDS` entry; the hosted secret digest matched. `MEMBERSHIP_ENFORCED` remains absent. This account alone exercises the paywall and membership AI checks; other beta users retain beta access.
+- Campaign verified `enabled=false`, `claimed=0`. All five new tables have RLS and no client read/write grants. All four RPCs are invoker-rights with no authenticated-client execute permission. Security advisor reports informational no-policy notices for deliberately server-only tables; no warning/error findings were returned.
+- 59 backend contract tests passed; all four affected entrypoints type-check. Hosted membership rejects unauthenticated calls (401); a forged Apple webhook payload is rejected (503), with no entitlement granted. The disposable account's database snapshot has no founder or subscription grant.
+- Saved the sandbox notification URL in App Store Connect and confirmed it survives page reload: `https://dcabdzuhuixlcgwavtsc.supabase.co/functions/v1/app-store-notifications`. Apple Request a Test Notification returned `4040007` (notification URL not found) on two checks despite the persisted UI setting. Delivery is **not verified**; recheck after configuration propagation and investigate with Apple if it persists. Production URL configuration remains pending.
+- No new TestFlight build/upload was made: the owner requested widget and other bug fixes first. The installed build predates native membership UI. Real sandbox purchase/restore/renewal/expiration/refund and signed-notification delivery remain untested. Product availability/review metadata and Paid Apps Agreement status also require a fresh check before purchase testing.
+
+When the updated TestFlight build is ready, sign into Footing with the selected disposable account, open Profile → Your membership, confirm the localized monthly price, and run the sandbox purchase. TestFlight purchases use Apple's sandbox and do not charge real money. Check premium access, force-quit/reopen, then restore on the same Footing account. Verify transaction/environment/account ownership on the backend before testing cancellation/expiration. Founding claims remain closed during these tests; do not consume a real launch place.
