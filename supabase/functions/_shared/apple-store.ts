@@ -18,7 +18,7 @@ export function appleStore(environment = 'Production') {
     true, env, 'com.dustin.nutripulse.app', 6789967509)
   // Pinned SDK passes this value directly to jsonwebtoken, which accepts KeyObject.
   // Preserve the normalized curve metadata for strict outgoing ES256 signing too.
-  const api = new AppStoreServerAPIClient(normalizeAppleKey(createPrivateKey(key)) as unknown as string, keyId, issuer, 'com.dustin.nutripulse.app', env)
+  const api = new AppStoreServerAPIClient(normalizeAppleKey(createPrivateKey(key), key) as unknown as string, keyId, issuer, 'com.dustin.nutripulse.app', env)
   return { verifier, api, environment }
 }
 

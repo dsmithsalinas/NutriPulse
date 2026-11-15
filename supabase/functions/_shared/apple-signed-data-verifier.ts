@@ -241,7 +241,7 @@ export class SignedDataVerifier {
           type: "spki",
           format: "pem"
         });
-        jsonwebtoken.verify(jwt, normalizeAppleKey(createPublicKey(encodedKey))) as T
+        jsonwebtoken.verify(jwt, normalizeAppleKey(createPublicKey(encodedKey), encodedKey.toString())) as T
         return decodedJWT
       } catch (error) {
         if (error instanceof VerificationException) {
