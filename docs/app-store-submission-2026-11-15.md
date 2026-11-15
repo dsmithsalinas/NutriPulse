@@ -37,7 +37,7 @@ All categories: **not used for tracking**. No advertising purposes selected.
 
 Payment-card/bank details are processed by Apple, not received by Footing. Audio is not retained by Footing; speech becomes text. Scanner camera images are not uploaded. No contacts, browsing history, photos, location, ad data or stored search-history collection was established in this inventory. Live infrastructure may retain technical request logs; never add request bodies or personal content to logs.
 
-The 14 categories are saved and fully configured. **Final Publish is pending owner confirmation** because Apple's confirmation explicitly agrees to accuracy, legal compliance and ongoing updates. This is not yet a published label.
+The 14 categories were **published November 15, 2026**, after the owner explicitly approved Apple's final accuracy, legal-compliance and update agreement. App Store Connect displayed ‘Published a few seconds ago by Dustin Smith-Salinas’. No tracking or advertising purposes are declared.
 
 ## Privacy source corrections
 
@@ -48,12 +48,10 @@ The 14 categories are saved and fully configured. **Final Publish is pending own
 
 ## Deployment and validation evidence
 
-Source commit `6576bd8` was pushed before the site deployment. Cloudflare Worker `footing-site` version `93d3412a-4ffd-4778-b55a-aa3d822d1cd0` uploaded exactly two changed assets: privacy.html and terms.html. Both public routes return success and their bytes match committed source. The site production build and native plist validation passed. The capture checks passed on both native iPhone sizes. Both six-image sequences persisted in App Store Connect after reload. No genuine Duo capture is claimed. No final App Privacy Publish agreement was accepted.
+Source commit `6576bd8` was pushed before the site deployment. Cloudflare Worker `footing-site` version `93d3412a-4ffd-4778-b55a-aa3d822d1cd0` uploaded exactly two changed assets: privacy.html and terms.html. Both public routes return success and their bytes match committed source. The site production build and native plist validation passed. The capture checks passed on both native iPhone sizes. Both six-image sequences persisted in App Store Connect after reload. No genuine Duo capture is claimed. The owner subsequently approved privacy publication; Apple's Publish agreement was accepted and publication confirmed. The owner also confirmed FatSecret commercial distribution is covered. Content Rights is saved as ‘Yes, this app has the necessary rights to its third-party content’ and persisted after reload. This records owner-provided licensing confirmation, not an independent contract audit.
 
 ## Remaining owner/dependency items
 
-- Confirm final App Privacy publication (question presented).
-- Confirm public commercial FatSecret rights before saving the third-party-content rights assertion (question presented). Working API access/attribution alone does not prove commercial licensing.
 - Six actual-app screenshots are uploaded for both medium (1206 × 2622) and large (1320 × 2868) iPhone displays, in order: Today, AI meal review, Pulse, Progress, shot routine, food detail. Capture checks passed on both simulator sizes; all PNGs are opaque RGB. Owner can review/replace this draft set before submission. See `marketing/app-store/2026-11-15/README.md`. Genuine Duo captures remain blocked by available simulator runtime support.
 - Reverify reviewer credentials and ensure reviewer premium access survives production enforcement, without consuming a founding place.
 - Finish subscription review screenshot/metadata and submit subscription alongside the first app version.
