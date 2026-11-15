@@ -1,5 +1,7 @@
 import { AppStoreServerAPIClient, Environment } from 'npm:@apple/app-store-server-library@3.1.0'
 import { Buffer } from 'node:buffer'
+import { createPrivateKey } from 'node:crypto'
+import { normalizeAppleKey } from './apple-crypto.ts'
 import { SignedDataVerifier } from './apple-signed-data-verifier.ts'
 import { APPLE_STORE_ROOTS } from './apple-store-roots.ts'
 import { subscriptionRecord } from './membership.ts'
@@ -14,7 +16,9 @@ export function appleStore(environment = 'Production') {
   if (!key || !keyId || !issuer) throw Error('Store is not configured')
   const verifier = new SignedDataVerifier(APPLE_STORE_ROOTS.map(root => Buffer.from(root, 'base64')),
     true, env, 'com.dustin.nutripulse.app', 6789967509)
-  const api = new AppStoreServerAPIClient(key, keyId, issuer, 'com.dustin.nutripulse.app', env)
+  // Pinned SDK passes this value directly to jsonwebtoken, which accepts KeyObject.
+  // Preserve the normalized curve metadata for strict outgoing ES256 signing too.
+  const api = new AppStoreServerAPIClient(normalizeAppleKey(createPrivateKey(key)) as unknown as string, keyId, issuer, 'com.dustin.nutripulse.app', env)
   return { verifier, api, environment }
 }
 

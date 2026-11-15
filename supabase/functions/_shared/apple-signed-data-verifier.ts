@@ -9,6 +9,7 @@ import { Buffer } from 'node:buffer';
 
 import { KeyObject, createPublicKey, createHash, verify } from 'node:crypto';
 import { EdgeX509Certificate as X509Certificate } from './apple-x509.ts';
+import { normalizeAppleKey } from './apple-crypto.ts';
 import { KJUR, X509, ASN1HEX } from 'npm:jsrsasign@11.1.0';
 
 import { Environment } from 'npm:@apple/app-store-server-library@3.1.0/dist/models/Environment.js';
@@ -240,7 +241,7 @@ export class SignedDataVerifier {
           type: "spki",
           format: "pem"
         });
-        jsonwebtoken.verify(jwt, encodedKey) as T
+        jsonwebtoken.verify(jwt, normalizeAppleKey(createPublicKey(encodedKey))) as T
         return decodedJWT
       } catch (error) {
         if (error instanceof VerificationException) {

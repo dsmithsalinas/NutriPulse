@@ -14,7 +14,18 @@ const make = (env = Environment.SANDBOX, bundle = 'com.dustin.nutripulse.app') =
   new SignedDataVerifier(roots, true, env, bundle, 6789967509)
 const descriptors = new Map<string, PropertyDescriptor | undefined>()
 const originalFetch = globalThis.fetch
+let keyPrototype = Object.getPrototypeOf(new X509Certificate(roots[1]).publicKey)
+while (!Object.getOwnPropertyDescriptor(keyPrototype, 'asymmetricKeyDetails')) keyPrototype = Object.getPrototypeOf(keyPrototype)
+const curveDescriptor = Object.getOwnPropertyDescriptor(keyPrototype, 'asymmetricKeyDetails')!
 try {
+  // Emulate hosted curve metadata as well as its missing certificate methods.
+  Object.defineProperty(keyPrototype, 'asymmetricKeyDetails', {
+    configurable:true, get() {
+      const details = curveDescriptor.get!.call(this)
+      const aliases: Record<string,string> = { prime256v1:'P-256',secp384r1:'P-384',secp521r1:'P-521' }
+      return { ...details, namedCurve:aliases[details?.namedCurve] ?? details?.namedCurve }
+    },
+  })
   for (const name of ['raw', 'infoAccess', 'verify', 'toString']) {
     descriptors.set(name, Object.getOwnPropertyDescriptor(X509Certificate.prototype, name))
     const unavailable = () => { throw Error('Simulated hosted runtime missing certificate method') }
@@ -41,6 +52,7 @@ try {
   console.log('Apple TEST verified; missing-runtime methods simulated; wrong app/environment, tampering and unavailable OCSP rejected.')
 } finally {
   globalThis.fetch = originalFetch
+  Object.defineProperty(keyPrototype, 'asymmetricKeyDetails', curveDescriptor)
   for (const [name, descriptor] of descriptors) {
     if (descriptor) Object.defineProperty(X509Certificate.prototype, name, descriptor)
     else Reflect.deleteProperty(X509Certificate.prototype, name)

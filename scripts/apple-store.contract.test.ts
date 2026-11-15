@@ -2,7 +2,8 @@ import { Environment } from 'npm:@apple/app-store-server-library@3.1.0'
 import { SignedDataVerifier } from '../supabase/functions/_shared/apple-signed-data-verifier.ts'
 import { EdgeX509Certificate } from '../supabase/functions/_shared/apple-x509.ts'
 import { Buffer } from 'node:buffer'
-import { X509Certificate } from 'node:crypto'
+import { X509Certificate, createPublicKey } from 'node:crypto'
+import { normalizeAppleKey } from '../supabase/functions/_shared/apple-crypto.ts'
 import { APPLE_STORE_ROOTS } from '../supabase/functions/_shared/apple-store-roots.ts'
 const roots = APPLE_STORE_ROOTS.map(root => Buffer.from(root, 'base64'))
 Deno.test('pinned Apple roots are valid self-signed CA certificates', () => {
@@ -31,4 +32,13 @@ Deno.test('Edge certificate adapter preserves real verification and rejects the 
     const copy = certificate.raw; copy.fill(0)
     if (certificate.raw[0] === 0) throw Error('Mutable certificate bytes leaked')
   }
+})
+
+Deno.test('equivalent hosted EC curve names normalize without disabling algorithm checks', () => {
+  const key = createPublicKey(new X509Certificate(roots[1]).publicKey.export({type:'spki',format:'pem'}))
+  Object.defineProperty(key, 'asymmetricKeyDetails', { value: { namedCurve:'P-256' }, configurable:true })
+  if (normalizeAppleKey(key).asymmetricKeyDetails?.namedCurve !== 'prime256v1') throw Error('Alias not normalized')
+  const unknown = createPublicKey(new X509Certificate(roots[1]).publicKey.export({type:'spki',format:'pem'}))
+  Object.defineProperty(unknown, 'asymmetricKeyDetails', { value: { namedCurve:'unknown' }, configurable:true })
+  if (normalizeAppleKey(unknown).asymmetricKeyDetails?.namedCurve !== 'unknown') throw Error('Unknown curve accepted')
 })
