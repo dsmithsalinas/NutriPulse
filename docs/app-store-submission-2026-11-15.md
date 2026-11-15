@@ -4,9 +4,9 @@
 
 - App name retained: **Footing: GLP-1 Nutrition**.
 - Subtitle: **Protein, meals & daily habits**.
-- Version changed from 1.0 to **1.3.9**; existing TestFlight **build 326** selected.
+- Version changed from 1.0 to **1.3.9**; final privacy candidate **build 330** selected and verified after reload; available to TestFlight Early Access.
 - Description, promotional text, keywords, support/marketing URLs and copyright entered.
-- Reviewer notes rewritten for current navigation, optional permissions, independent AI consent, free/premium features, monthly allowances, founding access and account deletion. Existing review credentials/contact retained; credentials have not been reverified in this pass.
+- Reviewer notes rewritten for current navigation, optional permissions, independent AI consent, free/premium features, monthly allowances, founding access and account deletion. Existing review credentials/contact retained; reviewer sign-in and authenticated membership status verified.
 - **Manual release** selected. Nothing submitted to App Review or released.
 - Free app-download pricing configured; app availability **United States only**, matching the current subscription territory. Price comparables for other territories do not enable those territories.
 - **18+** age rating saved, with the adult terms URL. Questionnaire: age assurance enabled (adult DOB gate); no parental controls, unrestricted web browser, broadly distributed UGC, social feed, user-to-user messaging or advertising; regular prescription-medication references and wellness guidance; no profanity, horror, sexual, violent, gambling, contest or loot-box content.
@@ -44,7 +44,7 @@ The 14 categories were **published November 15, 2026**, after the owner explicit
 - Published privacy policy includes Apple membership verification, founding claims, AI allowance counters, deletion and the fact that deleting Footing does not cancel Apple billing. Membership terms are published as well.
 - Added clear pseudonymous device analytics/diagnostics wording and optional sensitive preferences.
 - Native manifest now includes sensitive info and other diagnostics; name includes personalization; product interaction covers linked membership counters as well as analytics. Device ID is already declared by the bundled SDK.
-- Plist validation passes. **Build 326 predates these manifest corrections. Prepare and upload a replacement build before final submission; selecting 326 here is provisional.** No new release build was uploaded in this preparation pass.
+- Build 330 contains the corrected manifest and replaces 326 for submission. Signed Release archive, distribution IPA/privacy checks and all three membership UI checks passed. See `docs/testflight-1.3.9-330.md`.
 
 ## Deployment and validation evidence
 
@@ -53,8 +53,8 @@ Source commit `6576bd8` was pushed before the site deployment. Cloudflare Worker
 ## Remaining owner/dependency items
 
 - Six actual-app screenshots are uploaded for both medium (1206 × 2622) and large (1320 × 2868) iPhone displays, in order: Today, AI meal review, Pulse, Progress, shot routine, food detail. Capture checks passed on both simulator sizes; all PNGs are opaque RGB. Owner can review/replace this draft set before submission. See `marketing/app-store/2026-11-15/README.md`. Genuine Duo captures remain blocked by available simulator runtime support.
-- Reverify reviewer credentials and ensure reviewer premium access survives production enforcement, without consuming a founding place.
-- Finish subscription review screenshot/metadata and submit subscription alongside the first app version.
+- Reviewer credentials are verified. Marcus and Jordan are the only prelaunch sandbox-allowlisted accounts; Marcus receives the purchase flow with no premium grant or founding claim.
+- Subscription metadata, required review screenshot and detailed notes are saved. Notes disclose the read-only local StoreKit capture and pending expiration test. Update the acceptance results after expiration, then submit the first subscription alongside the app version.
 - Finish cancellation/expiration acceptance; purchase, reopen, restore and renewal cancellation are already observed. Expiration remains pending November 16 at 12:39 PM Pacific unless Apple's actual subscription state changes.
 - Configure production notifications, production entitlement launch settings and founding campaign at the coordinated release; neither global enforcement nor claims were enabled here.
 - Review untested Mac/Vision availability before launch; this pass did not certify those platforms.
