@@ -41,10 +41,14 @@ The 14 categories are saved and fully configured. **Final Publish is pending own
 
 ## Privacy source corrections
 
-- Public-policy draft includes Apple membership verification, founding claims, AI allowance counters, deletion and the fact that deleting Footing does not cancel Apple billing.
+- Published privacy policy includes Apple membership verification, founding claims, AI allowance counters, deletion and the fact that deleting Footing does not cancel Apple billing. Membership terms are published as well.
 - Added clear pseudonymous device analytics/diagnostics wording and optional sensitive preferences.
 - Native manifest now includes sensitive info and other diagnostics; name includes personalization; product interaction covers linked membership counters as well as analytics. Device ID is already declared by the bundled SDK.
 - Plist validation passes. **Build 326 predates these manifest corrections. Prepare and upload a replacement build before final submission; selecting 326 here is provisional.** No new release build was uploaded in this preparation pass.
+
+## Deployment and validation evidence
+
+Source commit `6576bd8` was pushed before the site deployment. Cloudflare Worker `footing-site` version `93d3412a-4ffd-4778-b55a-aa3d822d1cd0` uploaded exactly two changed assets: privacy.html and terms.html. Both public routes return success and their bytes match committed source. The site production build and native plist validation passed. The capture checks passed on both native iPhone sizes. Both six-image sequences persisted in App Store Connect after reload. No genuine Duo capture is claimed. No final App Privacy Publish agreement was accepted.
 
 ## Remaining owner/dependency items
 
