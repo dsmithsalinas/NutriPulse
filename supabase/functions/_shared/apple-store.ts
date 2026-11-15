@@ -1,5 +1,6 @@
-import { AppStoreServerAPIClient, Environment, SignedDataVerifier } from 'npm:@apple/app-store-server-library@3.1.0'
+import { AppStoreServerAPIClient, Environment } from 'npm:@apple/app-store-server-library@3.1.0'
 import { Buffer } from 'node:buffer'
+import { SignedDataVerifier } from './apple-signed-data-verifier.ts'
 import { APPLE_STORE_ROOTS } from './apple-store-roots.ts'
 import { subscriptionRecord } from './membership.ts'
 
