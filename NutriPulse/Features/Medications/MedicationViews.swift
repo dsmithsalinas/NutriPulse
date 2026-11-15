@@ -331,21 +331,12 @@ struct MedicationTodaySection: View {
         }
         return order.compactMap { groups[$0] }
     }
+    @State private var editingDose: MedicationOccurrence?
     private func compactDose(_ dose: MedicationOccurrence) -> some View {
-        Menu {
-            if !date.isToday {
-                Button("Review in history", action: onHistory)
-            } else if dose.status == .notLogged {
-                Button("Mark taken") { record(dose, .taken) }
-                    .accessibilityIdentifier("compactMedicationTaken")
-                Button("Skip dose") { record(dose, .skipped) }
-                    .accessibilityIdentifier("compactMedicationSkip")
-            } else {
-                if let time = dose.takenAt { Text("Taken at \(time.formatted(date: .omitted, time: .shortened))") }
-                Button("Undo \(dose.status.title.lowercased())") { record(dose, .notLogged) }
-                    .accessibilityIdentifier("compactMedicationUndo")
-                Button("View history", action: onHistory)
-            }
+        Button {
+            if date.isToday && dose.status == .notLogged { record(dose, .taken) }
+            else if date.isToday { editingDose = dose }
+            else { onHistory() }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: dose.status == .taken ? "checkmark.circle.fill" : dose.status == .skipped ? "minus.circle" : "plus.circle")
@@ -354,10 +345,34 @@ struct MedicationTodaySection: View {
             }.font(Theme.Fonts.body(12)).frame(maxWidth: .infinity, minHeight: 44)
                 .foregroundStyle(dose.status == .taken ? Theme.Colors.limeLabel : Theme.Colors.primaryText)
                 .background(dose.status == .taken ? Theme.Colors.lime.opacity(0.5) : Theme.Colors.surfaceInset, in: RoundedRectangle(cornerRadius: 12))
-        }.disabled(store.hasConflict && date.isToday)
+        }.buttonStyle(.plain)
+            .contextMenu {
+                if !date.isToday {
+                    Button("Review in history", action: onHistory)
+                } else if dose.status == .notLogged {
+                    Button("Skip dose") { record(dose, .skipped) }
+                        .accessibilityIdentifier("compactMedicationSkip")
+                } else {
+                    Button("Undo \(dose.status.title.lowercased())") { record(dose, .notLogged) }
+                        .accessibilityIdentifier("compactMedicationUndo")
+                    Button("View history", action: onHistory)
+                }
+            }
+            .confirmationDialog("Dose actions", isPresented: Binding(get: { editingDose?.id == dose.id }, set: { if !$0 { editingDose = nil } }), titleVisibility: .visible) {
+                Button("Undo \(dose.status.title.lowercased())") { record(dose, .notLogged); editingDose = nil }
+                    .accessibilityIdentifier("compactMedicationUndoDialog")
+                Button("View history") { editingDose = nil; onHistory() }
+                Button("Cancel", role: .cancel) { editingDose = nil }
+            }
+            .disabled(store.hasConflict && date.isToday)
             .accessibilityIdentifier("compactMedicationDose-\(dose.id)")
             .accessibilityLabel("\(dose.name), \(dose.amount), \(dose.scheduledAt.formatted(date: .omitted, time: .shortened)), \(dose.status.title)")
-            .accessibilityHint("Open dose actions")
+            .accessibilityHint(date.isToday && dose.status == .notLogged ? "Tap to mark taken. Touch and hold for Skip dose." : "Open dose actions")
+            .accessibilityActions {
+                if date.isToday && dose.status == .notLogged {
+                    Button("Skip dose") { record(dose, .skipped) }
+                }
+            }
     }
     private func record(_ dose: MedicationOccurrence, _ status: MedicationDoseStatus) {
         do { try store.record(dose, status: status); error = nil } catch { self.error = error.localizedDescription }

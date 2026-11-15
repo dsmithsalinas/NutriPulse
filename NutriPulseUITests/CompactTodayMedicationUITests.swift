@@ -40,15 +40,14 @@ final class CompactTodayMedicationUITests: XCTestCase {
             app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@ AND label ENDSWITH %@", "compactMedicationDose-", name + ",", status)).firstMatch
         }
         dose("NAC", "Not logged").tap()
-        app.buttons["compactMedicationTaken"].tap()
         XCTAssertTrue(app.staticTexts["3 of 4 taken"].exists)
         XCTAssertTrue(dose("Stress Reset", "Not logged").exists)
-        dose("Stress Reset", "Not logged").tap()
+        dose("Stress Reset", "Not logged").press(forDuration: 1)
         app.buttons["compactMedicationSkip"].tap()
         XCTAssertTrue(app.staticTexts["Today complete · 3 taken, 1 skipped"].exists)
         app.buttons["Review doses"].tap()
         dose("Stress Reset", "Skipped").tap()
-        app.buttons["compactMedicationUndo"].tap()
+        app.buttons.matching(identifier: "compactMedicationUndoDialog").firstMatch.tap()
         XCTAssertTrue(app.staticTexts["3 of 4 taken"].exists)
         XCTAssertTrue(dose("Stress Reset", "Not logged").exists)
     }

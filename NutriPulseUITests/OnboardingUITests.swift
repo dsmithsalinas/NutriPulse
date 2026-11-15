@@ -74,4 +74,64 @@ final class OnboardingUITests: XCTestCase {
         app.buttons["Start with today"].tap()
         XCTAssertTrue(app.staticTexts["What would feel easier?"].exists)
     }
+    func testBasicsUsesPillsAndFeetInchesWithUnitRoundTrip() {
+        let app = app(step: 2)
+        XCTAssertTrue(app.textFields["onboarding-height-feet"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.textFields["onboarding-height-feet"].value as? String, "5")
+        XCTAssertEqual(app.textFields["onboarding-height-inches"].value as? String, "6.9")
+        app.buttons["Metric"].tap()
+        XCTAssertEqual(app.textFields["Height (cm)"].value as? String, "170")
+        app.buttons["Imperial"].tap()
+        XCTAssertEqual(app.textFields["onboarding-height-feet"].value as? String, "5")
+        XCTAssertEqual(app.textFields["onboarding-height-inches"].value as? String, "6.9")
+        func replace(_ field: XCUIElement, with text: String) {
+            field.tap()
+            let old = field.value as? String ?? ""
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count))
+            if !text.isEmpty { field.typeText(text) }
+        }
+        replace(app.textFields["onboarding-height-feet"], with: "")
+        XCTAssertFalse(app.buttons["Review my setup"].isEnabled)
+        replace(app.textFields["onboarding-height-feet"], with: "6")
+        replace(app.textFields["onboarding-height-inches"], with: "12")
+        XCTAssertFalse(app.buttons["Review my setup"].isEnabled)
+        replace(app.textFields["onboarding-height-inches"], with: "2")
+        XCTAssertTrue(app.buttons["Review my setup"].isEnabled)
+        app.swipeDown()
+        app.buttons["Metric"].tap()
+        XCTAssertEqual(app.textFields["Height (cm)"].value as? String, "188")
+        app.buttons["Imperial"].tap()
+        XCTAssertEqual(app.textFields["onboarding-height-feet"].value as? String, "6")
+        XCTAssertEqual(app.textFields["onboarding-height-inches"].value as? String, "2")
+        capture("basics-feet-inches")
+        for _ in 0..<5 { if app.buttons["onboarding-Activity-light"].isHittable { break }; app.swipeUp() }
+        app.buttons["onboarding-Activity-light"].tap()
+        XCTAssertTrue(app.buttons["onboarding-Activity-light"].isSelected)
+        for _ in 0..<5 { if app.buttons["onboarding-Weight direction-maintain"].isHittable { break }; app.swipeUp() }
+        app.buttons["onboarding-Weight direction-maintain"].tap()
+        XCTAssertTrue(app.buttons["onboarding-Weight direction-maintain"].isSelected)
+        capture("basics-selected-pills")
+        XCTAssertTrue(app.buttons["Review my setup"].isEnabled)
+    }
+
+    func testBasicsPillsFitAccessibilityText() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--onboarding-preview", "--onboarding-step", "2", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let inches = app.textFields["onboarding-height-inches"]
+        for _ in 0..<30 {
+            if inches.isHittable { break }
+            app.swipeUp(velocity: .slow)
+        }
+        XCTAssertTrue(inches.isHittable)
+        XCTAssertLessThanOrEqual(inches.frame.maxX, app.frame.maxX)
+        capture("basics-height-accessibility-text")
+        let choice = app.buttons["onboarding-Activity-moderate"]
+        for _ in 0..<12 { if choice.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(choice.isHittable)
+        XCTAssertGreaterThanOrEqual(choice.frame.height, 44)
+        XCTAssertLessThanOrEqual(choice.frame.maxX, app.frame.maxX)
+        capture("basics-pills-accessibility-text")
+    }
+
 }
