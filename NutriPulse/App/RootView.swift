@@ -11,7 +11,9 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if let screen = duoAuditScreen {
+            if let membership = membershipPreview {
+                membership
+            } else if let screen = duoAuditScreen {
                 duoAuditPreview(screen)
             } else if isPulseHealthPreview {
                 pulseHealthPreview
@@ -71,8 +73,18 @@ struct RootView: View {
         // when the view appears and automatically cancels it when the view disappears.
         // No manual cleanup needed — Swift's structured concurrency handles it.
         .task {
-            if duoAuditScreen == nil && !isPulseHealthPreview && !isHealthPatternsPreview && !isOnboardingPreview && !isEverydayToolsPreview && !isOffScriptPreview && !isPulseWeekPreview && !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
+            if !AppStoreScreenshotMode.active { MembershipStore.shared.startListening() }
+            if membershipPreview == nil && duoAuditScreen == nil && !isPulseHealthPreview && !isHealthPatternsPreview && !isOnboardingPreview && !isEverydayToolsPreview && !isOffScriptPreview && !isPulseWeekPreview && !isStrongWeekPreview && !AppStoreScreenshotMode.active { await appState.startObservingAuth() }
         }
+    }
+
+    private var membershipPreview: AnyView? {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("--membership-preview") else { return nil }
+        return AnyView(MembershipView(store: .preview(founder: ProcessInfo.processInfo.arguments.contains("--founder-active")), isPreview: true))
+        #else
+        return nil
+        #endif
     }
 
     private var duoAuditScreen: String? {

@@ -3,7 +3,7 @@ import SwiftUI
 enum AppStoreScreenshotMode {
     static var active: Bool {
         #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("--store-today") || ProcessInfo.processInfo.arguments.contains("--store-food")
+        ProcessInfo.processInfo.arguments.contains("--store-today") || ProcessInfo.processInfo.arguments.contains("--store-food") || ProcessInfo.processInfo.arguments.contains("--membership-preview")
         #else
         false
         #endif

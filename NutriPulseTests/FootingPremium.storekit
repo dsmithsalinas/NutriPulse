@@ -1,0 +1,53 @@
+{
+  "identifier": "FootingPremiumLocalTests",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_applicationInternalID": "6789967509",
+    "_developerTeamID": "G574NUGMU2",
+    "_failTransactionsEnabled": false,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": []
+  },
+  "subscriptionGroups": [
+    {
+      "id": "footing-premium",
+      "localizations": [
+        {
+          "description": "Pulse coaching and AI food logging",
+          "displayName": "Footing premium",
+          "locale": "en_US"
+        }
+      ],
+      "name": "Footing premium",
+      "subscriptions": [
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "2.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "footing-monthly",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Pulse coaching, AI food logging, and weekly guidance",
+              "displayName": "Footing premium monthly",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "com.dustin.nutripulse.premium.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Footing premium monthly",
+          "subscriptionGroupID": "footing-premium",
+          "type": "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version": {
+    "major": 3,
+    "minor": 0
+  }
+}

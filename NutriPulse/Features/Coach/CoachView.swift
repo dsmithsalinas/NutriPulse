@@ -137,6 +137,7 @@ struct CoachView: View {
                 await vm.refreshStartSuggestions()
             }
         }
+        .sheet(isPresented: $vm.showMembership) { MembershipView() }
         .alert("Error", isPresented: Binding(
             get: { vm.error != nil },
             set: { if !$0 { vm.error = nil } }

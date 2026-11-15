@@ -109,6 +109,7 @@ struct TalkToLogView: View {
             }
         }
         .onDisappear { dictation.stop(); onFocusChanged(false) }
+        .sheet(isPresented: $vm.showMembership) { MembershipView() }
         .sheet(isPresented: $showFoodAIConsent) {
             FoodAIConsentSheet(onAllowed: { await vm.parse(for: date) })
         }

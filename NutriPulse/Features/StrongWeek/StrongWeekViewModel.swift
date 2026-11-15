@@ -9,6 +9,7 @@ final class StrongWeekViewModel {
     var isLoading = true
     var isGenerating = false
     var loadFailed = false
+    var showMembership = false
     var error: String?
     var editing = false
     var changedSinceGeneration = false
@@ -130,6 +131,8 @@ final class StrongWeekViewModel {
                 struct Response: Decodable { let outlook: StrongWeekOutlook }
                 guard try await supabase.auth.session.user.id == userId,
                       StrongWeekWindow.key() == week.weekStart else { throw URLError(.cancelled) }
+                guard await MembershipStore.shared.ensureAccess() else { showMembership = true; return }
+                guard try await supabase.auth.session.user.id == userId else { throw URLError(.userAuthenticationRequired) }
                 let response: Response = try await supabase.functions.invoke("coach-chat", options: .init(body: Request(context: context)))
                 outlook = response.outlook
                 pendingOutlook = outlook; pendingRevision = week.contextRevision
@@ -149,6 +152,7 @@ final class StrongWeekViewModel {
         } catch {
             self.error = EdgeFunctionError.message(from: error,
                 fallback: "Your week couldn't be updated. Any saved context is kept. Try again, or reopen to load the latest version.")
+            if EdgeFunctionError.isMembershipRequired(error) { showMembership = true }
             if EdgeFunctionError.isAIConsentRequired(error) { PulseProfileStore.shared.serverReportedConsentRequired() }
             if EdgeFunctionError.isPulseOff(error) { PulseProfileStore.shared.serverReportedPulseOff() }
         }

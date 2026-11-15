@@ -46,6 +46,7 @@ final class TalkToLogViewModel {
     var inputText = "" {
         didSet { if oldValue != inputText { foodContext.textChanged(); invalidateDraft() } }
     }
+    var showMembership = false
     var isParsing = false
     var rows: [ConfirmRow] = []
     var selectedMeal: Meal = .current
@@ -184,6 +185,7 @@ final class TalkToLogViewModel {
             }
         } catch {
             guard requestID == token, foodContext.revision == revision else { return }
+            if EdgeFunctionError.isMembershipRequired(error) { showMembership = true }
             if !dishes.isEmpty { compositionConfirmed = false }
             // Show the server's reason when present (e.g. the 429 rate-limit copy); otherwise
             // the generic parse-failure message.

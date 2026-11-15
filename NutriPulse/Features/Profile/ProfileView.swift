@@ -100,6 +100,7 @@ struct ProfileView: View {
 
     private var profileSupport: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tileGap) {
+            MembershipProfileSection()
             supportTile.popIn(order: 6)
             #if DEBUG
             debugTile
@@ -303,7 +304,7 @@ struct ProfileView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("This permanently deletes your account and all your Footing data. This cannot be undone. If you linked Apple, you’ll confirm with Apple first so Footing can revoke that connection. Records already saved in Apple Health stay there.")
+                Text("This permanently deletes your account and all your Footing data. This cannot be undone. If you linked Apple, you’ll confirm with Apple first so Footing can revoke that connection. Records already saved in Apple Health stay there. Deleting Footing does not cancel an Apple subscription. Manage or cancel it in Apple subscription settings before deleting.")
             }
             .confirmationDialog("Delete Footing and disconnect Apple manually?", isPresented: $vm.showManualAppleDeletionConfirm, titleVisibility: .visible) {
                 Button("Delete Footing account", role: .destructive) {
@@ -311,7 +312,7 @@ struct ProfileView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("Your Footing account and data will be permanently deleted. You’ll then need to disconnect Footing from Sign in with Apple in your Apple Account settings. We’ll show Apple’s instructions after deletion. This cannot be undone.")
+                Text("Your Footing account and data will be permanently deleted. You’ll then need to disconnect Footing from Sign in with Apple in your Apple Account settings. We’ll show Apple’s instructions after deletion. Deleting Footing does not cancel an Apple subscription; manage or cancel it in Apple subscription settings. This cannot be undone.")
             }
     }
 

@@ -7,6 +7,7 @@ final class CoachViewModel {
     var messages: [CoachMessage] = []
     var inputText: String = ""
     var isLoading: Bool = false
+    var showMembership = false
     var error: String? = nil
     private(set) var suggestedPrompts: [String] = []
     private(set) var canLoadOlder = false
@@ -428,9 +429,12 @@ final class CoachViewModel {
     /// The Monday Recap tile. The only way the weekly summary is generated now.
     func requestWeeklyRecap() async {
         guard !isLoading else { return }
+        let expectedOwner = supabase.auth.currentSession?.user.id
+        guard await MembershipStore.shared.ensureAccess() else { showMembership = true; return }
         beginTopic()
         do {
             let userId = try await supabase.auth.session.user.id
+            guard userId == expectedOwner else { return }
             let asked: CoachMessage = try await repo.save(
                 NewCoachMessage(userId: userId, role: "user", content: "Monday Recap", messageType: "chat")
             )
@@ -486,6 +490,7 @@ final class CoachViewModel {
     // weekly recap). The trigger isn't saved; the reply is, tagged with `type`.
     private func generateAutoMessage(type: String, trigger: String) async {
         guard let owner = supabase.auth.currentSession?.user.id else { return }
+        guard await MembershipStore.shared.ensureAccess() else { showMembership = true; return }
         isLoading = true
         await ensureProfileLoaded()
         let context = await contextBuilder.build(profile: profile, includeLastWeek: type == "weekly_summary")
@@ -506,6 +511,7 @@ final class CoachViewModel {
         } catch {
             // Only Pulse being off on the server is worth an alert here; anything else just
             // leaves the recap tile up to try again.
+            if EdgeFunctionError.isMembershipRequired(error) { showMembership = true }
             if EdgeFunctionError.isAIConsentRequired(error) { PulseProfileStore.shared.serverReportedConsentRequired() }
             if EdgeFunctionError.isPulseOff(error) {
                 PulseProfileStore.shared.serverReportedPulseOff()
@@ -546,6 +552,8 @@ final class CoachViewModel {
     func sendMessage(_ overrideText: String? = nil) async {
         let text = (overrideText ?? inputText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isLoading else { return }
+        let expectedOwner = supabase.auth.currentSession?.user.id
+        guard await MembershipStore.shared.ensureAccess() else { showMembership = true; return }
         let selectedSuggestion = suggestedPrompts.contains(text) ? text : nil
 
         inputText = ""
@@ -557,6 +565,7 @@ final class CoachViewModel {
 
         do {
             let userId = try await supabase.auth.session.user.id
+            guard userId == expectedOwner else { isLoading = false; return }
 
             let userMsg: CoachMessage = try await repo.save(
                 NewCoachMessage(userId: userId, role: "user", content: text, messageType: "chat")
@@ -606,6 +615,7 @@ final class CoachViewModel {
             // Surfaces the server's reason when there is one — notably the friendly 429
             // rate-limit copy — and the generic message for a genuine transport failure.
             self.error = EdgeFunctionError.message(from: error, fallback: "Couldn't reach Pulse right now. Try again.")
+            if EdgeFunctionError.isMembershipRequired(error) { showMembership = true }
             if EdgeFunctionError.isAIConsentRequired(error) { PulseProfileStore.shared.serverReportedConsentRequired() }
             if EdgeFunctionError.isPulseOff(error) { PulseProfileStore.shared.serverReportedPulseOff() }
             // `inputText = ""` happened before any network call. If the user's message never

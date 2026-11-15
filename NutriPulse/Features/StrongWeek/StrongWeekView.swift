@@ -191,6 +191,7 @@ struct StrongWeekView: View {
             vm.foodPreferencesChanged()
         }
         .sheet(isPresented: $showFoodPreferences) { FoodAccessPreferencesView() }
+        .sheet(isPresented: $vm.showMembership) { MembershipView() }
         .sheet(isPresented: $showAdjustments) { adjustmentSheet }
     }
 

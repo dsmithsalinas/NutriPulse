@@ -8,6 +8,7 @@ import Supabase
 // without an `error` field.
 enum EdgeFunctionError {
     static func message(from error: Error, fallback: String) -> String {
+        if let membership = error as? MembershipAccessError { return membership.localizedDescription }
         guard case let FunctionsError.httpError(_, data) = error else { return fallback }
         struct Body: Decodable { let error: String? }
         if let body = try? JSONDecoder().decode(Body.self, from: data),
@@ -19,6 +20,13 @@ enum EdgeFunctionError {
 
     /// coach-chat's 403 for an account whose Pulse setting is off on the server (turned off on
     /// another device, say) while this one still had it on.
+    static func isMembershipRequired(_ error: Error) -> Bool {
+        if error is MembershipAccessError { return true }
+        guard case let FunctionsError.httpError(status, data) = error, status == 402 else { return false }
+        struct Body: Decodable { let code: String? }
+        return (try? JSONDecoder().decode(Body.self, from: data))?.code == "membership_required"
+    }
+
     static func isPulseOff(_ error: Error) -> Bool {
         guard case let FunctionsError.httpError(code, data) = error, code == 403 else { return false }
         struct Body: Decodable { let code: String? }

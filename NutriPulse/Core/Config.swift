@@ -34,9 +34,7 @@ enum Config {
     // Canonical policy; old released builds remain supported by the legacy Pages redirect.
     static let privacyPolicyURL = URL(string: "https://tryfooting.app/privacy")!
 
-    // Apple's Standard License Agreement (LAEULA) — the EULA Apple applies to any app that
-    // doesn't ship its own. It's a complete, accepted Terms of Use for a free app, which is
-    // why App Review is satisfied by it. Swap for a self-hosted terms page (mirroring
-    // privacyPolicyURL) if we ever add subscriptions or custom terms.
+    // Apple's Standard License Agreement applies to the app and its subscriptions.
+    // Billing, renewal and founding-access terms are also shown before purchase/claim.
     static let termsOfUseURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 }

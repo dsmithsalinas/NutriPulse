@@ -118,6 +118,8 @@ final class AppState {
             #endif
             PulseProfileStore.shared.setAccount(session?.user.id)
             FoodAIConsentStore.shared.setAccount(session?.user.id)
+            MembershipStore.shared.setAccount(session?.user.id)
+            MembershipStore.shared.startListening()
             PulseMemoryStore.shared.setAccount(session?.user.id)
             EverydayToolsStore.shared.setAccount(session?.user.id)
             PulseAttentionStore.shared.setAccount(session?.user.id)
@@ -135,6 +137,10 @@ final class AppState {
             if event == .signedOut {
                 handleSignedOut()
             } else if session != nil {
+                Task {
+                    await MembershipStore.shared.refresh()
+                    await MembershipStore.shared.retryUnfinishedPurchases()
+                }
                 await PulseAttentionStore.shared.load()
                 await TrackingPreferencesStore.shared.load()
                 await fetchProfile()

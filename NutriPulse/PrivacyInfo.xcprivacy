@@ -20,6 +20,13 @@
 
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
+		<!-- Apple transaction identifiers, subscription status and founding-access dates. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key><string>NSPrivacyCollectedDataTypePurchaseHistory</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key><true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key><false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key><array><string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string></array>
+		</dict>
 		<!-- Free-text coaching messages, meal notes, approved memories and practical context. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key><string>NSPrivacyCollectedDataTypeOtherUserContent</string>

@@ -52,6 +52,9 @@ struct MainTabView: View {
         GeometryReader { geometry in
             mainContent(usesRail: geometry.size.width >= 720 && geometry.size.width > geometry.size.height)
         }
+        .onChange(of: MembershipStore.shared.pendingPurchaseIntent, initial: true) { _, pending in
+            if pending { selectedTab = .profile }
+        }
     }
 
     private func navigationContent(usesRail: Bool) -> some View {
@@ -212,6 +215,7 @@ struct MainTabView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                Task { await MembershipStore.shared.refresh(); await MembershipStore.shared.retryUnfinishedPurchases() }
                 handleMedicationRoute()
                 Task { await MedicationStore.shared.sync(refresh: true); await MedicationNotificationScheduler.shared.reconcile() }
             }
