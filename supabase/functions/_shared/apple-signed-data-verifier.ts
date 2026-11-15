@@ -1,6 +1,7 @@
 // Copyright (c) 2023 Apple Inc. Licensed under MIT License.
 // Vendored from v3.1.0/jws_verification.ts; see apple-verifier-LICENSE.txt.
-// Changes: pinned ESM imports, Edge X509 adapter, native fetch/AbortSignal for OCSP.
+// Changes: pinned ESM imports, Edge X509 adapter, equivalent EC key metadata,
+// native fetch/AbortSignal for OCSP, and Buffer base64url decoding.
 // Verification rules, online checks and model validators remain Apple's implementation.
 
 import jsonwebtoken from 'npm:jsonwebtoken@9.0.2';
