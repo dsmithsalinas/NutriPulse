@@ -8,13 +8,14 @@ import { runInNewContext } from 'node:vm';
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/^import .*\n/gm, '').replace(/export /g, '');
 const fullSource = read('../supabase/functions/_shared/pulse-context.ts') + '\n' +
   read('../supabase/functions/_shared/pulse-provider.ts') + '\n' +
-  read('../supabase/functions/_shared/ai-consent.ts') + '\n' + read('../supabase/functions/coach-chat/index.ts');
+  read('../supabase/functions/_shared/membership.ts') + '\n' + read('../supabase/functions/_shared/ai-consent.ts') + '\n' + read('../supabase/functions/coach-chat/index.ts');
 
 async function send(body: Record<string, unknown>, modelResponse: unknown, env: Record<string, string> = {}, settings?: Record<string, unknown> | null, tracking?: Record<string, unknown> | null, memoryRows?: unknown[], owner = 'test-user', breakfastRows?: unknown[]) {
   let handler: any, modelRequest: any;
   runInNewContext(stripTypeScriptTypes(fullSource), {
     Deno: { env: { get: (key: string) => key in env ? env[key] : key === 'ANTHROPIC_API_KEY' ? 'test-key' : undefined }, serve: (value: any) => { handler = value; } },
     createClient: () => ({
+      rpc: async () => ({data: env.MEMBERSHIP_TEST_RESULT ?? 'membership_required', error: null}),
       auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
       // Provider/context fixtures are explicitly consented; denial and lookup errors
       // are exercised separately in ai-consent.contract.mts using the real helper.
@@ -313,4 +314,18 @@ test('off-script day notes reach Pulse as qualitative context without becoming a
  assert.ok(context.includes('day_context'));assert.ok(context.includes('Travel changed the day.'));
  assert.match(context, /"approvedMemories": \[\]/);
  assert.match(modelRequest.system[0].text, /qualitative user-provided records with unknown nutrition/);
+});
+
+
+test('premium enforcement rejects chat and weekly generation before any provider spend', async () => {
+  for (const messageType of ['chat','weekly_summary','weekly_outlook']) {
+    const {result,modelRequest} = await send({message:'Hello',messageType},reply('Hi'),{MEMBERSHIP_ENFORCED:'true'});
+    assert.equal(result.status,402); assert.equal(modelRequest,undefined);
+  }
+});
+test('premium grant does not override independent AI consent and quota denial never calls model', async () => {
+  const consent = await send({message:'Hi'},reply('Hi'),{MEMBERSHIP_ENFORCED:'true',MEMBERSHIP_TEST_RESULT:'allowed'},{ai_consent_at:null});
+  assert.equal(consent.result.status,403); assert.equal(consent.modelRequest,undefined);
+  const capped = await send({message:'Hi'},reply('Hi'),{MEMBERSHIP_ENFORCED:'true',MEMBERSHIP_TEST_RESULT:'membership_limit_reached'});
+  assert.equal(capped.result.status,429); assert.equal(capped.modelRequest,undefined);
 });

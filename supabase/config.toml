@@ -419,6 +419,16 @@ entrypoint = "./functions/product-health/index.ts"
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
 
 # Private synthetic-fixture evaluation, authenticated by a dedicated expiring bearer token.
+[functions.membership]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/membership/index.ts"
+
+[functions.app-store-notifications]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/app-store-notifications/index.ts"
+
 [functions.pulse-eval]
 enabled = true
 verify_jwt = false

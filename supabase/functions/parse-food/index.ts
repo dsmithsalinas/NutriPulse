@@ -1,5 +1,6 @@
 import { requireAIConsent } from '../_shared/ai-consent.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.118.0'
+import { requireMembership, sandboxAccountAllowed } from '../_shared/membership.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { fatSecretGet, asArray } from '../_shared/fatsecret.ts'
 import { checkRateLimit } from '../_shared/ratelimit.ts'
@@ -240,6 +241,13 @@ Deno.serve(async (req) => {
       .select('user_id,food_ai_consent_at').eq('user_id', user.id).maybeSingle(), user.id, 'food')
     if (consent) return new Response(JSON.stringify(consent), {
       status: consent.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+
+    const membershipAdmin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+    const allowSandbox = sandboxAccountAllowed(user.id, Deno.env.get('APP_STORE_SANDBOX_USER_IDS'))
+    const membership = await requireMembership(membershipAdmin, user.id, 'food', Deno.env.get('MEMBERSHIP_ENFORCED') === 'true' || allowSandbox, allowSandbox)
+    if (membership) return new Response(JSON.stringify(membership), {
+      status: membership.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
     // Rate-limit before parsing/spending. Counts every consented call, malformed included.

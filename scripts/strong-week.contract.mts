@@ -56,11 +56,13 @@ test('chat uses current weekly context and retains scope, uncertainty, and ongoi
 
 async function requestOutlook(modelResponse: unknown) {
   const providerSource = readFileSync(new URL('../supabase/functions/_shared/pulse-provider.ts', import.meta.url), 'utf8').replace(/^import .*\n/gm, '').replace(/export /g, '');
-  const fullSource = source + '\n' + providerSource + '\n' + readFileSync(new URL('../supabase/functions/coach-chat/index.ts', import.meta.url), 'utf8').replace(/^import .*\n/gm, '');
+  const consentSource = readFileSync(new URL('../supabase/functions/_shared/ai-consent.ts', import.meta.url), 'utf8').replace(/^import .*\n/gm, '').replace(/export /g, '');
+  const membershipSource = readFileSync(new URL('../supabase/functions/_shared/membership.ts', import.meta.url), 'utf8').replace(/export /g, '');
+  const fullSource = source + '\n' + providerSource + '\n' + consentSource + '\n' + membershipSource + '\n' + readFileSync(new URL('../supabase/functions/coach-chat/index.ts', import.meta.url), 'utf8').replace(/^import .*\n/gm, '');
   let handler: any, modelRequest: any;
   runInNewContext(stripTypeScriptTypes(fullSource), {
     Deno: { env: { get: (key: string) => key === 'PULSE_PROVIDER' ? undefined : 'test-value' }, serve: (value: any) => { handler = value; } },
-    createClient: () => ({auth:{getUser:async()=>({data:{user:{id:'test-user'}}})}}),
+    createClient: () => ({auth:{getUser:async()=>({data:{user:{id:'test-user'}}})}, from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{user_id:'test-user',pulse_enabled:true,ai_consent_at:'2026-11-12T00:00:00Z'},error:null})})})})}),
     checkRateLimit: async()=>true, corsHeaders: {}, Request, Response, AbortSignal, performance,
     fetch: async(_url: string, options: any)=>{modelRequest=JSON.parse(options.body);return new Response(JSON.stringify(modelResponse),{status:200})},
     console: {error:()=>{}},
