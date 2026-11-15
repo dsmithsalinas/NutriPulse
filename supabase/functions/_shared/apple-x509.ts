@@ -1,6 +1,6 @@
-import { X509Certificate, type KeyObject } from 'node:crypto'
+import { X509Certificate, verify, type KeyObject } from 'node:crypto'
 import { Buffer } from 'node:buffer'
-import { X509, KEYUTIL } from 'npm:jsrsasign@11.1.0'
+import { X509, ASN1HEX } from 'npm:jsrsasign@11.1.0'
 
 // Supabase's hosted Node compatibility omits raw/toString/verify/infoAccess.
 // Retain the original DER and use the same pinned X509 parser Apple's library
@@ -28,7 +28,23 @@ export class EdgeX509Certificate {
   }
   verify(publicKey: KeyObject): boolean {
     try {
-      return this.certificate.verifySignature(KEYUTIL.getKey(publicKey.export({ type: 'spki', format: 'pem' }).toString()))
+      // Use native signature primitives, not CPU-heavy pure-JS elliptic-curve math.
+      // Only Apple's supported SHA-2 EC/RSA certificate signatures are accepted.
+      const algorithm = this.certificate.getSignatureAlgorithmField()
+      if (algorithm !== this.certificate.getSignatureAlgorithmName()) return false
+      const algorithms: Record<string, string> = {
+        SHA256withECDSA: 'sha256', SHA384withECDSA: 'sha384', SHA512withECDSA: 'sha512',
+        SHA256withRSA: 'sha256', SHA384withRSA: 'sha384', SHA512withRSA: 'sha512',
+      }
+      const digest = algorithms[algorithm]
+      if (!digest) return false
+      if (algorithm.endsWith('ECDSA') && publicKey.asymmetricKeyType !== 'ec') return false
+      if (algorithm.endsWith('RSA') && publicKey.asymmetricKeyType !== 'rsa') return false
+      const hex = this.der.toString('hex')
+      const tbs = ASN1HEX.getTLVbyList(hex, 0, [0])
+      if (!tbs) return false
+      return verify(digest, Buffer.from(tbs, 'hex'), publicKey,
+        Buffer.from(this.certificate.getSignatureValueHex(), 'hex'))
     } catch { return false } // A wrong key/algorithm is a failed signature, never a grant.
   }
   get infoAccess(): string | undefined {
