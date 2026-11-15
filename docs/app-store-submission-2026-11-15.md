@@ -56,7 +56,7 @@ Source commit `6576bd8` was pushed before the site deployment. Cloudflare Worker
 - Reviewer credentials are verified. Marcus and Jordan are the only prelaunch sandbox-allowlisted accounts; Marcus receives the purchase flow with no premium grant or founding claim.
 - Subscription metadata, required review screenshot and detailed notes are saved. Notes disclose the read-only local StoreKit capture and pending expiration test. Update the acceptance results after expiration, then submit the first subscription alongside the app version.
 - Finish cancellation/expiration acceptance; purchase, reopen, restore and renewal cancellation are already observed. Expiration remains pending November 16 at 12:39 PM Pacific unless Apple's actual subscription state changes.
-- Configure production notifications, production entitlement launch settings and founding campaign at the coordinated release; neither global enforcement nor claims were enabled here.
+- Production notification URL is now configured and persisted. Activation/rollback steps are prepared in `docs/membership-launch-2026-11-15.md`; global enforcement and founding claims remain off. Fresh sandbox TEST succeeds; production API delivery remains unverified until after first release (current request returns HTTP 401).
 - Review untested Mac/Vision availability before launch; this pass did not certify those platforms.
 
 ## Primary references

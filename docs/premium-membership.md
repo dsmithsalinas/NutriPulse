@@ -1,6 +1,6 @@
 # Footing premium membership
 
-Prepared November 14; backend deployed November 15, 2026 from pushed commit `625956f`. The premium migration and four Edge Functions are live. Native membership code is available in TestFlight 1.3.9 (326); revised policy pages and the public App Store release remain pending. Global premium enforcement and founding claims remain off; only the explicitly allowlisted disposable sandbox account uses prelaunch enforcement.
+Current launch preparation is tracked in [membership-launch-2026-11-15.md](membership-launch-2026-11-15.md). Build 1.3.9 (330) is uploaded and selected; privacy/terms are published and review materials saved. Production and sandbox notification URLs are configured; fresh sandbox TEST delivery succeeds. Production TEST still returns pre-release HTTP 401. Global enforcement and founding claims remain off with 0 of 50 places claimed; only the Jordan and Marcus disposable accounts are sandbox-allowlisted. Expiration testing and coordinated activation remain pending. The dated sections below retain earlier deployment/test history.
 
 ## Product behavior
 

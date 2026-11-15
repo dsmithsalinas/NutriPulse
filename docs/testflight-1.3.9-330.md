@@ -32,7 +32,7 @@ Review notes cover navigation, included features and monthly allowances, Apple b
 - Build 330 finished processing, is assigned to Early Access, and is selected for App Store version 1.3.9. Selection and manual release persisted after reload.
 - Complete the actual subscription expiration check; its last known expiration was November 16 at 12:39 PM Pacific.
 - Reviewer credentials verified through authenticated sign-in. Added the Marcus reviewer account alongside Jordan to the prelaunch sandbox allowlist; authenticated membership status returns HTTP 200, enforced=true, no premium grant and no founding offer. This exposes the purchase flow without consuming a founding place. A physical reviewer-device purchase remains untested.
-- Coordinate production notification URL, premium enforcement and founding-campaign launch settings.
+- Production notification URL is saved and persisted; fresh sandbox TEST succeeds. Premium enforcement/founding activation and rollback are staged in `docs/membership-launch-2026-11-15.md`. Production TEST remains pre-release HTTP 401 and must be repeated after first release. Public enforcement/campaign remain off.
 - Submit the first subscription and app version together after final readiness approval; retain manual release.
 
 Apple accepted the upload on November 15 at 2:35:18 PM Pacific. Processing completed, Early Access assignment was confirmed, and App Store version 1.3.9 now retains build 330 after reload. No App Review submission or public release has occurred. Jordan’s sandbox entitlement remains active through November 16 at 12:39:14 PM Pacific; expiration testing is still pending.
