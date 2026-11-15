@@ -45,7 +45,7 @@
   <section class="title">
     <p class="eb" style="color: var(--primary-text)">Legal</p>
     <h1 class="d">Privacy Policy</h1>
-    <span class="date">Last updated: November 12, 2026</span>
+    <span class="date">Last updated: November 15, 2026</span>
     <p class="intro">This policy explains what Footing collects, how it’s used, and who it reaches. A lot of what Footing handles is health information: food logs, weight, GLP-1 medication and how you feel on it, and optional Apple Health or Health Connect data. So we’ve been specific rather than generic.</p>
   </section>
   <section class="short" aria-label="The short version">
@@ -80,13 +80,13 @@
   <div><dt>Body</dt><dd>Weight, body fat, lean mass, BMI, body measurements you track (waist, hips, chest, upper arm, thigh), and body goals.</dd></div>
   <div><dt>Workouts</dt><dd>Workouts you log, and ones imported from Apple Health or Health Connect.</dd></div>
   <div><dt>GLP-1 tracking</dt><dd>Only if you use it: medication, dose, injection site and time, doses you mark as skipped, shot-cycle check-ins (appetite, fullness, nausea, energy, digestion and an optional note), and whether tracking is active, paused or stopped.</dd></div>
-  <div><dt>What Pulse knows</dt><dd>Optional: allergies and an allergy note, eating patterns (for example vegetarian or halal), foods you love, foods you’d rather skip, and practical memories you explicitly approve, edit or add under “What helps you”. Suggestions are not lasting memories until you save them. Meal notes are not automatically turned into lasting memories, and Pulse never guesses an allergy.</dd></div>
+  <div><dt>What Pulse knows</dt><dd>Optional: allergies and an allergy note, eating patterns (for example vegetarian or halal), foods you love, foods you’d rather skip, and practical memories you explicitly approve, edit or add under “What helps you”. Suggestions are not lasting memories until you save them. Meal notes are not automatically turned into lasting memories, and Pulse never guesses an allergy. Dietary preferences and free-text context can include sensitive information you choose to share, such as religious dietary requirements; Footing does not infer your beliefs from a food choice.</dd></div>
   <div><dt>Goals and experiments</dt><dd>Personal goals and their daily check-ins, and personal experiments with their measurements and results.</dd></div>
   <div><dt>Pulse</dt><dd>Messages you send and the replies, including suggested foods, follow-ups and weekly recap cards. Your Strong Week check-in answers (for example “traveling” or “injured”) and whether you found an outlook useful. Your Pulse settings: on or off, shown on Today, your attention limit, and when you agreed to Pulse and AI food-logging data sharing. Your lighter-tracking choice and optional vacation or feeling-unwell context are also saved.</dd></div>
   <div><dt>Voice input</dt><dd>Optional. Your speech is turned into text by your device’s speech service (Apple Speech Recognition on iPhone, or your Android speech service). Footing doesn’t record or store audio, only the resulting text.</dd></div>
   <div><dt>Apple Health / Health Connect</dt><dd>Optional, and only the categories you approve: Apple Health on iPhone: weight, body fat, BMI, lean mass, water, active energy, heart rate variability, resting heart rate, sleep, workouts, steps and waist circumference. With separate nutrition read permission, Footing can also read dietary calories, protein, carbohydrates, total fat and fiber. You can select one source per nutrient; those values replace Footing’s meal-based totals for that nutrient. Source preferences stay on this device for your account, and imported nutrition samples are held in memory rather than copied into meal records. If you use Pulse with AI sharing enabled, selected totals and source names may be included in its context. With write access, Footing can save weight, body fat, BMI, lean mass and water to Apple Health. Android Health Connect has its own permission list for supported body and activity records; only categories you approve are accessed.</dd></div>
   <div><dt>Feedback</dt><dd>Anything you send through Profile → Send Feedback.</dd></div>
-  <div><dt>Usage analytics</dt><dd>Anonymous product signals, like “a log was saved” or “a chat message was sent”. Never what you logged or said.</dd></div>
+  <div><dt>Usage analytics</dt><dd>Pseudonymous product signals, like “a log was saved” or “a chat message was sent”, time spent completing a logging flow, and basic app diagnostics such as a prior-session crash or sync failure. TelemetryDeck receives a privacy-preserving identifier and technical context such as app/device version to group these signals; Footing does not set your account name, email or account ID in the analytics SDK. Signals never include your log content, chat messages or food descriptions. Account-linked monthly AI request counters are kept separately to enforce membership allowances.</dd></div>
 </dl>
 </section>
 <section id="s2">
@@ -109,10 +109,15 @@
   <div><dt>Supabase</dt><dd>Database, sign-in and server functions. Stores all the account and log data above.</dd></div>
   <div><dt>Anthropic (Claude)</dt><dd>Powers Pulse and talk-to-log. Receives your message and the snapshot described in section 2, Strong Week check-in answers, and food descriptions for talk-to-log.</dd></div>
   <div><dt>FatSecret</dt><dd>Food search and barcode lookup. Receives the food name or barcode you search for, not who you are.</dd></div>
-  <div><dt>TelemetryDeck</dt><dd>Anonymous usage analytics. Receives usage signals only: no log content, messages or personal details.</dd></div>
+  <div><dt>TelemetryDeck</dt><dd>Pseudonymous usage analytics and basic app diagnostics. Receives a privacy-preserving identifier, usage signals and technical context, without your Footing account ID, name, email, log content or chat messages. It is not used for advertising tracking.</dd></div>
   <div><dt>Apple</dt><dd>Sign in with Apple, HealthKit, notifications and speech recognition, under Apple’s own privacy terms.</dd></div>
   <div><dt>Google / Android services</dt><dd>Google sign-in, Health Connect, notifications, barcode scanning and optional speech recognition on Android, under their own terms. Footing doesn’t send your Health Connect data to Google.</dd></div>
 </dl>
+</section>
+<section id="membership">
+<h2 class="d">Membership and purchases</h2>
+<p>For premium membership, Footing stores your account-linked Apple transaction identifiers, product, subscription environment, status and expiration dates. Apple processes payments; Footing does not receive your payment-card details. Footing sends transaction identifiers to Apple to verify purchases and receives signed subscription updates. Apple also receives a Footing account identifier to associate a purchase with your membership. Founding access stores its claim and expiration dates. Monthly counters enforce the AI allowance without storing your prompts or food descriptions in those counters. These records are used for app functionality, not tracking or advertising.</p>
+<p>Deleting your Footing account removes its membership and usage records. An aggregate count of claimed founding places remains, without an account identifier, so deleted accounts do not reopen the 50-place offer. Deleting Footing does not cancel an Apple subscription; manage or cancel it in Apple subscription settings.</p>
 </section>
 <section id="s4">
 <h2 class="d"><span>4.</span> Keeping and deleting your data</h2>
@@ -129,7 +134,7 @@
 </section>
 <section id="s7">
 <h2 class="d"><span>7.</span> Your choices and rights</h2>
-<p>Everything Footing stores is visible in the app, and you can correct or delete it there. There’s no export button yet: email us and we’ll send you a copy of your data. For anything else we haven’t made self-serve, get in touch.</p>
+<p>Your tracking records, membership status, and privacy controls are available in the app. You can correct or delete your tracking records there. There’s no export button yet: email us and we’ll send you a copy of your data. For anything else we haven’t made self-serve, get in touch.</p>
 </section>
 <section id="s8">
 <h2 class="d"><span>8.</span> Changes to this policy</h2>
