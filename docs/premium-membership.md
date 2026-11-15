@@ -121,3 +121,5 @@ Reproduce with a newly obtained, privately stored Apple TEST payload (never comm
 ```sh
 npx --yes deno run --node-modules-dir=none --no-lock --allow-read --allow-net scripts/apple-store.live-test.ts /secure/apple-test.json
 ```
+
+Final hosted verification: `membership` v8 is ACTIVE with JWT verification on; `app-store-notifications` v11 is ACTIVE with JWT verification off and Apple signature verification on. Both downloaded sources contain the PEM-based adapter. A fresh Apple TEST after diagnostic cleanup again reported SUCCESS; a forged payload remained rejected and temporary headers were absent. Campaign remains closed with zero claims; subscription rows remain zero. Global enforcement is absent and the sole sandbox allowlist entry is unchanged.
