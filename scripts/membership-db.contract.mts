@@ -12,7 +12,7 @@ before(async () => {
     create schema auth; create table auth.users(id uuid primary key,email_confirmed_at timestamptz,phone_confirmed_at timestamptz);
     grant usage on schema public,auth to anon,authenticated,service_role;
     `);
-  await db.exec(readFileSync(new URL('../supabase/migrations/20261115021855_premium_membership.sql', import.meta.url), 'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261115182443_premium_membership.sql', import.meta.url), 'utf8'));
   for (let n = 1; n <= 55; n++) await query('insert into auth.users(id,email_confirmed_at) values($1,now())', [id(n)]);
 });
 after(async () => db.close());

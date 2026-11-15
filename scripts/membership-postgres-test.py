@@ -30,7 +30,7 @@ try:
       create schema auth;
       create table auth.users(id uuid primary key,email_confirmed_at timestamptz,phone_confirmed_at timestamptz);
       grant usage on schema public,auth to service_role;""")
-    sql(Path(__file__).resolve().parents[1].joinpath('supabase/migrations/20261115021855_premium_membership.sql').read_text())
+    sql(Path(__file__).resolve().parents[1].joinpath('supabase/migrations/20261115182443_premium_membership.sql').read_text())
     owners = [str(uuid.uuid4()) for _ in range(60)]
     for owner in owners:
         sql(f"insert into auth.users values('{owner}',now(),null)")
