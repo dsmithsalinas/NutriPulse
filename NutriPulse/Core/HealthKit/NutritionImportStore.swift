@@ -97,7 +97,7 @@ final class NutritionImportStore {
         guard owner != id else { return }
         observers.forEach { health.stop($0) }; observers = []
         generation = UUID(); owner = id; samples = []; availableSources = [:]; errorMessage = nil
-        if allowsHealthQueries { invalidateWidget() }
+        if allowsHealthQueries { SharedStore.bindAccount(id) }
         selections = id.flatMap { defaults.data(forKey: key($0)) }
             .flatMap { try? JSONDecoder().decode([NutritionMacro: NutritionSource].self, from: $0) } ?? [:]
         revision += 1
@@ -105,6 +105,7 @@ final class NutritionImportStore {
     }
     func select(_ source: NutritionSource?, for macro: NutritionMacro) {
         guard owner != nil || preview else { return }
+        guard selections[macro] != source else { return }
         selections[macro] = source
         if !preview, let owner, let data = try? JSONEncoder().encode(selections) { defaults.set(data, forKey: key(owner)) }
         generation = UUID(); revision += 1
@@ -178,7 +179,8 @@ final class NutritionImportStore {
         }
     }
     private func invalidateWidget() {
-        SharedStore.save(.init(proteinToday: 0, proteinGoal: 0, updatedAt: .now, showsDose: false, nutritionUnknown: true))
+        guard let owner else { return }
+        SharedStore.invalidateProtein(owner: owner)
     }
     private func startObserving() {
         if !isEnabled { observers.forEach { health.stop($0) }; observers = []; samples = []; return }

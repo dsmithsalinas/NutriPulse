@@ -397,6 +397,7 @@ final class TodayViewModel {
             repeatedMeals = []
             repeatTargetDate = selectedDate.isoDateString
         }
+        var widgetOwner: UUID?
         let wasClosed      = allRingsClosed
         let wasProteinHit  = proteinGoalHit
         isLoading    = true
@@ -411,6 +412,7 @@ final class TodayViewModel {
 
         do {
             let userId = try await supabase.auth.session.user.id
+            widgetOwner = userId
 
             await UsualMealStore.shared.load()
             await BreakfastCheckinStore.shared.load()
@@ -465,14 +467,14 @@ final class TodayViewModel {
         justHitProteinGoal = !wasProteinHit && proteinGoalHit
 
         // Feed the protein-floor widget with today's numbers (only for the current day).
-        if isToday {
+        if isToday, let widgetOwner {
             SharedStore.save(ProteinFloorSnapshot(
                 proteinToday: totalProteinG,
                 proteinGoal: dailyGoal?.proteinG ?? 0,
                 updatedAt: .now,
                 showsDose: GLP1TrackingStore.shared.isTracking,
                 nutritionUnknown: nutrition.unavailableMacros.contains(.protein) && nutrition.nutritionSources[.protein] != nil
-            ))
+            ), owner: widgetOwner)
         }
 
         do {

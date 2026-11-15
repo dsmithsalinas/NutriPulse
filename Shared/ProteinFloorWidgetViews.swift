@@ -11,12 +11,6 @@ struct ProteinFloorWidgetView: View {
     let family: WidgetFamily
 
     var body: some View {
-        if snapshot.nutritionUnknown == true {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Protein —").font(.headline)
-                Text("No Health data").font(.caption)
-            }.foregroundStyle(family == .systemSmall ? Color.white : Theme.Colors.textPrimary)
-        } else {
         switch family {
         case .accessoryCircular:    circular
         case .accessoryRectangular: rectangular
@@ -24,11 +18,13 @@ struct ProteinFloorWidgetView: View {
         case .systemMedium:         medium
         default:                    small
         }
-        }
     }
 
+    private var unknown: Bool { snapshot.nutritionUnknown == true }
+    private var proteinText: String { unknown ? "—" : "\(Int(snapshot.proteinToday.rounded()))" }
+
     private var status: String {
-        snapshot.cleared ? "Floor cleared" : "\(snapshot.remaining)g to go"
+        unknown ? (snapshot.needsRefresh == true ? "Open Footing to refresh" : "No Health data") : snapshot.cleared ? "Floor cleared" : "\(snapshot.remaining)g to go"
     }
 
     // Past the floor: the whole tile turns lime, matching the Today protein tile and the
@@ -48,16 +44,16 @@ struct ProteinFloorWidgetView: View {
                     .tracking(1)
                     .foregroundStyle(label)
                 Spacer(minLength: 4)
-                Text("floor \(Int(snapshot.proteinGoal.rounded()))")
+                Text(snapshot.proteinGoal > 0 ? "floor \(Int(snapshot.proteinGoal.rounded()))" : "")
                     .font(Theme.Fonts.body(11, .semibold, relativeTo: nil))
                     .foregroundStyle(label)
             }
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Text("\(Int(snapshot.proteinToday.rounded()))")
+                Text(proteinText)
                     .font(Theme.Fonts.display(46, .extraBold, relativeTo: nil))
                     .monospacedDigit()
-                Text("g")
+                Text(unknown ? "" : "g")
                     .font(Theme.Fonts.display(18, .extraBold, relativeTo: nil))
             }
             .foregroundStyle(ink)
@@ -69,7 +65,7 @@ struct ProteinFloorWidgetView: View {
                 .foregroundStyle(snapshot.cleared ? Theme.Colors.limeLabel : Theme.Colors.heroSubtext)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Protein \(Int(snapshot.proteinToday.rounded())) of \(Int(snapshot.proteinGoal.rounded())) grams. \(status)")
+        .accessibilityLabel(unknown ? "Protein unavailable. \(status)" : "Protein \(Int(snapshot.proteinToday.rounded())) of \(Int(snapshot.proteinGoal.rounded())) grams. \(status)")
     }
 
     // Medium: the protein tile beside the quick actions, on the page ground like Today.
@@ -111,7 +107,7 @@ struct ProteinFloorWidgetView: View {
     }
 
     private var primaryAction: FootingQuickAction {
-        !snapshot.cleared && snapshot.remaining <= 45 ? .logFavorite : .talkToLog
+        !unknown && !snapshot.cleared && snapshot.remaining <= 45 ? .logFavorite : .talkToLog
     }
     private var primaryIcon: String { primaryAction == .logFavorite ? "star.fill" : "plus" }
     private var primaryLabel: String { primaryAction == .logFavorite ? "Close floor" : "Log food" }
@@ -132,15 +128,15 @@ struct ProteinFloorWidgetView: View {
     // MARK: Lock Screen (system-tinted; fonts and shapes carry the design)
 
     private var circular: some View {
-        Gauge(value: snapshot.pct) {
+        Gauge(value: unknown ? 0 : snapshot.pct) {
             PulseMark(lineWidthRatio: 0.18).frame(width: 10, height: 10)
         } currentValueLabel: {
-            Text("\(Int(snapshot.proteinToday.rounded()))")
+            Text(proteinText)
                 .font(Theme.Fonts.display(17, .extraBold, relativeTo: nil))
                 .minimumScaleFactor(0.6)
         }
         .gaugeStyle(.accessoryCircularCapacity)
-        .accessibilityLabel("Protein \(Int(snapshot.proteinToday.rounded())) grams. \(status)")
+        .accessibilityLabel(unknown ? "Protein unavailable. \(status)" : "Protein \(Int(snapshot.proteinToday.rounded())) grams. \(status)")
     }
 
     private var rectangular: some View {
@@ -149,7 +145,7 @@ struct ProteinFloorWidgetView: View {
                 .font(Theme.Fonts.body(11, .bold, relativeTo: nil))
                 .tracking(0.8)
                 .widgetAccentable()
-            Text("\(Int(snapshot.proteinToday.rounded())) / \(Int(snapshot.proteinGoal.rounded()))g")
+            Text(unknown ? "Protein —" : "\(Int(snapshot.proteinToday.rounded())) / \(Int(snapshot.proteinGoal.rounded()))g")
                 .font(Theme.Fonts.display(19, .extraBold, relativeTo: nil))
                 .monospacedDigit()
             Text(status)
@@ -160,7 +156,7 @@ struct ProteinFloorWidgetView: View {
     }
 
     private var inline: some View {
-        Text(snapshot.cleared
+        Text(unknown ? "Protein — · \(status)" : snapshot.cleared
              ? "Protein floor cleared"
              : "Protein \(Int(snapshot.proteinToday.rounded()))/\(Int(snapshot.proteinGoal.rounded()))g")
     }
@@ -173,12 +169,12 @@ struct ProteinFloorWidgetBackground: View {
     let snapshot: ProteinFloorSnapshot
 
     var body: some View {
-        if snapshot.cleared {
+        if snapshot.nutritionUnknown != true && snapshot.cleared {
             Theme.Colors.lime
         } else {
             ZStack(alignment: .bottom) {
                 Theme.Colors.heroDeep
-                StillLiquid(level: snapshot.pct).fill(Theme.Colors.hero)
+                StillLiquid(level: snapshot.nutritionUnknown == true ? 0 : snapshot.pct).fill(Theme.Colors.hero)
             }
         }
     }

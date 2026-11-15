@@ -18,6 +18,12 @@ struct WidgetGalleryPreview: View {
                     home(cleared, .systemSmall)
                 }
                 home(partial, .systemMedium)
+                TileEyebrow("Waiting for refresh")
+                home(.init(proteinToday: 0, proteinGoal: 140, updatedAt: .now, showsDose: true,
+                           nutritionUnknown: true, needsRefresh: true), .systemMedium)
+                TileEyebrow("Health source has no readable data")
+                home(.init(proteinToday: 0, proteinGoal: 140, updatedAt: .now, showsDose: true,
+                           nutritionUnknown: true), .systemMedium)
                 TileEyebrow("Lock Screen")
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(spacing: 16) {
