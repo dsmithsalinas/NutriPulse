@@ -1,6 +1,6 @@
 # Footing premium membership
 
-Prepared November 14; backend deployed November 15, 2026 from pushed commit `625956f`. The premium migration and four Edge Functions are live. Native membership code and revised policy pages are not released. Global premium enforcement and founding claims remain off; only the explicitly allowlisted disposable sandbox account uses prelaunch enforcement.
+Prepared November 14; backend deployed November 15, 2026 from pushed commit `625956f`. The premium migration and four Edge Functions are live. Native membership code is available in TestFlight 1.3.9 (326); revised policy pages and the public App Store release remain pending. Global premium enforcement and founding claims remain off; only the explicitly allowlisted disposable sandbox account uses prelaunch enforcement.
 
 ## Product behavior
 
@@ -30,7 +30,7 @@ Production and sandbox transactions use separate keys in the table. Sandbox acce
 - Product: **Footing premium monthly**, Apple ID `6834984644`, one month, US price $2.99; Apple's localized price equivalents saved.
 - English display name: **Footing premium**. Description: **Pulse coaching, AI food logging, and weekly guidance.**
 - Family Sharing is off. Purchase options are single-seat and App Store only; multiseat purchases are off.
-- Status: **Prepare for Submission**. No review submission or customer billing was initiated. Availability territories and review screenshot remain to be completed.
+- Status: **Prepare for Submission**. No review submission or customer billing was initiated. United States availability is configured at $2.99 for testing; the review screenshot remains to be completed.
 - Streamlined purchasing is still on. Apple rejected disabling it because no approved binary includes PurchaseIntent yet. This implementation now listens to PurchaseIntent; disable streamlined purchasing after the first eligible binary is approved. Keep outside-app promotions and offer campaigns off meanwhile.
 - Paid Apps Agreement still requires the owner's banking/tax information. This implementation does not submit financial/tax forms.
 
@@ -123,3 +123,7 @@ npx --yes deno run --node-modules-dir=none --no-lock --allow-read --allow-net sc
 ```
 
 Final hosted verification: `membership` v8 is ACTIVE with JWT verification on; `app-store-notifications` v11 is ACTIVE with JWT verification off and Apple signature verification on. Both downloaded sources contain the PEM-based adapter. A fresh Apple TEST after diagnostic cleanup again reported SUCCESS; a forged payload remained rejected and temporary headers were absent. Campaign remains closed with zero claims; subscription rows remain zero. Global enforcement is absent and the sole sandbox allowlist entry is unchanged.
+
+TestFlight update: native membership and the widget/onboarding/medication fixes were archived as 1.3.9 (326) from pushed commit `03e9d2b`, signed/exported, and accepted by Apple on November 15 at 11:17 AM Pacific. Processing/internal availability and the iPhone test steps are tracked in `docs/testflight-1.3.9-sandbox-check.md`. The owner-only Paid Apps Agreement banking/W-9 step was still pending at the pre-upload check.
+
+Apple finished processing 1.3.9 (326): Ready to Submit, internal Early Access group, one invitation. The owner can install it in TestFlight. No public App Store release or external beta submission was performed. Sandbox purchase availability still requires the Paid Apps Agreement to become Active after owner banking/W-9 completion.
