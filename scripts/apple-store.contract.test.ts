@@ -37,8 +37,8 @@ Deno.test('Edge certificate adapter preserves real verification and rejects the 
 Deno.test('equivalent hosted EC curve names normalize without disabling algorithm checks', () => {
   const key = createPublicKey(new X509Certificate(roots[1]).publicKey.export({type:'spki',format:'pem'}))
   Object.defineProperty(key, 'asymmetricKeyDetails', { value: { namedCurve:'P-256' }, configurable:true })
-  if (normalizeAppleKey(key).asymmetricKeyDetails?.namedCurve !== 'prime256v1') throw Error('Alias not normalized')
+  if (normalizeAppleKey(key).asymmetricKeyDetails?.namedCurve !== 'secp384r1') throw Error('Alias not normalized')
   const unknown = createPublicKey(new X509Certificate(roots[1]).publicKey.export({type:'spki',format:'pem'}))
   Object.defineProperty(unknown, 'asymmetricKeyDetails', { value: { namedCurve:'unknown' }, configurable:true })
-  if (normalizeAppleKey(unknown).asymmetricKeyDetails?.namedCurve !== 'unknown') throw Error('Unknown curve accepted')
+  if (normalizeAppleKey(unknown).asymmetricKeyDetails?.namedCurve !== 'secp384r1') throw Error('Curve must derive from actual key material')
 })

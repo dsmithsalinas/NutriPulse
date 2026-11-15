@@ -8,9 +8,17 @@ export function normalizeAppleKey<T extends KeyObject>(key: T): T {
     'P-256': 'prime256v1', secp256r1: 'prime256v1',
     'P-384': 'secp384r1', 'P-521': 'secp521r1',
   }
-  const canonical = aliases[details?.namedCurve ?? '']
+  // Some Edge versions omit curve details entirely; JWK derives the curve from
+  // the parsed key material rather than assuming a curve from the JWT header.
+  let materialCurve: string | undefined
+  if (key.asymmetricKeyType === 'ec') {
+    materialCurve = key.export({ format: 'jwk' }).crv
+  }
+  const canonical = aliases[materialCurve ?? ''] ?? aliases[details?.namedCurve ?? '']
   if (key.asymmetricKeyType === 'ec' && canonical) {
     Object.defineProperty(key, 'asymmetricKeyDetails', { value: { ...details, namedCurve: canonical } })
   }
+  console.info('apple_key_curve', JSON.stringify({ kind: key.type, algorithm: key.asymmetricKeyType,
+    materialCurve, normalizedCurve: key.asymmetricKeyDetails?.namedCurve }))
   return key
 }
