@@ -12,6 +12,7 @@ Deno.serve(async req => {
     const { signedPayload } = JSON.parse(raw)
     if (typeof signedPayload !== 'string') return new Response('Invalid payload', { status: 400 })
     let verified
+    const diagnostic: string[] = []
     for (const environment of ['Production','Sandbox']) {
       try {
         const { verifier } = appleStore(environment)
@@ -20,6 +21,7 @@ Deno.serve(async req => {
       } catch (error) {
         // Log only bounded error classification, never exception messages or signed data.
         const failure = error as { status?: number; cause?: { name?: string; code?: string; stack?: string; message?: string } }
+        diagnostic.push(`${environment}:${failure.status ?? 'configuration'}:${failure.cause?.code ?? failure.cause?.name ?? 'none'}`)
         console.error('apple_notification_verification', JSON.stringify({ environment,
           status: typeof failure.status === 'number' ? failure.status : null,
           cause: typeof failure.cause?.name === 'string' ? failure.cause.name.slice(0,60) : null,
@@ -28,7 +30,7 @@ Deno.serve(async req => {
           terms: failure.cause?.message?.match(/\b(?:not|implemented|supported|unsupported|crypto|verify|ec|rsa|key|algorithm|digest|invalid|signature|type|decode|encode|export|jwk|asn1|parameter)\b/gi)?.slice(0,12) ?? [] }))
       }
     }
-    if (!verified) return new Response('Invalid signature or unavailable configuration', { status: 503 })
+    if (!verified) return new Response('Invalid signature or unavailable configuration', { status: 503, headers: { 'X-Footing-Verifier': 'material-curve-v1', 'X-Footing-Verification-Status': diagnostic.join(';') } })
     const { notification, verifier, environment } = verified
     if (notification.notificationType === 'TEST') return new Response('ok')
     if (!notification.data?.signedTransactionInfo) return new Response('ok')
