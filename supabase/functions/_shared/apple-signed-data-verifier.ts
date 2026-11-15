@@ -7,7 +7,7 @@ import jsonwebtoken from 'npm:jsonwebtoken@9.0.2';
 import { Buffer } from 'node:buffer';
 
 
-import { KeyObject, createHash, verify } from 'node:crypto';
+import { KeyObject, createPublicKey, createHash, verify } from 'node:crypto';
 import { EdgeX509Certificate as X509Certificate } from './apple-x509.ts';
 import { KJUR, X509, ASN1HEX } from 'npm:jsrsasign@11.1.0';
 
