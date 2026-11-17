@@ -4,7 +4,7 @@
 
 - App name retained: **Footing: GLP-1 Nutrition**.
 - Subtitle: **Protein, meals & daily habits**.
-- Version changed from 1.0 to **1.3.9**; final privacy candidate **build 330** selected and verified after reload; available to TestFlight Early Access.
+- Version changed from 1.0 to **1.3.9**; final candidate **build 334** selected and verified after reload. It adds committed password-reset fixes to the privacy/membership candidate.
 - Description, promotional text, keywords, support/marketing URLs and copyright entered.
 - Reviewer notes rewritten for current navigation, optional permissions, independent AI consent, free/premium features, monthly allowances, founding access and account deletion. Existing review credentials/contact retained; reviewer sign-in and authenticated membership status verified.
 - **Manual release** selected. Nothing submitted to App Review or released.
@@ -54,10 +54,10 @@ Source commit `6576bd8` was pushed before the site deployment. Cloudflare Worker
 
 - Six actual-app screenshots are uploaded for both medium (1206 × 2622) and large (1320 × 2868) iPhone displays, in order: Today, AI meal review, Pulse, Progress, shot routine, food detail. Capture checks passed on both simulator sizes; all PNGs are opaque RGB. Owner can review/replace this draft set before submission. See `marketing/app-store/2026-11-15/README.md`. Genuine Duo captures remain blocked by available simulator runtime support.
 - Reviewer credentials are verified. Marcus and Jordan are the only prelaunch sandbox-allowlisted accounts; Marcus receives the purchase flow with no premium grant or founding claim.
-- Subscription metadata, required review screenshot and detailed notes are saved. Notes disclose the read-only local StoreKit capture and pending expiration test. Update the acceptance results after expiration, then submit the first subscription alongside the app version.
-- Finish cancellation/expiration acceptance; purchase, reopen, restore and renewal cancellation are already observed. Expiration remains pending November 16 at 12:39 PM Pacific unless Apple's actual subscription state changes.
+- Subscription metadata, required review screenshot and detailed notes are saved. Notes disclose the read-only local StoreKit capture and completed expiration test; updated app/subscription notes persisted after reload. Submit the first subscription alongside the app version.
+- Cancellation/expiration acceptance passed November 16: Apple status 2, no premium/subscription entitlement; user confirmed AI paywalls and retained free functionality.
 - Production notification URL is now configured and persisted. Activation/rollback steps are prepared in `docs/membership-launch-2026-11-15.md`; global enforcement and founding claims remain off. Fresh sandbox TEST succeeds; production API delivery remains unverified until after first release (current request returns HTTP 401).
-- Review untested Mac/Vision availability before launch; this pass did not certify those platforms.
+- Owner selected iPhone-only release November 16. Mac and Vision Pro availability are disabled and persisted. Replacement build 334 contains committed password-reset fixes and is selected. Apple shows the app, subscription group and monthly product as **Items Ready to Submit (3)** with Submit for Review enabled; final submission was not performed. See `docs/testflight-1.3.9-334.md` for checks and the remaining live password-reset smoke test.
 
 ## Primary references
 

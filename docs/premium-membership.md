@@ -1,6 +1,6 @@
 # Footing premium membership
 
-Current launch preparation is tracked in [membership-launch-2026-11-15.md](membership-launch-2026-11-15.md). Build 1.3.9 (330) is uploaded and selected; privacy/terms are published and review materials saved. Production and sandbox notification URLs are configured; fresh sandbox TEST delivery succeeds. Production TEST still returns pre-release HTTP 401. Global enforcement and founding claims remain off with 0 of 50 places claimed; only the Jordan and Marcus disposable accounts are sandbox-allowlisted. Expiration testing and coordinated activation remain pending. The dated sections below retain earlier deployment/test history.
+Current launch preparation is tracked in [membership-launch-2026-11-15.md](membership-launch-2026-11-15.md). Build 1.3.9 (334) with committed password-reset fixes is uploaded and selected; privacy/terms are published and review materials saved. Production and sandbox notification URLs are configured; fresh sandbox TEST delivery succeeds. Production TEST still returns pre-release HTTP 401. Global enforcement and founding claims remain off with 0 of 50 places claimed; only the Jordan and Marcus disposable accounts are sandbox-allowlisted. Expiration acceptance passed November 16 on-device and on the backend. App/subscription/group are staged together as Items Ready to Submit (3); actual submission and coordinated activation remain pending. The dated sections below retain earlier deployment/test history.
 
 ## Product behavior
 

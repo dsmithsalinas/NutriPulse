@@ -1,6 +1,6 @@
 # Membership launch configuration — November 15, 2026
 
-Prepared for Footing project `dcabdzuhuixlcgwavtsc`, app `6789967509`, product `com.dustin.nutripulse.premium.monthly`, build 1.3.9 (330). This is the activation runbook, not an instruction to activate during preparation. Expiration acceptance and public release are still pending.
+Prepared for Footing project `dcabdzuhuixlcgwavtsc`, app `6789967509`, product `com.dustin.nutripulse.premium.monthly`, build 1.3.9 (330). This is the activation runbook, not an instruction to activate during preparation. Expiration acceptance passed November 16 on-device and on the backend. Public release is still pending.
 
 ## Verified preparation
 
@@ -41,7 +41,7 @@ The three purchase-key secrets are present; the sandbox allowlist digest matches
 
 ## Gates before activation
 
-1. Finish Jordan's actual expiration test after November 16, 2026 at 12:39:14 PM Pacific (20:39:14 UTC), subject to Apple's current state. Verify premium turns off, paid AI is gated, and saved records/free features remain usable. Update review notes that currently say expiration is pending.
+1. Completed November 16: Jordan's subscription expired at 12:39:14 PM Pacific (20:39:14 UTC), Apple status 2, no effective premium/subscription entitlement and no founding grant. User confirmed both AI paywalls and retained free tracking/search/records. Review notes were updated and persisted. Owner requested committed password-reset fixes in replacement build 334 and an iPhone-only initial release; Mac/Vision availability is disabled and persisted.
 2. App and first subscription pass review; keep manual release. Reviewers can use the named sandbox-allowlisted account while the public beta and founding campaign remain off.
 3. Confirm US territory and $2.99 monthly price, current agreements, and disable streamlined purchasing once Apple permits it for the approved binary. Keep Family Sharing/multiseat off. Decide untested Mac/Vision availability separately.
 4. Notify existing beta users before their AI access changes. Install 330 for final smoke checks. Isolated founding concurrency tests already passed; do not consume any real campaign place for a prelaunch test.

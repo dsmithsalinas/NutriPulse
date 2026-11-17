@@ -8,4 +8,4 @@ Source capture: `MembershipUITests.testLocalStoreKitPriceAndPurchaseTerms`, `bui
 
 Product: `com.dustin.nutripulse.premium.monthly`; subscription Apple ID `6834984644`; group `22580786`. Existing English (US) display name: Footing premium. Description: Pulse coaching, AI food logging, and weekly guidance.
 
-Saved review notes explain Profile → Your membership, monthly allowances, Apple billing and cancellation, the independent no-billing founding offer, AI consent, free features and wellness boundaries. They record purchase/reopen/restore/cancellation testing as observed and expiration as still pending before review submission.
+Saved review notes explain Profile → Your membership, monthly allowances, Apple billing and cancellation, the independent no-billing founding offer, AI consent, free features and wellness boundaries. They record purchase/reopen/restore/cancellation and expiration testing as completed. Expiration was confirmed November 16 on-device (AI paywalls, retained free tracking/search/records) and on the backend (Apple status 2 and no effective premium entitlement). Updated notes persisted in App Store Connect.
