@@ -1229,6 +1229,26 @@ final class TrustworthyStateTests: XCTestCase {
         XCTAssertNil(message.automaticContextLabel)
     }
 
+    @MainActor
+    func testInvalidResetLinkStaysInRecoveryWithRetryMessage() async {
+        let state = AppState()
+        await state.handleAuthURL(URL(string: "footing://reset-password#error=access_denied&error_description=expired")!)
+        XCTAssertTrue(state.isPasswordRecoveryFlow)
+        XCTAssertFalse(state.isValidatingRecoveryLink)
+        XCTAssertNotNil(state.recoveryLinkError)
+        state.finishPasswordRecovery()
+        XCTAssertFalse(state.isPasswordRecoveryFlow)
+        XCTAssertNil(state.recoveryLinkError)
+    }
+
+    func testPasswordResetRouteDoesNotRequireRecoveryType() {
+        XCTAssertTrue(AppState.isPasswordResetURL(URL(string: "footing://reset-password#access_token=test")!))
+        XCTAssertTrue(AppState.isPasswordResetURL(URL(string: "footing://reset-password?code=test")!))
+        XCTAssertFalse(AppState.isPasswordResetURL(URL(string: "footing://login#type=recovery")!))
+        XCTAssertFalse(AppState.isPasswordResetURL(URL(string: "https://reset-password")!))
+        XCTAssertFalse(AppState.isPasswordResetURL(URL(string: "footing://reset-password/other")!))
+    }
+
     func testPasswordRecoveryRequiresEightMatchingCharacters() {
         XCTAssertNotNil(PasswordRecoveryViewModel.passwordValidationError(
             password: "short",

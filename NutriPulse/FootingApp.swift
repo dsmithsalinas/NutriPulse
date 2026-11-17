@@ -88,7 +88,7 @@ struct FootingApp: App {
                 .environment(appState)
                 .modelContainer(Self.modelContainer)
                 .onOpenURL { url in
-                    supabase.handle(url)
+                    Task { await appState.handleAuthURL(url) }
                 }
         }
         .onChange(of: scenePhase) { _, phase in

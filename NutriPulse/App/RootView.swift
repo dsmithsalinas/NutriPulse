@@ -50,10 +50,10 @@ struct RootView: View {
                 GoalsView()
             } else if isProgressPreview {
                 MainTabView()
-            } else if appState.isLoading {
-                StartupLoadingView(offersOfflineNotes: appState.isAuthenticated && !SyncEngine.shared.isOnline, onOpenNotes: { showOfflineNotes = true })
             } else if appState.isPasswordRecoveryFlow {
                 ResetPasswordView()
+            } else if appState.isLoading {
+                StartupLoadingView(offersOfflineNotes: appState.isAuthenticated && !SyncEngine.shared.isOnline, onOpenNotes: { showOfflineNotes = true })
             } else if !appState.isAuthenticated {
                 AuthView()
             } else if appState.profileLoadFailed {

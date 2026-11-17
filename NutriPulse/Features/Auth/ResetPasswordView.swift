@@ -3,6 +3,7 @@ import SwiftUI
 struct ResetPasswordView: View {
     @Environment(AppState.self) private var appState
     @State private var vm = PasswordRecoveryViewModel()
+    @State private var showRequestReset = false
 
     var body: some View {
         ScrollView {
@@ -20,7 +21,17 @@ struct ResetPasswordView: View {
                 .foregroundStyle(Theme.Colors.textPrimary)
                 .accessibilityAddTraits(.isHeader)
 
-            if vm.passwordUpdated {
+            if appState.isValidatingRecoveryLink {
+                ProgressView("Checking your reset link…")
+            } else if let error = appState.recoveryLinkError {
+                Text(error)
+                    .font(Theme.Fonts.body(15))
+                    .foregroundStyle(Theme.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                Button("Request a new link") { showRequestReset = true }
+                    .buttonStyle(.brandPrimary)
+                Button("Back to Footing") { appState.finishPasswordRecovery() }
+            } else if vm.passwordUpdated {
                 Text("You can continue using Footing with your new password.")
                     .font(Theme.Fonts.body(15))
                     .foregroundStyle(Theme.Colors.textSecondary)
@@ -76,6 +87,15 @@ struct ResetPasswordView: View {
         }
         .padding(Theme.Spacing.page)
         .daylightReadableWidth(600)
+        }
+        .onChange(of: appState.isValidatingRecoveryLink) { _, validating in
+            if validating {
+                showRequestReset = false
+                vm = PasswordRecoveryViewModel()
+            }
+        }
+        .sheet(isPresented: $showRequestReset) {
+            ForgotPasswordView(initialEmail: "")
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.Colors.ground.ignoresSafeArea())

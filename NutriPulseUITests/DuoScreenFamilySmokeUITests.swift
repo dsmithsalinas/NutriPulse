@@ -35,3 +35,36 @@ final class DuoScreenFamilySmokeUITests: XCTestCase {
         }
     }
 }
+
+/// Exercises real URL dispatch without sending an email or using account credentials.
+final class PasswordRecoveryRoutingUITests: XCTestCase {
+    private let expiredLink = URL(string: "footing://reset-password#error=access_denied&error_description=expired")!
+
+    private func assertRecoveryAndRetry(in app: XCUIApplication) {
+        let retry = app.buttons["Request a new link"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.secureTextFields["New password"].exists)
+        XCTAssertFalse(app.buttons["Update password"].exists)
+        retry.tap()
+        XCTAssertTrue(app.staticTexts["Reset your password"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["Email"].exists)
+        app.buttons["Close"].tap()
+        XCTAssertTrue(retry.waitForExistence(timeout: 5))
+        app.buttons["Back to Footing"].tap()
+        XCTAssertTrue(app.buttons["Sign In"].waitForExistence(timeout: 10))
+    }
+
+    func testWarmResetCallbackOffersRetryInsteadOfOpeningTheAppHome() {
+        let app = XCUIApplication()
+        app.launch()
+        XCUIDevice.shared.system.open(expiredLink)
+        assertRecoveryAndRetry(in: app)
+    }
+
+    func testColdResetCallbackOffersRetry() {
+        let app = XCUIApplication()
+        app.terminate()
+        app.open(expiredLink)
+        assertRecoveryAndRetry(in: app)
+    }
+}

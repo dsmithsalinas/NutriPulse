@@ -20,6 +20,8 @@ final class AppState {
     // onboarding — where re-running the save duplicated their starting weight.
     var profileLoadFailed = false
     var isPasswordRecoveryFlow = false
+    var isValidatingRecoveryLink = false
+    var recoveryLinkError: String?
 
     var isAuthenticated: Bool { session != nil }
 
@@ -245,7 +247,34 @@ final class AppState {
         self.profileLoadFailed = false
     }
 
+    nonisolated static func isPasswordResetURL(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "footing"
+            && url.host?.lowercased() == "reset-password"
+            && (url.path.isEmpty || url.path == "/")
+    }
+
+    func handleAuthURL(_ url: URL) async {
+        guard Self.isPasswordResetURL(url) else {
+            supabase.handle(url)
+            return
+        }
+
+        // Route before the SDK emits signedIn. Recovery must not depend on a
+        // subsequent passwordRecovery event (or on the callback's type field).
+        isPasswordRecoveryFlow = true
+        isValidatingRecoveryLink = true
+        recoveryLinkError = nil
+        defer { isValidatingRecoveryLink = false }
+        do {
+            _ = try await supabase.auth.session(from: url)
+        } catch {
+            // SDK errors can contain the callback URL and its credentials.
+            recoveryLinkError = "This reset link is invalid or has expired. Request a new link and try again."
+        }
+    }
+
     func finishPasswordRecovery() {
+        recoveryLinkError = nil
         isPasswordRecoveryFlow = false
     }
 }
