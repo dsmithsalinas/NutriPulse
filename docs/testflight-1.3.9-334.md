@@ -19,13 +19,13 @@ Disposable Jordan account: Apple subscription `Sandbox`, status **2 (expired)**,
 
 - App and subscription notes updated with completed purchase/reopen/restore/cancellation/expiration acceptance and persisted after reload.
 - Existing required subscription image retained; its read-only local StoreKit capture remains disclosed.
-- App version **1.3.9 (334)**, subscription group and monthly product are staged together. Apple shows **Items Ready to Submit (3)** and an enabled Submit for Review button, with no validation blocker displayed. No final Submit for Review action taken.
+- App version **1.3.9 (334)**, subscription group and monthly product are staged together. Apple shows **Items Ready to Submit (3)** and an enabled Submit for Review button, with no validation blocker displayed. Submitted November 16, 2026 at the owner’s explicit request. Apple confirmed **3 Items Submitted** and app version **Waiting for Review**. Submission ID: `b9130730-db70-4843-8bc6-af435cf12e3d`.
 - Owner selected iPhone only; Mac and Vision Pro availability disabled and persisted. Manual release retained.
 - Public enforcement remains off and founding campaign remains closed, 0/50 claims, no grants. Production notification routing is already saved; production API delivery is a post-release check.
 
 ## Remaining acceptance and release actions
 
-- Upload, processing, persisted binary selection and combined draft validation are complete. Manual release remains selected; no final submission or public activation occurred.
-- Complete a real password-reset email → new password → sign-in smoke check on the final TestFlight build. Existing simulator checks establish invalid-link routing and validation, not email delivery or successful credential replacement. Hosted configuration is recorded in build 333's evidence; it is not reconfigured here.
+- Upload, processing, persisted binary selection and combined draft validation are complete. Manual release was verified selected immediately before submission. App/subscription/group are submitted; public activation has not occurred.
+- Owner confirmed password reset worked on build 334 before authorizing submission.
 - The isolated iOS 26.5 StoreKit check was rerun and still fails at `SKTestSession.buyProduct` with `notEntitled`, before Footing transaction sync. The same check passes on iOS 27.2 and physical sandbox lifecycle acceptance passed. A [firsthand Apple Developer Forum report](https://developer.apple.com/forums/thread/826971) describes iOS 26.5 CLI StoreKit configuration propagation failures; this is supporting context, not proof of this failure's cause. No app entitlement or verification protection was altered to mask the test failure. Result: `build/Release334-StoreKit26-5.xcresult`.
-- Submit first app version/subscription/group together after final readiness approval; disable streamlined purchasing when the approved binary permits it. Follow `membership-launch-2026-11-15.md` for coordinated activation and post-release production verification.
+- App version/subscription/group submitted together. Await Apple’s decision; disable streamlined purchasing when the approved binary permits it. Follow `membership-launch-2026-11-15.md` for coordinated activation and post-release production verification.

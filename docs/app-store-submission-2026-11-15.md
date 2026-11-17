@@ -65,3 +65,7 @@ Source commit `6576bd8` was pushed before the site deployment. Cloudflare Worker
 - [Screenshot specifications, including iPhone Duo](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)
 - [Age rating definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions)
 - [Medical-device declaration](https://developer.apple.com/help/app-store-connect/manage-app-information/declare-regulated-medical-device-status)
+
+## Submitted November 16, 2026
+
+Owner confirmed password reset on build 334 and explicitly authorized submission. Manual release was verified selected. Apple confirmed **3 Items Submitted** (iOS 1.3.9 build 334, Footing premium group, monthly subscription) and **Waiting for Review**. Submission `b9130730-db70-4843-8bc6-af435cf12e3d`. No public release or membership launch activation occurred.
